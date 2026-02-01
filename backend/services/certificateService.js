@@ -1,8 +1,25 @@
 const React = require('react');
-const { Document, Page, Text, View, Image, StyleSheet, renderToBuffer } = require('@react-pdf/renderer');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+
+// Try to load @react-pdf/renderer, fallback if ES Module issue
+let Document, Page, Text, View, Image, StyleSheet, renderToBuffer;
+let pdfAvailable = true;
+try {
+  const reactPdf = require('@react-pdf/renderer');
+  Document = reactPdf.Document;
+  Page = reactPdf.Page;
+  Text = reactPdf.Text;
+  View = reactPdf.View;
+  Image = reactPdf.Image;
+  StyleSheet = reactPdf.StyleSheet;
+  renderToBuffer = reactPdf.renderToBuffer;
+} catch (error) {
+  console.warn('⚠️  @react-pdf/renderer not available. Certificate generation will be disabled.');
+  console.warn('   This is expected during initial deployment. Certificates can be enabled later.');
+  pdfAvailable = false;
+}
 
 // Try to load sharp for image analysis, fallback to manual if not available
 let sharp;
@@ -515,6 +532,11 @@ const getImageSource = (imagePath) => {
  * @returns {Buffer} PDF buffer
  */
 const generateCertificatePDF = async (data, template = null) => {
+  // Check if PDF generation is available
+  if (!pdfAvailable) {
+    throw new Error('Certificate generation is temporarily unavailable. Please contact administrator.');
+  }
+
   try {
     // Get logo source
     const logoPath = getImageSource(LOGO_PATH);
