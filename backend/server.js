@@ -84,11 +84,22 @@ const corsOptions = {
       process.env.FRONTEND_URL, // Vercel frontend URL
     ].filter(Boolean); // Remove undefined values
 
+    // Check exact match first
     if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
       callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+      return;
     }
+
+    // Allow all Vercel preview deployments for skill-sphere app
+    // Patterns: skill-sphere-*.vercel.app and skill-sphere-*-danish-s-projects-*.vercel.app
+    if (origin.includes('.vercel.app') && origin.includes('skill-sphere')) {
+      console.log('✅ CORS: Allowing Vercel preview deployment:', origin);
+      callback(null, true);
+      return;
+    }
+
+    console.log('❌ CORS: Blocked origin:', origin);
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
