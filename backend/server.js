@@ -90,9 +90,9 @@ const corsOptions = {
       return;
     }
 
-    // Allow all Vercel preview deployments for skill-sphere app
-    // Patterns: skill-sphere-*.vercel.app and skill-sphere-*-danish-s-projects-*.vercel.app
-    if (origin.includes('.vercel.app') && origin.includes('skill-sphere')) {
+    // Allow all Vercel preview deployments for skillsphere app
+    // Patterns: skill-sphere-*.vercel.app, skillsphere-*.vercel.app
+    if (origin.includes('.vercel.app') && (origin.includes('skill-sphere') || origin.includes('skillsphere'))) {
       console.log('✅ CORS: Allowing Vercel preview deployment:', origin);
       callback(null, true);
       return;
