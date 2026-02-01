@@ -2,17 +2,33 @@ const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 const { generateOTP, getOTPExpiry, verifyOTP } = require('../utils/otpUtils');
 const { sendOTPEmail, sendWelcomeEmail } = require('../services/emailService');
-const admin = require('firebase-admin');
 
-// Initialize Firebase Admin (only once)
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
-    })
-  });
+// Firebase Admin - Optional for Google OAuth
+let admin = null;
+let firebaseConfigured = false;
+
+try {
+  admin = require('firebase-admin');
+
+  // Only initialize if all required env vars are present
+  if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
+        })
+      });
+    }
+    firebaseConfigured = true;
+    console.log('✅ Firebase Admin SDK initialized');
+  } else {
+    console.log('⚠️ Firebase not configured - using direct Google OAuth token verification');
+  }
+} catch (error) {
+  console.log('⚠️ Firebase Admin SDK not available - using direct Google OAuth token verification');
+  admin = null;
 }
 
 const generateToken = (user) => {
@@ -459,28 +475,45 @@ exports.googleAuth = async (req, res) => {
 
     let email, name, picture, uid;
 
-    // Try to verify as Firebase token first, then as Google OAuth token
-    try {
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      email = decodedToken.email;
-      name = decodedToken.name;
-      picture = decodedToken.picture;
-      uid = decodedToken.uid;
-      console.log('✅ Verified as Firebase token');
-    } catch (firebaseError) {
-      // If Firebase verification fails, try to decode as Google OAuth token
-      console.log('Firebase verification failed, trying Google OAuth token decode...');
+    // Try Firebase verification first if configured, otherwise decode directly
+    if (firebaseConfigured && admin) {
       try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        email = decodedToken.email;
+        name = decodedToken.name;
+        picture = decodedToken.picture;
+        uid = decodedToken.uid;
+        console.log('✅ Verified as Firebase token');
+      } catch (firebaseError) {
+        console.log('❌ Firebase verification failed:', firebaseError.message);
+        // Fall through to direct Google OAuth token decode
+      }
+    }
+
+    // If Firebase didn't work or isn't configured, decode Google OAuth token directly
+    if (!email) {
+      try {
+        console.log('🔍 Decoding Google OAuth token directly...');
         // Decode the JWT payload (Google OAuth ID token is a JWT)
         const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64').toString());
 
+        console.log('📋 Token payload:', {
+          iss: payload.iss,
+          email: payload.email,
+          name: payload.name,
+          exp: payload.exp,
+          iat: payload.iat
+        });
+
         // Verify the token is from Google
         if (!payload.iss || (!payload.iss.includes('accounts.google.com') && !payload.iss.includes('https://accounts.google.com'))) {
+          console.log('❌ Invalid token issuer:', payload.iss);
           return res.status(401).json({ error: 'Invalid token issuer' });
         }
 
         // Check if token is expired
         if (payload.exp && payload.exp * 1000 < Date.now()) {
+          console.log('❌ Token expired. Exp:', new Date(payload.exp * 1000), 'Now:', new Date());
           return res.status(401).json({ error: 'Token has expired' });
         }
 
@@ -488,9 +521,9 @@ exports.googleAuth = async (req, res) => {
         name = payload.name;
         picture = payload.picture;
         uid = payload.sub; // Google's subject ID
-        console.log('✅ Decoded as Google OAuth token');
+        console.log('✅ Decoded Google OAuth token successfully');
       } catch (decodeError) {
-        console.error('Token decode error:', decodeError);
+        console.error('❌ Token decode error:', decodeError);
         return res.status(401).json({ error: 'Invalid authentication token' });
       }
     }
