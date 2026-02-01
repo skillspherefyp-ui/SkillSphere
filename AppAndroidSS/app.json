@@ -1,0 +1,14 @@
+{
+  "name": "SkillSphere",
+  "displayName": "SkillSphere",
+  "icon": "./assets/icon.png",
+  "android": {
+    "adaptiveIcon": {
+      "foregroundImage": "./assets/icon.png",
+      "backgroundColor": "#FFFFFF"
+    }
+  },
+  "ios": {
+    "icon": "./assets/icon.png"
+  }
+}
