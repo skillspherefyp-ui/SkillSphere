@@ -4,14 +4,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const DEFAULT_PORT = '5000';
 
 const getHost = () => {
-  // Production environment - use Railway backend URL
-  if (Platform.OS === 'web' && process.env.NODE_ENV === 'production') {
-    return process.env.REACT_APP_API_URL || 'https://your-railway-app.up.railway.app';
+  // Check if we have a production API URL configured
+  if (Platform.OS === 'web' && process.env.REACT_APP_API_URL) {
+    console.log('🌐 Using production API:', process.env.REACT_APP_API_URL);
+    return process.env.REACT_APP_API_URL;
   }
 
   // Development environments
   if (Platform.OS === 'android') return `http://10.0.2.2:${DEFAULT_PORT}`;
-  if (Platform.OS === 'web') return `http://localhost:${DEFAULT_PORT}`;
+  if (Platform.OS === 'web') {
+    console.log('⚠️  No REACT_APP_API_URL found, using localhost');
+    return `http://localhost:${DEFAULT_PORT}`;
+  }
   return `http://localhost:${DEFAULT_PORT}`;
 };
 
