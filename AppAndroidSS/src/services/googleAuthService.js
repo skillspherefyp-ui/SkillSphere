@@ -2,9 +2,20 @@ import { Platform } from 'react-native';
 
 const WEB_CLIENT_ID = '1027771061-5gdm8g72cimck7bjpgknspaqkisfme4g.apps.googleusercontent.com';
 
+// Get redirect URI based on environment
+const getRedirectUri = () => {
+  if (typeof window !== 'undefined') {
+    // Use current origin in production, localhost in development
+    const origin = window.location.origin;
+    return origin.includes('localhost') ? 'http://localhost:3000' : origin;
+  }
+  return 'http://localhost:3000';
+};
+
 // Configure Google Sign-In
 export const configureGoogleSignIn = () => {
   console.log('Google Sign-In configured for platform:', Platform.OS);
+  console.log('Redirect URI:', getRedirectUri());
 };
 
 /**
@@ -13,7 +24,7 @@ export const configureGoogleSignIn = () => {
 const signInWithGoogleWeb = async () => {
   try {
     // Create OAuth URL for Google
-    const redirectUri = encodeURIComponent('http://localhost:3000');
+    const redirectUri = encodeURIComponent(getRedirectUri());
     const scope = encodeURIComponent('email profile openid');
     const responseType = 'token id_token';
 
@@ -53,7 +64,8 @@ const signInWithGoogleWeb = async () => {
           }
 
           const currentUrl = popup.location.href;
-          if (currentUrl.includes('http://localhost:3000') && currentUrl.includes('id_token=')) {
+          const expectedRedirectUri = getRedirectUri();
+          if (currentUrl.includes(expectedRedirectUri) && currentUrl.includes('id_token=')) {
             clearInterval(checkPopup);
             popup.close();
 
