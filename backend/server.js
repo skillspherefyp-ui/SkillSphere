@@ -6,7 +6,7 @@ require('dotenv').config();
 const { sequelize, testConnection } = require('./config/database');
 require('./models'); // Load models and associations
 const { User } = require('./models');
-const { sendSuperAdminWelcomeEmail, logSmtpConfig } = require('./services/emailService');
+const { sendSuperAdminWelcomeEmail } = require('./services/emailService');
 
 // Initialize SuperAdmin if not exists
 const initSuperAdmin = async () => {
@@ -169,8 +169,6 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
       console.log(`📚 API endpoints available at http://localhost:${PORT}/api`);
-      // Log SMTP configuration on startup
-      logSmtpConfig();
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
