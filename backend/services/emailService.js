@@ -19,16 +19,41 @@ try {
   console.error('Error loading logo:', error.message);
 }
 
-// Create transporter using Gmail's secure settings
+// Log SMTP configuration status on startup (without exposing credentials)
+const smtpUser = process.env.SMTP_USER;
+const smtpPass = process.env.SMTP_PASS;
+const smtpHost = process.env.SMTP_HOST || 'smtp-relay.brevo.com';
+const smtpPort = parseInt(process.env.SMTP_PORT) || 587;
+
+console.log('📧 Email Service Configuration:');
+console.log(`   SMTP_HOST: ${smtpHost}`);
+console.log(`   SMTP_PORT: ${smtpPort}`);
+console.log(`   SMTP_USER: ${smtpUser ? smtpUser.substring(0, 5) + '***' : '❌ NOT SET'}`);
+console.log(`   SMTP_PASS: ${smtpPass ? '***SET***' : '❌ NOT SET'}`);
+
+if (!smtpUser || !smtpPass) {
+  console.error('❌ WARNING: SMTP credentials are not properly configured!');
+  console.error('   Please set SMTP_USER and SMTP_PASS environment variables in Railway.');
+}
+
+// Create transporter using SMTP settings (Brevo/Gmail/etc)
 const createTransporter = () => {
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
+  if (!smtpUser || !smtpPass) {
+    console.error('❌ Cannot create transporter: SMTP credentials missing');
+    return null;
+  }
 
   return nodemailer.createTransport({
-    service: 'gmail',
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
     auth: {
       user: smtpUser,
       pass: smtpPass
+    },
+    tls: {
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1.2'
     },
     pool: false,
     connectionTimeout: 30000,
@@ -37,13 +62,15 @@ const createTransporter = () => {
   });
 };
 
-// Alternative transporter using direct SMTP (fallback)
+// Alternative transporter using SSL port 465 (fallback)
 const createDirectTransporter = () => {
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
+  if (!smtpUser || !smtpPass) {
+    console.error('❌ Cannot create direct transporter: SMTP credentials missing');
+    return null;
+  }
 
   return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
+    host: smtpHost,
     port: 465,
     secure: true,
     auth: {
@@ -51,7 +78,8 @@ const createDirectTransporter = () => {
       pass: smtpPass
     },
     tls: {
-      rejectUnauthorized: true
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1.2'
     },
     connectionTimeout: 30000,
     greetingTimeout: 30000,
@@ -264,6 +292,13 @@ const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
   const fromEmail = process.env.SMTP_USER;
   const toEmail = mailOptions.to;
 
+  // Check if credentials are configured
+  if (!fromEmail || !process.env.SMTP_PASS) {
+    const error = new Error('SMTP credentials not configured. Please set SMTP_USER and SMTP_PASS environment variables in Railway.');
+    console.error('❌ Email Error:', error.message);
+    throw error;
+  }
+
   const isInstitutional = toEmail.includes('.edu') ||
                          toEmail.includes('.pk') ||
                          toEmail.includes('.ac.') ||
@@ -276,16 +311,38 @@ const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
 
   console.log(`📧 Sending email to: ${toEmail}`);
   console.log(`📧 Subject: ${mailOptions.subject}`);
+  console.log(`📧 From: ${fromEmail}`);
 
-  const transporters = [
-    { name: 'Gmail Service', transporter: createTransporter() },
-    { name: 'Gmail Direct SMTP', transporter: createDirectTransporter() }
-  ];
+  const primaryTransporter = createTransporter();
+  const fallbackTransporter = createDirectTransporter();
+
+  const transporters = [];
+  if (primaryTransporter) {
+    transporters.push({ name: 'SMTP Primary', transporter: primaryTransporter });
+  }
+  if (fallbackTransporter) {
+    transporters.push({ name: 'SMTP SSL Fallback', transporter: fallbackTransporter });
+  }
+
+  if (transporters.length === 0) {
+    throw new Error('No email transporters available. Check SMTP configuration.');
+  }
 
   for (const { name, transporter } of transporters) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(`   Trying ${name} (attempt ${attempt}/${maxRetries})...`);
+
+        // Verify transporter connection first
+        if (attempt === 1) {
+          try {
+            await transporter.verify();
+            console.log(`   ✅ ${name} connection verified`);
+          } catch (verifyError) {
+            console.error(`   ⚠️ ${name} verification failed:`, verifyError.message);
+          }
+        }
+
         const info = await transporter.sendMail(mailOptions);
         console.log(`✅ Email sent successfully via ${name}`);
         console.log(`   Message ID: ${info.messageId}`);
@@ -293,6 +350,8 @@ const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
       } catch (error) {
         lastError = error;
         console.error(`   ❌ ${name} attempt ${attempt} failed:`, error.message);
+        console.error(`   Error code: ${error.code || 'N/A'}`);
+        console.error(`   Error response: ${error.response || 'N/A'}`);
         if (attempt < maxRetries) {
           await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
         }
@@ -301,6 +360,7 @@ const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
   }
 
   console.error(`❌ All email attempts failed for: ${toEmail}`);
+  console.error(`   Last error: ${lastError.message}`);
   throw lastError;
 };
 
