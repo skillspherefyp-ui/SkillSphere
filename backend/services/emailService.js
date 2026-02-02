@@ -19,40 +19,59 @@ try {
   console.error('Error loading logo:', error.message);
 }
 
-// Create transporter using Gmail's secure settings
+// ==================== FIXED TRANSPORTER CONFIGURATION ====================
+
+// Create transporter using Brevo SMTP (from your .env file)
 const createTransporter = () => {
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
+  const smtpHost = process.env.SMTP_HOST;  // smtp-relay.brevo.com
+  const smtpPort = process.env.SMTP_PORT;  // 587
+  const smtpUser = process.env.SMTP_USER;  // a14ca8001@smtp-brevo.com
+  const smtpPass = process.env.SMTP_PASS;  // your Brevo API key
 
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: smtpUser,
-      pass: smtpPass
-    },
-    pool: false,
-    connectionTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 60000
+  console.log('🔧 Creating Brevo transporter with:', {
+    host: smtpHost,
+    port: smtpPort,
+    user: smtpUser ? smtpUser.substring(0, 10) + '...' : 'undefined'
   });
-};
-
-// Alternative transporter using direct SMTP (fallback)
-const createDirectTransporter = () => {
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
 
   return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    host: smtpHost,
+    port: parseInt(smtpPort),
+    secure: false, // Use TLS (STARTTLS) for port 587
     auth: {
       user: smtpUser,
       pass: smtpPass
     },
     tls: {
-      rejectUnauthorized: true
+      ciphers: 'SSLv3',
+      rejectUnauthorized: false
     },
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 60000,
+    debug: true, // Enable debug logging
+    logger: true // Enable logger
+  });
+};
+
+// Alternative transporter using Gmail (fallback if you have Gmail app password)
+const createGmailTransporter = () => {
+  // Only use this if you have Gmail credentials
+  const gmailUser = process.env.GMAIL_USER; // Optional: add if you have Gmail
+  const gmailPass = process.env.GMAIL_APP_PASSWORD; // Optional: Gmail app password
+
+  if (!gmailUser || !gmailPass) {
+    console.log('⚠️ Gmail credentials not configured, skipping Gmail transporter');
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: gmailUser,
+      pass: gmailPass
+    },
+    pool: false,
     connectionTimeout: 30000,
     greetingTimeout: 30000,
     socketTimeout: 60000
@@ -258,49 +277,78 @@ const generateEmailTemplate = ({ title, subtitle, content, icon }) => {
 </html>`;
 };
 
-// Send email with retry logic
+// ==================== FIXED EMAIL SENDING FUNCTION ====================
+
+// Send email with retry logic and proper error handling
 const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
   let lastError = null;
-  const fromEmail = process.env.SMTP_USER;
+  
+  // Get sender email from environment
+  const fromEmail = process.env.SMTP_USER; // Use SMTP_USER for Brevo
   const toEmail = mailOptions.to;
 
-  const isInstitutional = toEmail.includes('.edu') ||
-                         toEmail.includes('.pk') ||
-                         toEmail.includes('.ac.') ||
-                         toEmail.includes('cust.pk');
+  // IMPORTANT: For Brevo, you must use verified sender email
+  // Make sure your SMTP_USER email is verified in Brevo
+  mailOptions.from = { 
+    name: 'SkillSphere', 
+    address: fromEmail 
+  };
 
-  if (isInstitutional) {
-    mailOptions.from = fromEmail;
-    console.log(`📧 Institutional email detected: ${toEmail}`);
-  }
-
-  console.log(`📧 Sending email to: ${toEmail}`);
+  console.log(`📧 Preparing email to: ${toEmail}`);
+  console.log(`📧 From: ${fromEmail}`);
   console.log(`📧 Subject: ${mailOptions.subject}`);
 
+  // Create list of transporters to try
   const transporters = [
-    { name: 'Gmail Service', transporter: createTransporter() },
-    { name: 'Gmail Direct SMTP', transporter: createDirectTransporter() }
+    { name: 'Brevo SMTP', transporter: createTransporter() }
   ];
 
+  // Add Gmail transporter if configured
+  const gmailTransporter = createGmailTransporter();
+  if (gmailTransporter) {
+    transporters.push({ name: 'Gmail', transporter: gmailTransporter });
+  }
+
+  // Try each transporter with retries
   for (const { name, transporter } of transporters) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`   Trying ${name} (attempt ${attempt}/${maxRetries})...`);
+        console.log(`📤 Attempting to send via ${name} (attempt ${attempt}/${maxRetries})...`);
+        
+        // Verify transporter connection first
+        await transporter.verify();
+        console.log(`✅ ${name} connection verified`);
+        
+        // Send the email
         const info = await transporter.sendMail(mailOptions);
         console.log(`✅ Email sent successfully via ${name}`);
         console.log(`   Message ID: ${info.messageId}`);
+        console.log(`   Response: ${info.response}`);
+        
         return { success: true, messageId: info.messageId, response: info.response };
       } catch (error) {
         lastError = error;
-        console.error(`   ❌ ${name} attempt ${attempt} failed:`, error.message);
+        console.error(`❌ ${name} attempt ${attempt} failed:`);
+        console.error(`   Error: ${error.message}`);
+        
+        // Log detailed error information
+        if (error.code) console.error(`   Code: ${error.code}`);
+        if (error.command) console.error(`   Command: ${error.command}`);
+        if (error.responseCode) console.error(`   Response Code: ${error.responseCode}`);
+        
+        // Wait before retry (exponential backoff)
         if (attempt < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          const waitTime = 1000 * attempt;
+          console.log(`   Waiting ${waitTime}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
         }
       }
     }
   }
 
-  console.error(`❌ All email attempts failed for: ${toEmail}`);
+  // All attempts failed
+  console.error(`❌ All email delivery attempts failed for: ${toEmail}`);
+  console.error(`   Last error: ${lastError.message}`);
   throw lastError;
 };
 
@@ -309,8 +357,6 @@ const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
 // Send OTP Email
 const sendOTPEmail = async (email, otp, name = 'User') => {
   try {
-    const fromEmail = process.env.SMTP_USER;
-
     const content = `
       <h2 style="color: #1a1a2e; margin: 0 0 20px 0; font-size: 22px; font-weight: 600;" class="text-primary">Hello ${name}!</h2>
       <p style="color: #666666; margin: 0 0 25px 0; font-size: 16px; line-height: 1.6;" class="text-secondary">
@@ -338,7 +384,6 @@ const sendOTPEmail = async (email, otp, name = 'User') => {
 
     const logoAttachment = getLogoAttachment();
     const mailOptions = {
-      from: { name: 'SkillSphere', address: fromEmail },
       to: email,
       subject: `${otp} is your SkillSphere verification code`,
       html,
@@ -347,10 +392,10 @@ const sendOTPEmail = async (email, otp, name = 'User') => {
     };
 
     const result = await sendEmailWithRetry(mailOptions);
-    console.log('OTP email sent:', result.messageId);
+    console.log('✅ OTP email sent successfully:', result.messageId);
     return result;
   } catch (error) {
-    console.error('Error sending OTP email:', error);
+    console.error('❌ Error sending OTP email:', error);
     throw error;
   }
 };
@@ -358,8 +403,6 @@ const sendOTPEmail = async (email, otp, name = 'User') => {
 // Send Welcome Email
 const sendWelcomeEmail = async (email, name) => {
   try {
-    const fromEmail = process.env.SMTP_USER;
-
     const content = `
       <h2 style="color: #1a1a2e; margin: 0 0 20px 0; font-size: 22px; font-weight: 600;" class="text-primary">Hello ${name}!</h2>
       <p style="color: #666666; margin: 0 0 20px 0; font-size: 16px; line-height: 1.6;" class="text-secondary">
@@ -390,7 +433,6 @@ const sendWelcomeEmail = async (email, name) => {
 
     const logoAttachment = getLogoAttachment();
     const mailOptions = {
-      from: { name: 'SkillSphere', address: fromEmail },
       to: email,
       subject: 'Welcome to SkillSphere!',
       html,
@@ -399,10 +441,10 @@ const sendWelcomeEmail = async (email, name) => {
     };
 
     const result = await sendEmailWithRetry(mailOptions);
-    console.log('Welcome email sent:', result.messageId);
+    console.log('✅ Welcome email sent successfully:', result.messageId);
     return result;
   } catch (error) {
-    console.error('Error sending welcome email:', error);
+    console.error('❌ Error sending welcome email:', error);
     throw error;
   }
 };
@@ -410,7 +452,6 @@ const sendWelcomeEmail = async (email, name) => {
 // Send Admin Account Created Email
 const sendAdminAccountCreatedEmail = async (email, name, password, role) => {
   try {
-    const fromEmail = process.env.SMTP_USER;
     const roleDisplay = role.charAt(0).toUpperCase() + role.slice(1);
 
     const content = `
@@ -453,7 +494,6 @@ const sendAdminAccountCreatedEmail = async (email, name, password, role) => {
 
     const logoAttachment = getLogoAttachment();
     const mailOptions = {
-      from: { name: 'SkillSphere', address: fromEmail },
       to: email,
       subject: `Welcome to SkillSphere - Your ${roleDisplay} Account is Ready!`,
       html,
@@ -462,10 +502,10 @@ const sendAdminAccountCreatedEmail = async (email, name, password, role) => {
     };
 
     const result = await sendEmailWithRetry(mailOptions);
-    console.log('Admin account created email sent:', result.messageId);
+    console.log('✅ Admin account created email sent successfully:', result.messageId);
     return result;
   } catch (error) {
-    console.error('Error sending admin account created email:', error);
+    console.error('❌ Error sending admin account created email:', error);
     throw error;
   }
 };
@@ -473,7 +513,6 @@ const sendAdminAccountCreatedEmail = async (email, name, password, role) => {
 // Send Certificate Email with PDF attachment
 const sendCertificateEmail = async (email, studentName, courseName, certificateNumber, pdfBuffer) => {
   try {
-    const fromEmail = process.env.SMTP_USER;
     const issueDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
     const content = `
@@ -525,7 +564,6 @@ const sendCertificateEmail = async (email, studentName, courseName, certificateN
     if (logoAttachment) attachments.push(logoAttachment);
 
     const mailOptions = {
-      from: { name: 'SkillSphere', address: fromEmail },
       to: email,
       subject: `Congratulations! Your Certificate for ${courseName}`,
       html,
@@ -534,10 +572,10 @@ const sendCertificateEmail = async (email, studentName, courseName, certificateN
     };
 
     const result = await sendEmailWithRetry(mailOptions);
-    console.log('Certificate email sent:', result.messageId);
+    console.log('✅ Certificate email sent successfully:', result.messageId);
     return result;
   } catch (error) {
-    console.error('Error sending certificate email:', error);
+    console.error('❌ Error sending certificate email:', error);
     throw error;
   }
 };
@@ -545,8 +583,6 @@ const sendCertificateEmail = async (email, studentName, courseName, certificateN
 // Send Super Admin Welcome Email
 const sendSuperAdminWelcomeEmail = async (email, name, password) => {
   try {
-    const fromEmail = process.env.SMTP_USER;
-
     const content = `
       <h2 style="color: #1a1a2e; margin: 0 0 20px 0; font-size: 22px; font-weight: 600;" class="text-primary">Welcome, ${name}!</h2>
       <p style="color: #666666; margin: 0 0 20px 0; font-size: 16px; line-height: 1.6;" class="text-secondary">
@@ -590,7 +626,6 @@ const sendSuperAdminWelcomeEmail = async (email, name, password) => {
 
     const logoAttachment = getLogoAttachment();
     const mailOptions = {
-      from: { name: 'SkillSphere', address: fromEmail },
       to: email,
       subject: 'Welcome Super Admin - Your SkillSphere Account is Ready!',
       html,
@@ -599,10 +634,10 @@ const sendSuperAdminWelcomeEmail = async (email, name, password) => {
     };
 
     const result = await sendEmailWithRetry(mailOptions);
-    console.log('Super admin welcome email sent:', result.messageId);
+    console.log('✅ Super admin welcome email sent successfully:', result.messageId);
     return result;
   } catch (error) {
-    console.error('Error sending super admin welcome email:', error);
+    console.error('❌ Error sending super admin welcome email:', error);
     throw error;
   }
 };
