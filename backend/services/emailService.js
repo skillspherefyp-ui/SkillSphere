@@ -19,37 +19,51 @@ try {
   console.error('Error loading logo:', error.message);
 }
 
-// Log SMTP configuration status on startup (without exposing credentials)
-const smtpUser = process.env.SMTP_USER;
-const smtpPass = process.env.SMTP_PASS;
-const smtpHost = process.env.SMTP_HOST || 'smtp-relay.brevo.com';
-const smtpPort = parseInt(process.env.SMTP_PORT) || 587;
+// Get SMTP config at runtime (not module load time - important for Railway)
+const getSmtpConfig = () => {
+  return {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+    host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
+    port: parseInt(process.env.SMTP_PORT) || 587
+  };
+};
 
-console.log('📧 Email Service Configuration:');
-console.log(`   SMTP_HOST: ${smtpHost}`);
-console.log(`   SMTP_PORT: ${smtpPort}`);
-console.log(`   SMTP_USER: ${smtpUser ? smtpUser.substring(0, 5) + '***' : '❌ NOT SET'}`);
-console.log(`   SMTP_PASS: ${smtpPass ? '***SET***' : '❌ NOT SET'}`);
+// Log SMTP configuration status
+const logSmtpConfig = () => {
+  const config = getSmtpConfig();
+  console.log('📧 Email Service Configuration:');
+  console.log(`   SMTP_HOST: ${config.host}`);
+  console.log(`   SMTP_PORT: ${config.port}`);
+  console.log(`   SMTP_USER: ${config.user ? config.user.substring(0, 10) + '***' : '❌ NOT SET'}`);
+  console.log(`   SMTP_PASS: ${config.pass ? '***SET*** (length: ' + config.pass.length + ')' : '❌ NOT SET'}`);
 
-if (!smtpUser || !smtpPass) {
-  console.error('❌ WARNING: SMTP credentials are not properly configured!');
-  console.error('   Please set SMTP_USER and SMTP_PASS environment variables in Railway.');
-}
+  if (!config.user || !config.pass) {
+    console.error('❌ WARNING: SMTP credentials are not properly configured!');
+  }
+  return config;
+};
 
 // Create transporter using SMTP settings (Brevo/Gmail/etc)
 const createTransporter = () => {
-  if (!smtpUser || !smtpPass) {
+  const config = getSmtpConfig();
+
+  if (!config.user || !config.pass) {
     console.error('❌ Cannot create transporter: SMTP credentials missing');
+    console.error(`   SMTP_USER: ${config.user ? 'SET' : 'MISSING'}`);
+    console.error(`   SMTP_PASS: ${config.pass ? 'SET' : 'MISSING'}`);
     return null;
   }
 
+  console.log(`📧 Creating transporter: ${config.host}:${config.port}`);
+
   return nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
-    secure: smtpPort === 465,
+    host: config.host,
+    port: config.port,
+    secure: config.port === 465,
     auth: {
-      user: smtpUser,
-      pass: smtpPass
+      user: config.user,
+      pass: config.pass
     },
     tls: {
       rejectUnauthorized: false,
@@ -64,18 +78,20 @@ const createTransporter = () => {
 
 // Alternative transporter using SSL port 465 (fallback)
 const createDirectTransporter = () => {
-  if (!smtpUser || !smtpPass) {
+  const config = getSmtpConfig();
+
+  if (!config.user || !config.pass) {
     console.error('❌ Cannot create direct transporter: SMTP credentials missing');
     return null;
   }
 
   return nodemailer.createTransport({
-    host: smtpHost,
+    host: config.host,
     port: 465,
     secure: true,
     auth: {
-      user: smtpUser,
-      pass: smtpPass
+      user: config.user,
+      pass: config.pass
     },
     tls: {
       rejectUnauthorized: false,
@@ -289,11 +305,12 @@ const generateEmailTemplate = ({ title, subtitle, content, icon }) => {
 // Send email with retry logic
 const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
   let lastError = null;
-  const fromEmail = process.env.SMTP_USER;
+  const config = logSmtpConfig();
+  const fromEmail = config.user;
   const toEmail = mailOptions.to;
 
   // Check if credentials are configured
-  if (!fromEmail || !process.env.SMTP_PASS) {
+  if (!config.user || !config.pass) {
     const error = new Error('SMTP credentials not configured. Please set SMTP_USER and SMTP_PASS environment variables in Railway.');
     console.error('❌ Email Error:', error.message);
     throw error;
@@ -369,7 +386,7 @@ const sendEmailWithRetry = async (mailOptions, maxRetries = 3) => {
 // Send OTP Email
 const sendOTPEmail = async (email, otp, name = 'User') => {
   try {
-    const fromEmail = process.env.SMTP_USER;
+    const fromEmail = getSmtpConfig().user;
 
     const content = `
       <h2 style="color: #1a1a2e; margin: 0 0 20px 0; font-size: 22px; font-weight: 600;" class="text-primary">Hello ${name}!</h2>
@@ -418,7 +435,7 @@ const sendOTPEmail = async (email, otp, name = 'User') => {
 // Send Welcome Email
 const sendWelcomeEmail = async (email, name) => {
   try {
-    const fromEmail = process.env.SMTP_USER;
+    const fromEmail = getSmtpConfig().user;
 
     const content = `
       <h2 style="color: #1a1a2e; margin: 0 0 20px 0; font-size: 22px; font-weight: 600;" class="text-primary">Hello ${name}!</h2>
@@ -470,7 +487,7 @@ const sendWelcomeEmail = async (email, name) => {
 // Send Admin Account Created Email
 const sendAdminAccountCreatedEmail = async (email, name, password, role) => {
   try {
-    const fromEmail = process.env.SMTP_USER;
+    const fromEmail = getSmtpConfig().user;
     const roleDisplay = role.charAt(0).toUpperCase() + role.slice(1);
 
     const content = `
@@ -533,7 +550,7 @@ const sendAdminAccountCreatedEmail = async (email, name, password, role) => {
 // Send Certificate Email with PDF attachment
 const sendCertificateEmail = async (email, studentName, courseName, certificateNumber, pdfBuffer) => {
   try {
-    const fromEmail = process.env.SMTP_USER;
+    const fromEmail = getSmtpConfig().user;
     const issueDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
     const content = `
@@ -605,7 +622,7 @@ const sendCertificateEmail = async (email, studentName, courseName, certificateN
 // Send Super Admin Welcome Email
 const sendSuperAdminWelcomeEmail = async (email, name, password) => {
   try {
-    const fromEmail = process.env.SMTP_USER;
+    const fromEmail = getSmtpConfig().user;
 
     const content = `
       <h2 style="color: #1a1a2e; margin: 0 0 20px 0; font-size: 22px; font-weight: 600;" class="text-primary">Welcome, ${name}!</h2>
@@ -672,5 +689,6 @@ module.exports = {
   sendWelcomeEmail,
   sendAdminAccountCreatedEmail,
   sendCertificateEmail,
-  sendSuperAdminWelcomeEmail
+  sendSuperAdminWelcomeEmail,
+  logSmtpConfig
 };
