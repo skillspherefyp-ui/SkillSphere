@@ -159,7 +159,7 @@ const startServer = async () => {
     // Sync database (create tables and add new columns if they don't exist)
     // alter: true will modify existing tables to match model definitions
     // In production, use migrations instead
-    await sequelize.sync({ alter: true });
+    await sequelize.sync();
 
     console.log('✅ Database synced successfully');
 
