@@ -19,6 +19,13 @@
     console.error('Error loading logo:', error.message);
   }
 
+  // Log SMTP configuration on startup
+  console.log('📧 Email Service Configuration:');
+  console.log(`   SMTP_HOST: ${process.env.SMTP_HOST || 'NOT SET'}`);
+  console.log(`   SMTP_PORT: ${process.env.SMTP_PORT || 'NOT SET'}`);
+  console.log(`   SMTP_USER: ${process.env.SMTP_USER ? '***configured***' : 'NOT SET'}`);
+  console.log(`   SMTP_FROM_EMAIL: ${process.env.SMTP_FROM_EMAIL || 'NOT SET'}`);
+
   // Create transporter for Brevo SMTP
   const createTransporter = () => {
     return nodemailer.createTransport({
