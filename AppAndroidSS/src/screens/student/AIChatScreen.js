@@ -71,7 +71,7 @@ const AIChatScreen = () => {
       // If error, show default welcome message
       setMessages([{
         id: '1',
-        content: "Hello! I'm your AI learning assistant. I can help you with:\n\n• Understanding course concepts\n• Answering questions about your lessons\n• Providing study tips and guidance\n• Explaining difficult topics\n\nHow can I help you today?",
+        content: "Hello! I'm SkillSphere AI, your personal assistant. I can help you with anything:\n\n• Answer any question on any topic\n• Help with coding and programming\n• Explain concepts in any subject\n• Assist with writing and research\n• Provide advice and guidance\n\nAsk me anything - I'm here to help!",
         sender: 'ai',
         timestamp: new Date(),
       }]);
@@ -121,7 +121,7 @@ const AIChatScreen = () => {
       // Fallback to local message
       setMessages([{
         id: '1',
-        content: "Hello! I'm your AI learning assistant. I can help you with:\n\n• Understanding course concepts\n• Answering questions about your lessons\n• Providing study tips and guidance\n• Explaining difficult topics\n\nHow can I help you today?",
+        content: "Hello! I'm SkillSphere AI, your personal assistant. I can help you with anything:\n\n• Answer any question on any topic\n• Help with coding and programming\n• Explain concepts in any subject\n• Assist with writing and research\n• Provide advice and guidance\n\nAsk me anything - I'm here to help!",
         sender: 'ai',
         timestamp: new Date(),
       }]);

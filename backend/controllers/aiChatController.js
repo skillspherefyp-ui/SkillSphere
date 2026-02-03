@@ -16,7 +16,7 @@ exports.createSession = async (req, res) => {
     // Create the initial AI welcome message
     const welcomeMessage = await AIChatMessage.create({
       sessionId: session.id,
-      content: "Hello! I'm your AI learning assistant. I can help you with:\n\n• Understanding course concepts\n• Answering questions about your lessons\n• Providing study tips and guidance\n• Explaining difficult topics\n\nHow can I help you today?",
+      content: "Hello! I'm SkillSphere AI, your personal assistant. I can help you with anything:\n\n• Answer any question on any topic\n• Help with coding and programming\n• Explain concepts in any subject\n• Assist with writing and research\n• Provide advice and guidance\n• Creative ideas and brainstorming\n\nAsk me anything - I'm here to help!",
       sender: 'ai',
       timestamp: new Date()
     });
@@ -119,7 +119,7 @@ exports.sendMessage = async (req, res) => {
 
     // Get chat history for context (exclude the welcome message)
     const chatHistory = (session.messages || [])
-      .filter(msg => msg.sender === 'user' || !msg.content.includes("I'm your AI learning assistant"))
+      .filter(msg => msg.sender === 'user' || !msg.content.includes("I'm SkillSphere AI"))
       .map(msg => ({
         sender: msg.sender,
         content: msg.content
