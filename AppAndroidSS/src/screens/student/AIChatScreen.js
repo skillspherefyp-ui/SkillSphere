@@ -308,35 +308,38 @@ const AIChatScreen = () => {
   // Chat History Sidebar Content
   const renderChatSidebar = () => (
     <View style={styles.chatSidebarContent}>
-      {/* Header */}
-      <View style={styles.sidebarHeader}>
-        <View style={styles.sidebarHeaderIcon}>
-          <Icon name="chatbubbles" size={20} color={theme.colors.primary} />
+      {/* Fixed Header Section */}
+      <View style={styles.sidebarFixedHeader}>
+        {/* Header */}
+        <View style={styles.sidebarHeader}>
+          <View style={styles.sidebarHeaderIcon}>
+            <Icon name="chatbubbles" size={20} color={theme.colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.sidebarTitle, { color: theme.colors.textPrimary }]}>Chat History</Text>
+            <Text style={[styles.sidebarSubtitle, { color: theme.colors.textSecondary }]}>
+              {sessions.length} conversation{sessions.length !== 1 ? 's' : ''}
+            </Text>
+          </View>
+          {!isLargeScreen && (
+            <TouchableOpacity onPress={() => setShowChatSidebar(false)} style={styles.closeSidebar}>
+              <Icon name="close" size={24} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+          )}
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.sidebarTitle, { color: theme.colors.textPrimary }]}>Chat History</Text>
-          <Text style={[styles.sidebarSubtitle, { color: theme.colors.textSecondary }]}>
-            {sessions.length} conversation{sessions.length !== 1 ? 's' : ''}
-          </Text>
-        </View>
-        {!isLargeScreen && (
-          <TouchableOpacity onPress={() => setShowChatSidebar(false)} style={styles.closeSidebar}>
-            <Icon name="close" size={24} color={theme.colors.textPrimary} />
-          </TouchableOpacity>
-        )}
+
+        {/* New Chat Button */}
+        <TouchableOpacity
+          style={[styles.newChatButton, { backgroundColor: theme.colors.primary }]}
+          onPress={handleNewChat}
+        >
+          <Icon name="add" size={20} color="#fff" />
+          <Text style={styles.newChatButtonText}>New Chat</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* New Chat Button */}
-      <TouchableOpacity
-        style={[styles.newChatButton, { backgroundColor: theme.colors.primary }]}
-        onPress={handleNewChat}
-      >
-        <Icon name="add" size={20} color="#fff" />
-        <Text style={styles.newChatButtonText}>New Chat</Text>
-      </TouchableOpacity>
-
-      {/* Chat List */}
-      <ScrollView style={styles.sessionsList} showsVerticalScrollIndicator={false}>
+      {/* Scrollable Chat List */}
+      <ScrollView style={styles.sessionsList} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>
         {sessions.map((session) => (
           <TouchableOpacity
             key={session.id}
@@ -624,6 +627,9 @@ const getStyles = (theme, isDark, isWeb, isPhone, isLargeScreen, width, height) 
     chatSidebarContent: {
       flex: 1,
       paddingTop: 8,
+    },
+    sidebarFixedHeader: {
+      // Fixed header section - does not scroll
     },
     sidebarHeader: {
       flexDirection: 'row',

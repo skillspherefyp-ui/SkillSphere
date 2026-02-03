@@ -52,22 +52,23 @@ const ForgotPasswordScreen = ({ navigation, route }) => {
       }
       style={styles.container}
     >
+      {/* Back Button - Fixed outside ScrollView */}
+      <TouchableOpacity
+        style={[styles.backButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.7}
+      >
+        <Icon name="arrow-back" size={24} color={theme.colors.textInverse} />
+      </TouchableOpacity>
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={[styles.scrollContent, containerPadding]}
           showsVerticalScrollIndicator={false}
         >
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
-          >
-            <Icon name="arrow-back" size={24} color={theme.colors.textInverse} />
-          </TouchableOpacity>
-
           <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
             <BrandLogo size={90} />
             <Text style={[styles.title, { color: theme.colors.textInverse }]}>
@@ -131,8 +132,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 50,
     left: 20,
-    zIndex: 1,
-    padding: 8,
+    zIndex: 10,
+    padding: 10,
+    borderRadius: 12,
   },
   header: {
     alignItems: 'center',

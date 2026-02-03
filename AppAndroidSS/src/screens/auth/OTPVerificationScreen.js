@@ -126,25 +126,26 @@ const OTPVerificationScreen = ({ route, navigation }) => {
     : [theme.colors.background, theme.colors.backgroundSecondary];
 
   const content = (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.keyboardView}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+    <>
+      {/* Back Button - Fixed outside ScrollView */}
+      <TouchableOpacity
+        onPress={() => navigation.goBack()}
+        style={[styles.backButton, { backgroundColor: theme.colors.card + 'CC' }]}
+        activeOpacity={0.7}
       >
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          >
-            <Icon name="arrow-back" size={24} color={theme.colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
+        <Icon name="arrow-back" size={24} color={theme.colors.textPrimary} />
+      </TouchableOpacity>
 
-        <Animated.View
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Animated.View
           entering={FadeInDown.duration(600).delay(200)}
           style={[
             styles.formContainer,
@@ -244,6 +245,7 @@ const OTPVerificationScreen = ({ route, navigation }) => {
         </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </>
   );
 
   if (isWeb) {
@@ -279,18 +281,13 @@ const styles = StyleSheet.create({
     padding: 20,
     minHeight: '100%',
   },
-  header: {
+  backButton: {
     position: 'absolute',
     top: 50,
     left: 20,
-    right: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     zIndex: 10,
-  },
-  backButton: {
-    padding: 8,
+    padding: 10,
+    borderRadius: 12,
   },
   logoContainer: {
     alignItems: 'center',
