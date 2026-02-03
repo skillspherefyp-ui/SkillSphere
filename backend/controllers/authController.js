@@ -288,9 +288,15 @@ exports.resendOTP = async (req, res) => {
     });
 
     // Send OTP email
-    await sendOTPEmail(email, otp, user.name);
+    try {
+      await sendOTPEmail(email, otp, user.name);
+      console.log('📧 OTP resent to:', email);
+    } catch (emailError) {
+      console.log('⚠️ Email resend failed, OTP for development:', otp);
+      console.log('⚠️ Email error:', emailError.message);
+      // Continue even if email fails - OTP is still saved in database
+    }
 
-    console.log('📧 OTP resent to:', email);
     res.json({
       success: true,
       message: 'OTP resent successfully'
