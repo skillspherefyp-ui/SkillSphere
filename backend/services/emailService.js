@@ -83,8 +83,18 @@ const sendEmailWithBrevoAPI = async (emailData) => {
   }
 };
 
+// Get logo as data URI
+const getLogoDataUri = () => {
+  if (LOGO_BASE64_PNG) {
+    return `data:image/png;base64,${LOGO_BASE64_PNG}`;
+  }
+  return null;
+};
+
 // Generate email template
 const generateEmailTemplate = ({ title, subtitle, content, icon }) => {
+  const logoDataUri = getLogoDataUri();
+
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -95,7 +105,7 @@ const generateEmailTemplate = ({ title, subtitle, content, icon }) => {
   <title>${title}</title>
   <style>
     :root { color-scheme: light dark; }
-    body { background-color: #f4f4f4 !important; }
+    body { background-color: #f4f4f4 !important; margin: 0; padding: 0; }
     .email-body { background-color: #ffffff !important; }
     .text-primary { color: #1a1a2e !important; }
     .text-secondary { color: #666666 !important; }
@@ -109,6 +119,7 @@ const generateEmailTemplate = ({ title, subtitle, content, icon }) => {
       .text-primary { color: #ffffff !important; }
       .text-secondary { color: #d1d5db !important; }
       .highlight-box { background: linear-gradient(135deg, #312e81 0%, #1e3a5f 100%) !important; }
+      .info-box { background-color: #374151 !important; }
       .code-display { background-color: #374151 !important; color: #22D3EE !important; }
     }
   </style>
@@ -117,23 +128,59 @@ const generateEmailTemplate = ({ title, subtitle, content, icon }) => {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4;">
     <tr>
       <td align="center" style="padding: 40px 20px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(79,70,229,0.15);" class="email-body">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 8px 30px rgba(79,70,229,0.12);" class="email-body">
+
+          <!-- Header with Logo -->
           <tr>
-            <td style="background: linear-gradient(135deg, #4F46E5 0%, #6366F1 50%, #22D3EE 100%); padding: 35px 30px; text-align: center;">
+            <td style="background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%); padding: 40px 30px; text-align: center;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                ${icon ? `<tr><td align="center" style="padding-bottom: 10px;"><span style="font-size: 40px; line-height: 1;">${icon}</span></td></tr>` : ''}
-                <tr><td align="center"><h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 700;">${title}</h1>${subtitle ? `<p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 14px;">${subtitle}</p>` : ''}</td></tr>
+                <!-- Logo -->
+                ${logoDataUri ? `
+                <tr>
+                  <td align="center" style="padding-bottom: 20px;">
+                    <img src="${logoDataUri}" alt="SkillSphere" width="180" height="auto" style="display: block; border: 0; max-width: 180px;">
+                  </td>
+                </tr>
+                ` : ''}
+                <!-- Icon (if provided) -->
+                ${icon ? `
+                <tr>
+                  <td align="center" style="padding-bottom: 15px;">
+                    <span style="font-size: 50px; line-height: 1;">${icon}</span>
+                  </td>
+                </tr>
+                ` : ''}
+                <!-- Title -->
+                <tr>
+                  <td align="center">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">${title}</h1>
+                    ${subtitle ? `<p style="color: rgba(255,255,255,0.85); margin: 12px 0 0 0; font-size: 15px; font-weight: 400;">${subtitle}</p>` : ''}
+                  </td>
+                </tr>
               </table>
             </td>
           </tr>
-          <tr><td style="padding: 35px 30px;" class="email-body">${content}</td></tr>
+
+          <!-- Content -->
           <tr>
-            <td style="background-color: #EEF2FF; padding: 25px 30px; text-align: center; border-top: 1px solid #E0E7FF;" class="footer-bg">
-              <p style="color: #6366F1; margin: 0; font-size: 12px; font-weight: 600;">SkillSphere</p>
-              <p style="color: #999999; margin: 8px 0 0 0; font-size: 11px;">Empower your skills, Expand your sphere</p>
-              <p style="color: #cccccc; margin: 12px 0 0 0; font-size: 10px;">&copy; ${new Date().getFullYear()} SkillSphere. All rights reserved.</p>
+            <td style="padding: 40px 35px;" class="email-body">
+              ${content}
             </td>
           </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #1a1a2e 0%, #2d2d44 100%); padding: 30px; text-align: center;">
+              ${logoDataUri ? `
+              <img src="${logoDataUri}" alt="SkillSphere" width="120" height="auto" style="display: inline-block; margin-bottom: 15px; opacity: 0.9;">
+              ` : `
+              <p style="color: #8B5CF6; margin: 0 0 10px 0; font-size: 18px; font-weight: 700;">SkillSphere</p>
+              `}
+              <p style="color: #a0aec0; margin: 0 0 8px 0; font-size: 12px;">Empower your skills, Expand your sphere</p>
+              <p style="color: #718096; margin: 0; font-size: 11px;">&copy; ${new Date().getFullYear()} SkillSphere. All rights reserved.</p>
+            </td>
+          </tr>
+
         </table>
       </td>
     </tr>
