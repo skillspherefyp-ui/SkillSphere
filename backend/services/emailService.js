@@ -1,22 +1,3 @@
-const path = require('path');
-const fs = require('fs');
-
-// Load the logo image and convert to base64
-const LOGO_PATH = path.join(__dirname, '..', 'assets', 'skillsphere-logo.png');
-let LOGO_BASE64_PNG = '';
-
-try {
-  if (fs.existsSync(LOGO_PATH)) {
-    const logoBuffer = fs.readFileSync(LOGO_PATH);
-    LOGO_BASE64_PNG = logoBuffer.toString('base64');
-    console.log('✅ Logo loaded successfully from:', LOGO_PATH);
-  } else {
-    console.log('⚠️ Logo file not found at:', LOGO_PATH);
-  }
-} catch (error) {
-  console.error('Error loading logo:', error.message);
-}
-
 // Log Email Service Configuration
 console.log('📧 Email Service Configuration:');
 console.log(`   BREVO_API_KEY: ${process.env.BREVO_API_KEY ? '***configured***' : 'NOT SET'}`);
