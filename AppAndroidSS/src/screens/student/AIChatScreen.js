@@ -11,11 +11,11 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
+  SafeAreaView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
-import MainLayout from '../../components/ui/MainLayout';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
@@ -477,31 +477,44 @@ const AIChatScreen = () => {
 
   if (loading) {
     return (
-      <MainLayout
-        showSidebar={false}
-        showHeader={true}
-      >
+      <SafeAreaView style={[styles.screenContainer, { backgroundColor: theme.colors.background }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
             Loading chats...
           </Text>
         </View>
-      </MainLayout>
+      </SafeAreaView>
     );
   }
 
   return (
-    <MainLayout
-      showSidebar={false}
-      showHeader={true}
-      customSidebar={renderChatSidebar()}
-      customSidebarVisible={showChatSidebar}
-      onCustomSidebarToggle={setShowChatSidebar}
-      customMenuIcon="chatbubbles-outline"
-    >
+    <SafeAreaView style={[styles.screenContainer, { backgroundColor: theme.colors.background }]}>
+      {/* Fixed Sidebar - Always visible on large screens */}
+      {(isLargeScreen || showChatSidebar) && (
+        <View style={[
+          styles.sidebarContainer,
+          {
+            backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
+            borderRightColor: theme.colors.border,
+          },
+          !isLargeScreen && styles.sidebarOverlay
+        ]}>
+          {renderChatSidebar()}
+        </View>
+      )}
+
+      {/* Overlay backdrop for mobile sidebar */}
+      {!isLargeScreen && showChatSidebar && (
+        <TouchableOpacity
+          style={styles.sidebarBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowChatSidebar(false)}
+        />
+      )}
+
+      {/* Chat Area - Independent scrolling */}
       <View style={[styles.mainContainer, { backgroundColor: isDark ? theme.colors.background : theme.colors.background }]}>
-        {/* Chat Area */}
         <View style={styles.chatArea}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -516,6 +529,15 @@ const AIChatScreen = () => {
               >
                 <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
               </TouchableOpacity>
+              {/* Menu button for mobile to show sidebar */}
+              {!isLargeScreen && (
+                <TouchableOpacity
+                  style={[styles.menuButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : theme.colors.backgroundSecondary }]}
+                  onPress={() => setShowChatSidebar(true)}
+                >
+                  <Icon name="chatbubbles-outline" size={20} color={theme.colors.primary} />
+                </TouchableOpacity>
+              )}
               <View style={[styles.chatHeaderIcon, { backgroundColor: theme.colors.primary + '15' }]}>
                 <Icon name="sparkles" size={isPhone ? 20 : 24} color={theme.colors.primary} />
               </View>
@@ -604,12 +626,17 @@ const AIChatScreen = () => {
           </KeyboardAvoidingView>
         </View>
       </View>
-    </MainLayout>
+    </SafeAreaView>
   );
 };
 
 const getStyles = (theme, isDark, isWeb, isPhone, isLargeScreen, width, height) =>
   StyleSheet.create({
+    // Main screen container - horizontal flex for sidebar + chat
+    screenContainer: {
+      flex: 1,
+      flexDirection: 'row',
+    },
     loadingContainer: {
       flex: 1,
       justifyContent: 'center',
@@ -618,6 +645,33 @@ const getStyles = (theme, isDark, isWeb, isPhone, isLargeScreen, width, height) 
     loadingText: {
       marginTop: 12,
       fontSize: 14,
+    },
+    // Sidebar container - fixed width, does not scroll with chat
+    sidebarContainer: {
+      width: isLargeScreen ? 280 : 300,
+      height: '100%',
+      borderRightWidth: 1,
+      zIndex: 100,
+    },
+    sidebarOverlay: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      shadowColor: '#000',
+      shadowOffset: { width: 2, height: 0 },
+      shadowOpacity: 0.25,
+      shadowRadius: 10,
+      elevation: 10,
+    },
+    sidebarBackdrop: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      zIndex: 99,
     },
     mainContainer: {
       flex: 1,
@@ -731,6 +785,13 @@ const getStyles = (theme, isDark, isWeb, isPhone, isLargeScreen, width, height) 
       gap: 12,
     },
     backButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    menuButton: {
       width: 40,
       height: 40,
       borderRadius: 12,
