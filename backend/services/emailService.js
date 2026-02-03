@@ -27,11 +27,17 @@
   console.log(`   SMTP_FROM_EMAIL: ${process.env.SMTP_FROM_EMAIL || 'NOT SET'}`);
 
   // Create transporter for Brevo SMTP
+  // Try port 465 (SSL) first, fallback to 587 (TLS)
   const createTransporter = () => {
+    const port = parseInt(process.env.SMTP_PORT) || 465;
+    const isSecure = port === 465;
+
+    console.log(`📧 Creating transporter: ${process.env.SMTP_HOST}:${port} (secure: ${isSecure})`);
+
     return nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
-      port: parseInt(process.env.SMTP_PORT) || 587,
-      secure: false,
+      port: port,
+      secure: isSecure,
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
@@ -39,9 +45,9 @@
       tls: {
         rejectUnauthorized: false
       },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000
     });
   };
 
