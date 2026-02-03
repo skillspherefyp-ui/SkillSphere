@@ -1,4 +1,5 @@
 const { AIChatSession, AIChatMessage, User } = require('../models');
+const geminiService = require('../services/geminiService');
 
 // Create a new chat session
 exports.createSession = async (req, res) => {
@@ -95,7 +96,13 @@ exports.sendMessage = async (req, res) => {
 
     // Verify session belongs to user
     const session = await AIChatSession.findOne({
-      where: { id, userId }
+      where: { id, userId },
+      include: [{
+        model: AIChatMessage,
+        as: 'messages',
+        order: [['timestamp', 'ASC']],
+        limit: 20 // Get last 20 messages for context
+      }]
     });
 
     if (!session) {
@@ -110,8 +117,16 @@ exports.sendMessage = async (req, res) => {
       timestamp: new Date()
     });
 
-    // Generate AI response (simulated for now)
-    const aiResponseContent = generateAIResponse(content);
+    // Get chat history for context (exclude the welcome message)
+    const chatHistory = (session.messages || [])
+      .filter(msg => msg.sender === 'user' || !msg.content.includes("I'm your AI learning assistant"))
+      .map(msg => ({
+        sender: msg.sender,
+        content: msg.content
+      }));
+
+    // Generate AI response using Gemini
+    const aiResponseContent = await geminiService.generateResponse(content.trim(), chatHistory);
 
     const aiMessage = await AIChatMessage.create({
       sessionId: id,
@@ -198,15 +213,3 @@ exports.deleteSession = async (req, res) => {
   }
 };
 
-// Helper function to generate AI response (simulated)
-function generateAIResponse(userMessage) {
-  const responses = [
-    "Thank you for your question! That's a great topic to explore. Based on your enrolled courses, I can help you understand this concept better. Would you like me to provide more specific examples?",
-    "I understand what you're asking about. This is an important concept in your learning journey. Let me break it down for you in simpler terms.",
-    "Great question! This relates to several key concepts we've covered. Here's how I would explain it: the main idea is to focus on understanding the fundamentals first, then build upon them.",
-    "I'd be happy to help you with that! This is a common area where students need clarification. The key thing to remember is to practice regularly and don't hesitate to ask questions.",
-    "That's an excellent question! Understanding this concept is crucial for your progress. I recommend reviewing the related materials and practicing with examples."
-  ];
-
-  return responses[Math.floor(Math.random() * responses.length)];
-}
