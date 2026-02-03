@@ -18,6 +18,11 @@ router.post('/complete-registration', authController.completeRegistration);
 router.post('/send-login-otp', authController.sendLoginOTP);
 router.post('/login-with-otp', authController.loginWithOTP);
 
+// Password reset routes
+router.post('/forgot-password', authController.forgotPassword);
+router.post('/reset-password', authController.resetPassword);
+router.post('/verify-signup-otp', authController.verifySignupOTP);
+
 // Google OAuth route
 router.post('/google-auth', authController.googleAuth);
 

@@ -175,6 +175,10 @@ export const authAPI = {
   // OTP Login (for existing users)
   sendLoginOTP: (email) => post('/auth/send-login-otp', { email }, false),
   loginWithOTP: (email, otp) => post('/auth/login-with-otp', { email, otp }, false),
+  // Password Reset
+  forgotPassword: (email) => post('/auth/forgot-password', { email }, false),
+  resetPassword: (email, otp, newPassword) => post('/auth/reset-password', { email, otp, newPassword }, false),
+  verifySignupOTP: (email, otp) => post('/auth/verify-signup-otp', { email, otp }, false),
   // Google OAuth
   googleAuth: (idToken) => post('/auth/google-auth', { idToken }, false),
 };

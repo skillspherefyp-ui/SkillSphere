@@ -470,6 +470,158 @@ exports.loginWithOTP = async (req, res) => {
   }
 };
 
+// Forgot Password - Send OTP for password reset
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const user = await User.findOne({ where: { email } });
+
+    if (!user) {
+      return res.status(404).json({ error: 'No account found with this email' });
+    }
+
+    if (!user.isActive) {
+      return res.status(401).json({ error: 'Account is inactive' });
+    }
+
+    // Generate OTP
+    const otp = generateOTP();
+    const otpExpiry = getOTPExpiry(10); // 10 minutes expiry
+
+    await user.update({
+      otpCode: otp,
+      otpExpiry: otpExpiry
+    });
+
+    // Send OTP email
+    try {
+      await sendOTPEmail(email, otp, user.name, 'Password Reset');
+      console.log('📧 Password reset OTP sent to:', email);
+    } catch (emailError) {
+      console.log('⚠️ Email sending failed, OTP for development:', otp);
+      console.log('⚠️ Email error:', emailError.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Password reset code sent to your email'
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Failed to send reset code. Please try again.' });
+  }
+};
+
+// Reset Password - Verify OTP and update password
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ error: 'Email, OTP, and new password are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    const user = await User.findOne({ where: { email } });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Verify OTP
+    const verification = verifyOTP(otp, user.otpCode, user.otpExpiry);
+
+    if (!verification.valid) {
+      return res.status(400).json({ error: verification.message });
+    }
+
+    // Update password and clear OTP
+    await user.update({
+      password: newPassword, // Will be hashed by beforeUpdate hook
+      otpCode: null,
+      otpExpiry: null
+    });
+
+    console.log('✅ Password reset successful for:', email);
+    res.json({
+      success: true,
+      message: 'Password reset successfully'
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password. Please try again.' });
+  }
+};
+
+// Verify Signup OTP and complete registration
+exports.verifySignupOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email and OTP are required' });
+    }
+
+    const user = await User.findOne({ where: { email } });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Verify OTP
+    const verification = verifyOTP(otp, user.otpCode, user.otpExpiry);
+
+    if (!verification.valid) {
+      return res.status(400).json({ error: verification.message });
+    }
+
+    // Mark email as verified and clear OTP
+    await user.update({
+      emailVerified: true,
+      isActive: true,
+      otpCode: null,
+      otpExpiry: null
+    });
+
+    // Generate token for auto-login
+    const token = generateToken(user);
+
+    // Send welcome email
+    try {
+      await sendWelcomeEmail(email, user.name);
+    } catch (emailError) {
+      console.error('Failed to send welcome email:', emailError);
+    }
+
+    console.log('✅ Signup verified for:', email);
+    res.json({
+      success: true,
+      message: 'Email verified successfully',
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        emailVerified: true,
+        permissions: user.permissions
+      }
+    });
+  } catch (error) {
+    console.error('Verify signup OTP error:', error);
+    res.status(500).json({ error: 'Failed to verify OTP. Please try again.' });
+  }
+};
+
 // Google OAuth Authentication
 exports.googleAuth = async (req, res) => {
   try {

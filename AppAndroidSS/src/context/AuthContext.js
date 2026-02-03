@@ -341,6 +341,55 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Forgot Password - Send OTP for password reset
+  const forgotPassword = async (email) => {
+    setIsLoading(true);
+    try {
+      const response = await authAPI.forgotPassword(email);
+      setIsLoading(false);
+      return response;
+    } catch (error) {
+      setIsLoading(false);
+      return { success: false, error: error.message || 'Failed to send reset code' };
+    }
+  };
+
+  // Reset Password - Verify OTP and update password
+  const resetPassword = async (email, otp, newPassword) => {
+    setIsLoading(true);
+    try {
+      const response = await authAPI.resetPassword(email, otp, newPassword);
+      setIsLoading(false);
+      return response;
+    } catch (error) {
+      setIsLoading(false);
+      return { success: false, error: error.message || 'Failed to reset password' };
+    }
+  };
+
+  // Verify Signup OTP
+  const verifySignupOTP = async (email, otp) => {
+    setIsLoading(true);
+    try {
+      const response = await authAPI.verifySignupOTP(email, otp);
+
+      if (response.success && response.token) {
+        const userPayload = normalizeUser(response.user, 'student');
+        await AsyncStorage.setItem('@skillsphere:token', response.token);
+        await AsyncStorage.setItem('@skillsphere:user', JSON.stringify(userPayload));
+        setUser(userPayload);
+        setIsLoading(false);
+        return { success: true, user: userPayload };
+      }
+
+      setIsLoading(false);
+      return response;
+    } catch (error) {
+      setIsLoading(false);
+      return { success: false, error: error.message || 'Failed to verify OTP' };
+    }
+  };
+
   // Google OAuth Authentication
   const googleSignIn = async (idToken) => {
     setIsLoading(true);
@@ -385,6 +434,10 @@ export const AuthProvider = ({ children }) => {
     // OTP login methods (for existing users)
     sendLoginOTP,
     loginWithOTP,
+    // Password reset
+    forgotPassword,
+    resetPassword,
+    verifySignupOTP,
     // Google OAuth
     googleSignIn,
   };
