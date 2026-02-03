@@ -163,7 +163,7 @@
   // Send OTP Email
   const sendOTPEmail = async (email, otp, name = 'User') => {
     try {
-      const fromEmail = process.env.SMTP_USER;
+      const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
       const content = `
         <h2 style="color: #1a1a2e; margin: 0 0 20px 0; font-size: 22px; font-weight: 600;" class="text-primary">Hello ${name}!</h2>
         <p style="color: #666666; margin: 0 0 25px 0; font-size: 16px; line-height: 1.6;" class="text-secondary">Your verification code is:</p>
@@ -193,7 +193,7 @@
   // Send Welcome Email
   const sendWelcomeEmail = async (email, name) => {
     try {
-      const fromEmail = process.env.SMTP_USER;
+      const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
       const content = `
         <h2 style="color: #1a1a2e; margin: 0 0 20px 0; font-size: 22px; font-weight: 600;" class="text-primary">Hello ${name}!</h2>
         <p style="color: #666666; margin: 0 0 20px 0; font-size: 16px; line-height: 1.6;" class="text-secondary">Thank you for joining <strong>SkillSphere</strong>! We're excited to have you on board.</p>
@@ -228,7 +228,7 @@
   // Send Admin Account Created Email
   const sendAdminAccountCreatedEmail = async (email, name, password, role) => {
     try {
-      const fromEmail = process.env.SMTP_USER;
+      const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
       const roleDisplay = role.charAt(0).toUpperCase() + role.slice(1);
       const content = `
         <h2 style="color: #1a1a2e; margin: 0 0 20px 0; font-size: 22px; font-weight: 600;" class="text-primary">Hello ${name}!</h2>
@@ -260,7 +260,7 @@
   // Send Certificate Email
   const sendCertificateEmail = async (email, studentName, courseName, certificateNumber, pdfBuffer) => {
     try {
-      const fromEmail = process.env.SMTP_USER;
+      const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
       const issueDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
       const content = `
         <h2 style="color: #1a1a2e; margin: 0 0 20px 0; font-size: 22px; font-weight: 600;" class="text-primary">Hello ${studentName}!</h2>
@@ -297,7 +297,7 @@
   // Send Super Admin Welcome Email
   const sendSuperAdminWelcomeEmail = async (email, name, password) => {
     try {
-      const fromEmail = process.env.SMTP_USER;
+      const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
       const content = `
         <h2 style="color: #1a1a2e; margin: 0 0 20px 0; font-size: 22px; font-weight: 600;" class="text-primary">Welcome, ${name}!</h2>
         <p style="color: #666666; margin: 0 0 20px 0; font-size: 16px;" class="text-secondary">Your Super Admin account has been created successfully.</p>
