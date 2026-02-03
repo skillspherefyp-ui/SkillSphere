@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TextInput, TouchableOpacity, Alert, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TextInput, TouchableOpacity, Alert, useWindowDimensions, Modal } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/Ionicons';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn, FadeInUp, ZoomIn, BounceIn } from 'react-native-reanimated';
 import AppButton from '../../components/ui/AppButton';
 import AppInput from '../../components/ui/AppInput';
 import BrandLogo from '../../components/BrandLogo';
@@ -16,6 +16,9 @@ const OTPVerificationScreen = ({ route, navigation }) => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [successTitle, setSuccessTitle] = useState('');
   const inputRefs = useRef([]);
   const { resetPassword, verifySignupOTP, isLoading } = useAuth();
   const { theme } = useTheme();
@@ -68,11 +71,15 @@ const OTPVerificationScreen = ({ route, navigation }) => {
         Alert.alert('Password Mismatch', 'Passwords do not match');
         return;
       }
+      if (newPassword.length < 6) {
+        Alert.alert('Weak Password', 'Password must be at least 6 characters');
+        return;
+      }
       const result = await resetPassword(email, otpString, newPassword);
       if (result.success) {
-        Alert.alert('Success', 'Password reset successfully!', [
-          { text: 'OK', onPress: () => navigation.navigate('Login') }
-        ]);
+        setSuccessTitle('Password Changed!');
+        setSuccessMessage('Your password has been reset successfully. You can now login with your new password.');
+        setShowSuccessModal(true);
       } else {
         Alert.alert('Error', result.error || 'Invalid OTP');
       }
@@ -80,21 +87,31 @@ const OTPVerificationScreen = ({ route, navigation }) => {
       // Verify signup OTP
       const result = await verifySignupOTP(email, otpString);
       if (result.success) {
-        Alert.alert('Success', 'Email verified successfully! Your account has been created.', [
-          { text: 'OK', onPress: () => {
-            // Navigation will be handled by auth context based on user role
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Main' }],
-            });
-          }}
-        ]);
+        setSuccessTitle('Welcome to SkillSphere!');
+        setSuccessMessage('Your email has been verified and your account is ready. Let\'s start learning!');
+        setShowSuccessModal(true);
       } else {
         Alert.alert('Verification Failed', result.error || 'Invalid OTP. Please try again.');
       }
     } else {
       // Email verification (for other purposes)
-      Alert.alert('Success', 'Email verified successfully!');
+      setSuccessTitle('Email Verified!');
+      setSuccessMessage('Your email has been verified successfully.');
+      setShowSuccessModal(true);
+    }
+  };
+
+  const handleSuccessClose = () => {
+    setShowSuccessModal(false);
+    if (isPasswordReset) {
+      navigation.navigate('Login');
+    } else if (isSignup) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Main' }],
+      });
+    } else {
+      navigation.goBack();
     }
   };
 
@@ -125,8 +142,79 @@ const OTPVerificationScreen = ({ route, navigation }) => {
     ? [theme.colors.background, theme.colors.backgroundSecondary]
     : [theme.colors.background, theme.colors.backgroundSecondary];
 
+  // Success Modal Component
+  const SuccessModal = () => (
+    <Modal
+      visible={showSuccessModal}
+      transparent
+      animationType="fade"
+      onRequestClose={handleSuccessClose}
+    >
+      <View style={styles.modalOverlay}>
+        <Animated.View
+          entering={ZoomIn.duration(400)}
+          style={[styles.modalContent, { backgroundColor: theme.colors.card }]}
+        >
+          {/* Success Icon */}
+          <Animated.View
+            entering={BounceIn.duration(600).delay(200)}
+            style={[styles.successIconContainer, { backgroundColor: '#10B981' }]}
+          >
+            <Icon name="checkmark" size={50} color="#ffffff" />
+          </Animated.View>
+
+          {/* Success Title */}
+          <Animated.Text
+            entering={FadeInUp.duration(400).delay(300)}
+            style={[styles.successTitle, { color: theme.colors.textPrimary }]}
+          >
+            {successTitle}
+          </Animated.Text>
+
+          {/* Success Message */}
+          <Animated.Text
+            entering={FadeInUp.duration(400).delay(400)}
+            style={[styles.successMessage, { color: theme.colors.textSecondary }]}
+          >
+            {successMessage}
+          </Animated.Text>
+
+          {/* Decorative Elements */}
+          <Animated.View
+            entering={FadeIn.duration(600).delay(500)}
+            style={styles.decorativeContainer}
+          >
+            <View style={[styles.decorativeDot, { backgroundColor: '#10B981' }]} />
+            <View style={[styles.decorativeDot, { backgroundColor: '#3B82F6' }]} />
+            <View style={[styles.decorativeDot, { backgroundColor: '#8B5CF6' }]} />
+          </Animated.View>
+
+          {/* Continue Button */}
+          <Animated.View
+            entering={FadeInUp.duration(400).delay(600)}
+            style={styles.successButtonContainer}
+          >
+            <TouchableOpacity
+              style={[styles.successButton, { backgroundColor: theme.colors.primary }]}
+              onPress={handleSuccessClose}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.successButtonText}>
+                {isPasswordReset ? 'Go to Login' : 'Continue'}
+              </Text>
+              <Icon name="arrow-forward" size={20} color="#ffffff" />
+            </TouchableOpacity>
+          </Animated.View>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+
   const content = (
     <>
+      {/* Success Modal */}
+      <SuccessModal />
+
       {/* Back Button - Fixed outside ScrollView */}
       <TouchableOpacity
         onPress={() => navigation.goBack()}
@@ -360,6 +448,81 @@ const styles = StyleSheet.create({
   changeEmailText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  // Success Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 28,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.3,
+    shadowRadius: 30,
+    elevation: 20,
+  },
+  successIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  successTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
+  successMessage: {
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+    paddingHorizontal: 10,
+  },
+  decorativeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 28,
+  },
+  decorativeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  successButtonContainer: {
+    width: '100%',
+  },
+  successButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    gap: 10,
+  },
+  successButtonText: {
+    color: '#ffffff',
+    fontSize: 17,
+    fontWeight: '600',
   },
 });
 
