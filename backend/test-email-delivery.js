@@ -1,10 +1,10 @@
 /**
  * Email Delivery Test Script
  *
- * Tests email delivery to different email providers including institutional emails
+ * Tests email delivery using Brevo SMTP
  *
  * Usage: node test-email-delivery.js <email_address>
- * Example: node test-email-delivery.js BCS223076@cust.pk
+ * Example: node test-email-delivery.js danishshafique39@gmail.com
  */
 
 require('dotenv').config();
@@ -14,62 +14,46 @@ const testEmail = process.argv[2];
 
 if (!testEmail) {
   console.log('Usage: node test-email-delivery.js <email_address>');
-  console.log('Example: node test-email-delivery.js BCS223076@cust.pk');
+  console.log('Example: node test-email-delivery.js your-email@gmail.com');
   process.exit(1);
 }
 
-const isInstitutional = testEmail.includes('.edu') ||
-                       testEmail.includes('.pk') ||
-                       testEmail.includes('.ac.') ||
-                       testEmail.includes('cust.pk');
+const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
 
 console.log('='.repeat(60));
-console.log('SkillSphere Email Delivery Test');
+console.log('SkillSphere Email Delivery Test (Brevo SMTP)');
 console.log('='.repeat(60));
-console.log(`\nTesting email delivery to: ${testEmail}`);
-console.log(`Email type: ${isInstitutional ? 'INSTITUTIONAL' : 'Regular'}`);
-console.log(`From: ${process.env.SMTP_USER}`);
+console.log(`\nSMTP Host: ${process.env.SMTP_HOST}`);
+console.log(`SMTP User: ${process.env.SMTP_USER}`);
+console.log(`From Email: ${fromEmail}`);
+console.log(`To: ${testEmail}`);
 console.log('');
 
-async function testWithGmailService() {
-  console.log('\n--- Method 1: Gmail Service ---');
+async function testBrevoSMTP() {
+  console.log('\n--- Testing Brevo SMTP (Port 587) ---');
   const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
+    port: parseInt(process.env.SMTP_PORT) || 587,
+    secure: false,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS
+    },
+    tls: {
+      rejectUnauthorized: false
     }
   });
 
   await transporter.verify();
-  console.log('✅ Connection verified');
-  return transporter;
-}
-
-async function testWithDirectSMTP() {
-  console.log('\n--- Method 2: Direct SMTP (SSL) ---');
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  });
-
-  await transporter.verify();
-  console.log('✅ Connection verified');
+  console.log('✅ SMTP Connection verified');
   return transporter;
 }
 
 async function testEmailDelivery() {
-  const fromEmail = process.env.SMTP_USER;
   const testCode = Math.floor(100000 + Math.random() * 900000);
 
-  // Simple email for institutional addresses
-  const simpleMailOptions = {
-    from: fromEmail,
+  const mailOptions = {
+    from: { name: 'SkillSphere', address: fromEmail },
     to: testEmail,
     subject: `${testCode} - SkillSphere Test Code`,
     text: `Hello,
@@ -88,58 +72,41 @@ SkillSphere Team`,
 <html>
 <head><meta charset="utf-8"></head>
 <body style="font-family: Arial, sans-serif; padding: 20px;">
-<h2>SkillSphere Test</h2>
+<h2 style="color: #4F46E5;">SkillSphere Test</h2>
 <p>Your test verification code is:</p>
-<h1 style="font-size: 32px; background: #f0f0f0; padding: 15px; text-align: center;">${testCode}</h1>
+<h1 style="font-size: 32px; background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%); padding: 15px; text-align: center; color: #4F46E5; border-radius: 8px;">${testCode}</h1>
 <p>If you received this email, delivery is working correctly!</p>
 <p style="color: #666; font-size: 12px;">Sent to: ${testEmail}<br>Time: ${new Date().toISOString()}</p>
 </body>
 </html>`
   };
 
-  const methods = [
-    { name: 'Gmail Service', fn: testWithGmailService },
-    { name: 'Direct SMTP', fn: testWithDirectSMTP }
-  ];
+  try {
+    const transporter = await testBrevoSMTP();
 
-  for (const method of methods) {
-    try {
-      const transporter = await method.fn();
+    console.log('Sending email...');
+    const info = await transporter.sendMail(mailOptions);
 
-      console.log(`Sending email via ${method.name}...`);
-      const info = await transporter.sendMail(simpleMailOptions);
+    console.log('\n' + '='.repeat(60));
+    console.log('✅ EMAIL SENT SUCCESSFULLY!');
+    console.log('='.repeat(60));
+    console.log(`Message ID: ${info.messageId}`);
+    console.log(`Response: ${info.response}`);
+    console.log(`Test Code: ${testCode}`);
 
-      console.log('\n' + '='.repeat(60));
-      console.log(`✅ EMAIL SENT via ${method.name}!`);
-      console.log('='.repeat(60));
-      console.log(`Message ID: ${info.messageId}`);
-      console.log(`Response: ${info.response}`);
-      console.log(`Test Code: ${testCode}`);
+    console.log('\n📋 CHECK YOUR EMAIL:');
+    console.log('1. Wait 1-2 minutes');
+    console.log('2. Check INBOX');
+    console.log('3. Check SPAM/JUNK folder');
+    console.log(`4. Look for subject: "${testCode} - SkillSphere Test Code"`);
 
-      console.log('\n📋 CHECK YOUR EMAIL:');
-      console.log('1. Wait 1-5 minutes');
-      console.log('2. Check INBOX');
-      console.log('3. Check SPAM/JUNK folder');
-      console.log('4. Look for subject: "' + testCode + ' - SkillSphere Test Code"');
-
-      if (isInstitutional) {
-        console.log('\n⚠️  INSTITUTIONAL EMAIL:');
-        console.log('If not received, the university server may be blocking.');
-        console.log('Options:');
-        console.log('1. Ask IT to whitelist: ' + fromEmail);
-        console.log('2. Add ' + fromEmail + ' to your contacts');
-        console.log('3. Check quarantine/blocked emails');
-      }
-
-      return; // Success, exit
-
-    } catch (error) {
-      console.error(`❌ ${method.name} failed:`, error.message);
-    }
+  } catch (error) {
+    console.error('\n❌ EMAIL FAILED:', error.message);
+    console.log('\nTroubleshooting:');
+    console.log('1. Check SMTP_HOST, SMTP_USER, SMTP_PASS in .env');
+    console.log('2. Verify Brevo API key is active');
+    console.log('3. Check if sender email is verified in Brevo');
   }
-
-  console.error('\n❌ ALL METHODS FAILED');
-  console.log('Please check your SMTP credentials in .env file');
 }
 
 testEmailDelivery();
