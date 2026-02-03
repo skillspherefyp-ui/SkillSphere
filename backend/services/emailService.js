@@ -83,18 +83,8 @@ const sendEmailWithBrevoAPI = async (emailData) => {
   }
 };
 
-// Get logo as data URI
-const getLogoDataUri = () => {
-  if (LOGO_BASE64_PNG) {
-    return `data:image/png;base64,${LOGO_BASE64_PNG}`;
-  }
-  return null;
-};
-
-// Generate email template (original design + logo)
+// Generate email template
 const generateEmailTemplate = ({ title, subtitle, content, icon }) => {
-  const logoDataUri = getLogoDataUri();
-
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -131,14 +121,6 @@ const generateEmailTemplate = ({ title, subtitle, content, icon }) => {
           <tr>
             <td style="background: linear-gradient(135deg, #4F46E5 0%, #6366F1 50%, #22D3EE 100%); padding: 35px 30px; text-align: center;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                <!-- Logo -->
-                ${logoDataUri ? `
-                <tr>
-                  <td align="center" style="padding-bottom: 15px;">
-                    <img src="${logoDataUri}" alt="SkillSphere" width="150" height="auto" style="display: block; border: 0;">
-                  </td>
-                </tr>
-                ` : ''}
                 ${icon ? `<tr><td align="center" style="padding-bottom: 10px;"><span style="font-size: 40px; line-height: 1;">${icon}</span></td></tr>` : ''}
                 <tr><td align="center"><h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 700;">${title}</h1>${subtitle ? `<p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 14px;">${subtitle}</p>` : ''}</td></tr>
               </table>
