@@ -333,9 +333,7 @@ const CourseDetailScreen = () => {
 
                 <View style={styles.materialsList}>
                   {course.materials.map((material, index) => {
-                    const fileUrl = material.uri.startsWith('/uploads')
-                      ? resolveFileUrl(material.uri)
-                      : material.uri;
+                    const fileUrl = resolveFileUrl(material.uri);
 
                     return (
                       <TouchableOpacity

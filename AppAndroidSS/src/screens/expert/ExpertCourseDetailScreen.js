@@ -219,9 +219,7 @@ const ExpertCourseDetailScreen = () => {
                         Materials ({topic.materials.length})
                       </Text>
                       {topic.materials.map((material, idx) => {
-                        const fileUrl = material.uri.startsWith('/uploads')
-                          ? resolveFileUrl(material.uri)
-                          : material.uri;
+                        const fileUrl = resolveFileUrl(material.uri);
                         const iconName = material.type === 'pdf' ? 'document-text' : 'image';
 
                         return (
@@ -270,9 +268,7 @@ const ExpertCourseDetailScreen = () => {
                 </Text>
               </View>
               {course.materials.map((material, index) => {
-                const fileUrl = material.uri.startsWith('/uploads')
-                  ? resolveFileUrl(material.uri)
-                  : material.uri;
+                const fileUrl = resolveFileUrl(material.uri);
                 const iconName = material.type === 'pdf' ? 'document-text' : 'image';
 
                 return (

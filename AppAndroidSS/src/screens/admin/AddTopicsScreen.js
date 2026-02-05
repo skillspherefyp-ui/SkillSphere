@@ -159,9 +159,7 @@ import React, { useState, useMemo } from 'react';
     };
 
     const handleOpenMaterial = (material) => {
-      const fileUrl = material.uri?.startsWith('/uploads')
-        ? resolveFileUrl(material.uri)
-        : material.uri;
+      const fileUrl = resolveFileUrl(material.uri);
 
       if (Platform.OS === 'web') {
         window.open(fileUrl, '_blank');
