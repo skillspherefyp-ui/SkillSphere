@@ -10,10 +10,13 @@ cloudinary.config({
 // General storage for uploads (PDFs, images, materials)
 const generalStorage = new CloudinaryStorage({
   cloudinary,
-  params: {
-    folder: 'skillsphere/uploads',
-    resource_type: 'auto',
-    allowed_formats: ['pdf', 'jpg', 'jpeg', 'png'],
+  params: async (req, file) => {
+    const isPdf = file.mimetype === 'application/pdf';
+    return {
+      folder: 'skillsphere/uploads',
+      resource_type: isPdf ? 'raw' : 'image',
+      allowed_formats: ['pdf', 'jpg', 'jpeg', 'png'],
+    };
   },
 });
 
