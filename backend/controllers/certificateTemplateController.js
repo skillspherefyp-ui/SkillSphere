@@ -1,24 +1,21 @@
 const { CertificateTemplate, User, Certificate, Course, TemplateCourse } = require('../models');
 const { generateCertificatePDF } = require('../services/certificateService');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const { templateStorage, cloudinary } = require('../config/cloudinary');
 
-// Configure multer for file uploads
-const uploadsDir = path.join(__dirname, '../uploads/templates');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+// Helper: extract Cloudinary public_id from a full URL
+const getPublicIdFromUrl = (url) => {
+  try {
+    // Cloudinary URLs look like: https://res.cloudinary.com/<cloud>/image/upload/v123/folder/filename.ext
+    const parts = url.split('/upload/');
+    if (parts.length < 2) return null;
+    // Remove version prefix (v123/) and file extension
+    const pathAfterUpload = parts[1].replace(/^v\d+\//, '');
+    return pathAfterUpload.replace(/\.[^/.]+$/, '');
+  } catch {
+    return null;
   }
-});
+};
 
 const fileFilter = (req, file, cb) => {
   const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -30,7 +27,7 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-  storage,
+  storage: templateStorage,
   fileFilter,
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
@@ -336,15 +333,19 @@ exports.deleteTemplate = async (req, res) => {
       return res.status(404).json({ error: 'Template not found' });
     }
 
-    // Delete associated files
-    if (template.backgroundImage && template.backgroundImage.startsWith('/uploads')) {
-      const bgPath = path.join(__dirname, '..', template.backgroundImage);
-      if (fs.existsSync(bgPath)) fs.unlinkSync(bgPath);
+    // Delete associated Cloudinary files
+    if (template.backgroundImage) {
+      const publicId = getPublicIdFromUrl(template.backgroundImage);
+      if (publicId) {
+        try { await cloudinary.uploader.destroy(publicId); } catch (e) { console.log('Could not delete old background from Cloudinary:', e.message); }
+      }
     }
 
-    if (template.adminSignature && template.adminSignature.startsWith('/uploads')) {
-      const sigPath = path.join(__dirname, '..', template.adminSignature);
-      if (fs.existsSync(sigPath)) fs.unlinkSync(sigPath);
+    if (template.adminSignature) {
+      const publicId = getPublicIdFromUrl(template.adminSignature);
+      if (publicId) {
+        try { await cloudinary.uploader.destroy(publicId); } catch (e) { console.log('Could not delete old signature from Cloudinary:', e.message); }
+      }
     }
 
     await template.destroy();
@@ -370,19 +371,24 @@ exports.uploadBackground = [
       const template = await CertificateTemplate.findByPk(id);
 
       if (!template) {
-        // Delete uploaded file
-        fs.unlinkSync(req.file.path);
+        // Delete the uploaded Cloudinary file
+        const publicId = getPublicIdFromUrl(req.file.path);
+        if (publicId) {
+          try { await cloudinary.uploader.destroy(publicId); } catch (e) { /* ignore */ }
+        }
         return res.status(404).json({ error: 'Template not found' });
       }
 
-      // Delete old background if exists
-      if (template.backgroundImage && template.backgroundImage.startsWith('/uploads')) {
-        const oldPath = path.join(__dirname, '..', template.backgroundImage);
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      // Delete old background from Cloudinary if exists
+      if (template.backgroundImage) {
+        const oldPublicId = getPublicIdFromUrl(template.backgroundImage);
+        if (oldPublicId) {
+          try { await cloudinary.uploader.destroy(oldPublicId); } catch (e) { console.log('Could not delete old background:', e.message); }
+        }
       }
 
-      // Update template with new background
-      template.backgroundImage = `/uploads/templates/${req.file.filename}`;
+      // Store full Cloudinary URL
+      template.backgroundImage = req.file.path;
       await template.save();
 
       res.json({
@@ -392,7 +398,12 @@ exports.uploadBackground = [
       });
     } catch (error) {
       console.error('Upload background error:', error);
-      if (req.file) fs.unlinkSync(req.file.path);
+      if (req.file) {
+        const publicId = getPublicIdFromUrl(req.file.path);
+        if (publicId) {
+          try { await cloudinary.uploader.destroy(publicId); } catch (e) { /* ignore */ }
+        }
+      }
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -412,18 +423,23 @@ exports.uploadAdminSignature = [
       const template = await CertificateTemplate.findByPk(id);
 
       if (!template) {
-        fs.unlinkSync(req.file.path);
+        const publicId = getPublicIdFromUrl(req.file.path);
+        if (publicId) {
+          try { await cloudinary.uploader.destroy(publicId); } catch (e) { /* ignore */ }
+        }
         return res.status(404).json({ error: 'Template not found' });
       }
 
-      // Delete old signature if exists
-      if (template.adminSignature && template.adminSignature.startsWith('/uploads')) {
-        const oldPath = path.join(__dirname, '..', template.adminSignature);
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      // Delete old signature from Cloudinary if exists
+      if (template.adminSignature) {
+        const oldPublicId = getPublicIdFromUrl(template.adminSignature);
+        if (oldPublicId) {
+          try { await cloudinary.uploader.destroy(oldPublicId); } catch (e) { console.log('Could not delete old signature:', e.message); }
+        }
       }
 
-      // Update template with new signature
-      template.adminSignature = `/uploads/templates/${req.file.filename}`;
+      // Store full Cloudinary URL
+      template.adminSignature = req.file.path;
       await template.save();
 
       res.json({
@@ -433,7 +449,12 @@ exports.uploadAdminSignature = [
       });
     } catch (error) {
       console.error('Upload admin signature error:', error);
-      if (req.file) fs.unlinkSync(req.file.path);
+      if (req.file) {
+        const publicId = getPublicIdFromUrl(req.file.path);
+        if (publicId) {
+          try { await cloudinary.uploader.destroy(publicId); } catch (e) { /* ignore */ }
+        }
+      }
       res.status(500).json({ error: 'Internal server error' });
     }
   }

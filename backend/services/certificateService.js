@@ -2,6 +2,7 @@ const React = require('react');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { cloudinary } = require('../config/cloudinary');
 
 // Try to load @react-pdf/renderer, fallback if ES Module issue
 let Document, Page, Text, View, Image, StyleSheet, renderToBuffer;
@@ -32,12 +33,6 @@ try {
 
 // Logo path - automatically used for all certificates
 const LOGO_PATH = path.join(__dirname, '../assets/skillsphere-logo.png');
-const UPLOADS_DIR = path.join(__dirname, '../uploads/certificates');
-
-// Ensure uploads directory exists
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
 
 /**
  * Convert hex color to RGB
@@ -86,42 +81,58 @@ const analyzeImageBrightness = async (imagePath) => {
   try {
     if (!imagePath) return null;
 
-    // Get the actual file path
-    let fullPath = imagePath;
-    if (imagePath.startsWith('/uploads/') || imagePath.startsWith('\\uploads\\')) {
-      const relativePath = imagePath.replace(/^[/\\]/, '').replace(/\//g, path.sep);
-      fullPath = path.join(__dirname, '..', relativePath);
-    } else if (!path.isAbsolute(imagePath)) {
-      fullPath = path.join(__dirname, '..', imagePath);
-    }
-    fullPath = path.normalize(fullPath);
-
-    if (!fs.existsSync(fullPath)) {
-      console.log('analyzeImageBrightness: File not found:', fullPath);
-      return null;
-    }
-
-    if (sharp) {
-      // Use sharp for accurate analysis
-      const image = sharp(fullPath);
-      const stats = await image.stats();
-
-      // Calculate average brightness from RGB channels
-      const avgBrightness = (stats.channels[0].mean + stats.channels[1].mean + stats.channels[2].mean) / 3;
-
-      // Normalize to 0-1 range (values are 0-255)
-      const normalizedBrightness = avgBrightness / 255;
-
-      console.log(`analyzeImageBrightness: Average brightness = ${normalizedBrightness.toFixed(2)}`);
-
-      // Threshold: below 0.5 is dark, above is light
-      return normalizedBrightness > 0.5 ? 'light' : 'dark';
-    } else {
-      // Fallback: analyze PNG/JPEG header or use default
-      // For simplicity, assume dark background if we can't analyze
+    if (!sharp) {
       console.log('analyzeImageBrightness: Sharp not available, defaulting to dark');
       return 'dark';
     }
+
+    let imageInput;
+
+    // Handle HTTP URLs (Cloudinary or remote images)
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      console.log('analyzeImageBrightness: Downloading from URL:', imagePath);
+      const https = require('https');
+      const http = require('http');
+      const client = imagePath.startsWith('https') ? https : http;
+      imageInput = await new Promise((resolve, reject) => {
+        client.get(imagePath, (res) => {
+          const chunks = [];
+          res.on('data', (chunk) => chunks.push(chunk));
+          res.on('end', () => resolve(Buffer.concat(chunks)));
+          res.on('error', reject);
+        }).on('error', reject);
+      });
+    } else {
+      // Local file path
+      let fullPath = imagePath;
+      if (imagePath.startsWith('/uploads/') || imagePath.startsWith('\\uploads\\')) {
+        const relativePath = imagePath.replace(/^[/\\]/, '').replace(/\//g, path.sep);
+        fullPath = path.join(__dirname, '..', relativePath);
+      } else if (!path.isAbsolute(imagePath)) {
+        fullPath = path.join(__dirname, '..', imagePath);
+      }
+      fullPath = path.normalize(fullPath);
+
+      if (!fs.existsSync(fullPath)) {
+        console.log('analyzeImageBrightness: File not found:', fullPath);
+        return null;
+      }
+      imageInput = fullPath;
+    }
+
+    const image = sharp(imageInput);
+    const stats = await image.stats();
+
+    // Calculate average brightness from RGB channels
+    const avgBrightness = (stats.channels[0].mean + stats.channels[1].mean + stats.channels[2].mean) / 3;
+
+    // Normalize to 0-1 range (values are 0-255)
+    const normalizedBrightness = avgBrightness / 255;
+
+    console.log(`analyzeImageBrightness: Average brightness = ${normalizedBrightness.toFixed(2)}`);
+
+    // Threshold: below 0.5 is dark, above is light
+    return normalizedBrightness > 0.5 ? 'light' : 'dark';
   } catch (error) {
     console.error('analyzeImageBrightness: Error analyzing image:', error.message);
     return null;
@@ -594,18 +605,29 @@ const generateCertificatePDF = async (data, template = null) => {
  * Save PDF to storage and return URL
  * @param {Buffer} pdfBuffer - PDF buffer
  * @param {string} certificateNumber - Unique certificate number
- * @returns {string} File URL/path
+ * @returns {string} File URL/path (Cloudinary URL)
  */
 const saveCertificatePDF = async (pdfBuffer, certificateNumber) => {
   try {
-    const filename = `Certificate_${certificateNumber}.pdf`;
-    const filepath = path.join(UPLOADS_DIR, filename);
+    const filename = `Certificate_${certificateNumber}`;
 
-    // Write PDF to file
-    fs.writeFileSync(filepath, pdfBuffer);
+    // Upload to Cloudinary as raw resource (PDF)
+    const result = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          resource_type: 'raw',
+          folder: 'skillsphere/certificates',
+          public_id: filename,
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      uploadStream.end(pdfBuffer);
+    });
 
-    // Return relative URL path
-    return `/uploads/certificates/${filename}`;
+    return result.secure_url;
   } catch (error) {
     console.error('Error saving certificate PDF:', error);
     throw error;

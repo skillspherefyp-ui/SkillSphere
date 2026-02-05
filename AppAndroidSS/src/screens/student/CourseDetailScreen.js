@@ -23,6 +23,7 @@ import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { resolveFileUrl } from '../../utils/urlHelpers';
 
 const CourseDetailScreen = () => {
   const navigation = useNavigation();
@@ -587,7 +588,7 @@ const CourseDetailScreen = () => {
                 <View style={styles.materialsList}>
                   {course.materials.map((material, index) => {
                     const fileUrl = material.uri?.startsWith('/uploads')
-                      ? `http://localhost:5000${material.uri}`
+                      ? resolveFileUrl(material.uri)
                       : material.uri;
                     const canAccess = isEnrolled;
 
@@ -656,7 +657,7 @@ const CourseDetailScreen = () => {
 
               {course.thumbnailImage ? (
                 <Image
-                  source={{ uri: `http://localhost:5000${course.thumbnailImage}` }}
+                  source={{ uri: resolveFileUrl(course.thumbnailImage) }}
                   style={styles.thumbnailImage}
                   resizeMode="cover"
                 />

@@ -23,6 +23,7 @@ import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { resolveFileUrl } from '../../utils/urlHelpers';
 
 const EnrolledCoursesScreen = () => {
   const { enrollments, fetchMyEnrollments } = useData();
@@ -409,7 +410,7 @@ const EnrolledCoursesScreen = () => {
                     {/* Course Image */}
                     {course.thumbnailImage ? (
                       <Image
-                        source={{ uri: `http://localhost:5000${course.thumbnailImage}` }}
+                        source={{ uri: resolveFileUrl(course.thumbnailImage) }}
                         style={styles.courseImage}
                         resizeMode="cover"
                       />

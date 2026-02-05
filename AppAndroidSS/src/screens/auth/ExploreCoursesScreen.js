@@ -11,6 +11,7 @@ import { useNavigation } from '@react-navigation/native';
 import { categoryAPI, courseAPI } from '../../services/apiClient';
 import ThemeToggle from '../../components/ThemeToggle';
 import BrandLogo from '../../components/BrandLogo';
+import { resolveFileUrl } from '../../utils/urlHelpers';
 
 const ExploreCoursesScreen = () => {
   const { theme } = useTheme();
@@ -75,7 +76,7 @@ const ExploreCoursesScreen = () => {
       <AppCard style={styles.courseCard}>
         {item.thumbnailImage ? (
           <Image
-            source={{ uri: `http://localhost:5000${item.thumbnailImage}` }}
+            source={{ uri: resolveFileUrl(item.thumbnailImage) }}
             style={styles.courseThumbnail}
             resizeMode="cover"
           />

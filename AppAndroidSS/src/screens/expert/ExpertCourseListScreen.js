@@ -19,6 +19,7 @@ import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
+import { resolveFileUrl } from '../../utils/urlHelpers';
 
 const ExpertCourseListScreen = () => {
   const { courses, categories } = useData();
@@ -92,7 +93,7 @@ const ExpertCourseListScreen = () => {
         {/* Thumbnail */}
         {course.thumbnailImage ? (
           <Image
-            source={{ uri: `http://localhost:5000${course.thumbnailImage}` }}
+            source={{ uri: resolveFileUrl(course.thumbnailImage) }}
             style={styles.courseThumbnail}
             resizeMode="cover"
           />

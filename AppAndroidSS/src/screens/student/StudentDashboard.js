@@ -17,6 +17,7 @@ import { useData } from '../../context/DataContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { certificateAPI } from '../../services/apiClient';
+import { resolveFileUrl } from '../../utils/urlHelpers';
 
 // UI Components
 import MainLayout from '../../components/ui/MainLayout';
@@ -816,7 +817,7 @@ const StudentDashboard = () => {
                   <View style={[styles.tableCell, styles.imageColumn]}>
                     {course.thumbnailImage ? (
                       <Image
-                        source={{ uri: `http://localhost:5000${course.thumbnailImage}` }}
+                        source={{ uri: resolveFileUrl(course.thumbnailImage) }}
                         style={styles.courseImage}
                         resizeMode="cover"
                       />
@@ -1046,7 +1047,7 @@ const StudentDashboard = () => {
                 >
                   {course.thumbnailImage ? (
                     <Image
-                      source={{ uri: `http://localhost:5000${course.thumbnailImage}` }}
+                      source={{ uri: resolveFileUrl(course.thumbnailImage) }}
                       style={styles.recommendedImage}
                       resizeMode="cover"
                     />

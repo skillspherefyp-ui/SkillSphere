@@ -23,6 +23,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { uploadAPI } from '../../services/apiClient';
+import { resolveFileUrl } from '../../utils/urlHelpers';
 
 const CreateCourseScreen = () => {
   const navigation = useNavigation();
@@ -359,7 +360,7 @@ const CreateCourseScreen = () => {
               {thumbnailImage ? (
                 <View style={styles.thumbnailPreviewContainer}>
                   <Image
-                    source={{ uri: `http://localhost:5000${thumbnailImage}` }}
+                    source={{ uri: resolveFileUrl(thumbnailImage) }}
                     style={styles.thumbnailPreview}
                     resizeMode="cover"
                   />

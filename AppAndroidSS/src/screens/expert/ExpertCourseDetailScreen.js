@@ -20,6 +20,7 @@ import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { resolveFileUrl } from '../../utils/urlHelpers';
 
 const ExpertCourseDetailScreen = () => {
   const navigation = useNavigation();
@@ -110,7 +111,7 @@ const ExpertCourseDetailScreen = () => {
             <View style={styles.courseHeaderContent}>
               {course.thumbnailImage ? (
                 <Image
-                  source={{ uri: `http://localhost:5000${course.thumbnailImage}` }}
+                  source={{ uri: resolveFileUrl(course.thumbnailImage) }}
                   style={styles.courseThumbnail}
                   resizeMode="cover"
                 />
@@ -219,7 +220,7 @@ const ExpertCourseDetailScreen = () => {
                       </Text>
                       {topic.materials.map((material, idx) => {
                         const fileUrl = material.uri.startsWith('/uploads')
-                          ? `http://localhost:5000${material.uri}`
+                          ? resolveFileUrl(material.uri)
                           : material.uri;
                         const iconName = material.type === 'pdf' ? 'document-text' : 'image';
 
@@ -270,7 +271,7 @@ const ExpertCourseDetailScreen = () => {
               </View>
               {course.materials.map((material, index) => {
                 const fileUrl = material.uri.startsWith('/uploads')
-                  ? `http://localhost:5000${material.uri}`
+                  ? resolveFileUrl(material.uri)
                   : material.uri;
                 const iconName = material.type === 'pdf' ? 'document-text' : 'image';
 

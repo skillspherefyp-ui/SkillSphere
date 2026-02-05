@@ -33,6 +33,7 @@ import AppButton from '../../components/ui/AppButton';
 import AppCard from '../../components/ui/AppCard';
 import ThemeToggle from '../../components/ThemeToggle';
 import { courseAPI, enrollmentAPI } from '../../services/apiClient';
+import { resolveFileUrl } from '../../utils/urlHelpers';
 
 const FeatureCard = ({ icon, title, description, delay, theme, isMobile }) => (
   <Animated.View
@@ -665,7 +666,7 @@ const LandingScreen = ({ navigation }) => {
                       <View style={styles.courseImageContainer}>
                         {course.thumbnailImage ? (
                           <Image
-                            source={{ uri: `http://localhost:5000${course.thumbnailImage}` }}
+                            source={{ uri: resolveFileUrl(course.thumbnailImage) }}
                             style={styles.modernCourseThumbnail}
                             resizeMode="cover"
                           />
@@ -826,7 +827,7 @@ const LandingScreen = ({ navigation }) => {
                       <View style={styles.courseImageContainer}>
                         {course.thumbnailImage ? (
                           <Image
-                            source={{ uri: `http://localhost:5000${course.thumbnailImage}` }}
+                            source={{ uri: resolveFileUrl(course.thumbnailImage) }}
                             style={styles.modernCourseThumbnail}
                             resizeMode="cover"
                           />

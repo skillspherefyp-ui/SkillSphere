@@ -24,6 +24,7 @@ import AppCard from '../../components/ui/AppCard';
 import AppButton from '../../components/ui/AppButton';
 import StatusBadge from '../../components/ui/StatusBadge';
 import Skeleton, { SkeletonDashboardStats, SkeletonTableRow } from '../../components/ui/Skeleton';
+import { resolveFileUrl } from '../../utils/urlHelpers';
 
 // ============================================
 // UTILITY FUNCTIONS FOR DATA PROCESSING
@@ -787,7 +788,7 @@ const AdminDashboard = () => {
                   <View style={[styles.tableCell, styles.imageColumn]}>
                     {course.thumbnailImage ? (
                       <Image
-                        source={{ uri: `http://localhost:5000${course.thumbnailImage}` }}
+                        source={{ uri: resolveFileUrl(course.thumbnailImage) }}
                         style={styles.courseImage}
                         resizeMode="cover"
                       />

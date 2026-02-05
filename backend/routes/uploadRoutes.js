@@ -1,26 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-
-// Ensure uploads directory exists
-const uploadDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Configure multer for file storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    // Generate unique filename: timestamp-originalname
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
-  }
-});
+const { generalStorage } = require('../config/cloudinary');
 
 // File filter to accept only PDFs and images
 const fileFilter = (req, file, cb) => {
@@ -33,7 +14,7 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-  storage: storage,
+  storage: generalStorage,
   fileFilter: fileFilter,
   limits: {
     fileSize: 10 * 1024 * 1024 // 10MB max file size
@@ -50,12 +31,11 @@ router.post('/file', upload.single('file'), (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Return the file URL
-    const fileUrl = `/uploads/${req.file.filename}`;
+    // Cloudinary returns the full URL in req.file.path
+    const fileUrl = req.file.path;
 
     console.log('✅ File uploaded successfully:');
     console.log('   - Original name:', req.file.originalname);
-    console.log('   - Saved as:', req.file.filename);
     console.log('   - URL:', fileUrl);
     console.log('   - Size:', req.file.size, 'bytes');
     console.log('   - Type:', req.file.mimetype);
@@ -83,7 +63,7 @@ router.post('/files', upload.array('files', 10), (req, res) => {
     }
 
     const files = req.files.map(file => ({
-      url: `/uploads/${file.filename}`,
+      url: file.path,
       filename: file.originalname,
       size: file.size,
       mimetype: file.mimetype

@@ -23,6 +23,7 @@ import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { resolveFileUrl } from '../../utils/urlHelpers';
 
 const BrowseCoursesScreen = () => {
   const { courses, categories, enrollments, fetchCourses, fetchCategories } = useData();
@@ -446,7 +447,7 @@ const BrowseCoursesScreen = () => {
                     {/* Course Image */}
                     {course.thumbnailImage ? (
                       <Image
-                        source={{ uri: `http://localhost:5000${course.thumbnailImage}` }}
+                        source={{ uri: resolveFileUrl(course.thumbnailImage) }}
                         style={styles.courseImage}
                         resizeMode="cover"
                       />

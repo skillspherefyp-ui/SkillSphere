@@ -25,6 +25,7 @@ import React, { useState, useMemo } from 'react';
   import { useAuth } from '../../context/AuthContext';
   import { useTheme } from '../../context/ThemeContext';
   import { useNavigation, useRoute } from '@react-navigation/native';
+  import { resolveFileUrl } from '../../utils/urlHelpers';
 
   // Color palette for topic cards
   const TOPIC_COLORS = [
@@ -159,7 +160,7 @@ import React, { useState, useMemo } from 'react';
 
     const handleOpenMaterial = (material) => {
       const fileUrl = material.uri?.startsWith('/uploads')
-        ? `http://localhost:5000${material.uri}`
+        ? resolveFileUrl(material.uri)
         : material.uri;
 
       if (Platform.OS === 'web') {

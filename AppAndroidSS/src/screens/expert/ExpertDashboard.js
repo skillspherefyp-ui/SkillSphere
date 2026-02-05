@@ -21,6 +21,7 @@ import PageTitleRow from '../../components/ui/PageTitleRow';
 import AppCard from '../../components/ui/AppCard';
 import AppButton from '../../components/ui/AppButton';
 import Skeleton, { SkeletonDashboardStats, SkeletonTableRow } from '../../components/ui/Skeleton';
+import { resolveFileUrl } from '../../utils/urlHelpers';
 
 // ============================================
 // UTILITY FUNCTIONS
@@ -510,7 +511,7 @@ const ExpertDashboard = () => {
                   <View style={[styles.tableCell, styles.imageColumn]}>
                     {course.thumbnailImage ? (
                       <Image
-                        source={{ uri: `http://localhost:5000${course.thumbnailImage}` }}
+                        source={{ uri: resolveFileUrl(course.thumbnailImage) }}
                         style={styles.courseImage}
                         resizeMode="cover"
                       />
