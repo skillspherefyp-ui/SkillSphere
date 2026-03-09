@@ -211,7 +211,7 @@ const getStyles = (theme, isDark, isWeb, isLargeScreen, hasPersistentSidebar, ha
     },
     menuButtonCustom: {
       backgroundColor: isDark
-        ? 'rgba(79, 70, 229, 0.2)'
+        ? theme.colors.primaryGlow
         : theme.colors.primary + '15',
     },
     // Custom Sidebar styles
@@ -221,9 +221,9 @@ const getStyles = (theme, isDark, isWeb, isLargeScreen, hasPersistentSidebar, ha
       top: 0,
       bottom: 0,
       width: CUSTOM_SIDEBAR_WIDTH,
-      backgroundColor: isDark ? '#1a1a2e' : theme.colors.surface,
+      backgroundColor: theme.colors.surface,
       borderRightWidth: 1,
-      borderRightColor: isDark ? 'rgba(255,255,255,0.1)' : theme.colors.border,
+      borderRightColor: theme.colors.border,
       zIndex: 10,
     },
     customSidebarOverlay: {
@@ -241,9 +241,9 @@ const getStyles = (theme, isDark, isWeb, isLargeScreen, hasPersistentSidebar, ha
       top: 0,
       bottom: 0,
       width: CUSTOM_SIDEBAR_WIDTH,
-      backgroundColor: isDark ? '#1a1a2e' : theme.colors.surface,
+      backgroundColor: theme.colors.surface,
       zIndex: 100,
-      shadowColor: '#000',
+      shadowColor: theme.colors.shadow,
       shadowOffset: { width: 4, height: 0 },
       shadowOpacity: 0.3,
       shadowRadius: 12,

@@ -66,7 +66,7 @@ const AppButton = ({
       return [
         ...baseStyle,
         {
-          backgroundColor: isDark ? theme.colors.backgroundTertiary : theme.colors.backgroundSecondary,
+          backgroundColor: theme.colors.surface,
           borderWidth: 1,
           borderColor: theme.colors.border,
         },

@@ -35,8 +35,10 @@ const AnimatedButton = ({ title, onPress, loading = false, variant = 'primary', 
         activeOpacity={0.8}
       >
         <LinearGradient
-          colors={[theme.colors.secondary, theme.colors.secondaryDark, theme.colors.secondaryLight]}
+          colors={[theme.colors.buttonGradientStart, theme.colors.buttonGradientEnd]}
           style={styles.gradientButton}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
         >
           {loading ? (
             <ActivityIndicator color="#ffffff" />

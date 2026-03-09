@@ -7,6 +7,7 @@ export const toastConfig = (theme) => ({
     <View style={[styles.container, {
       backgroundColor: theme.colors.card,
       borderLeftColor: theme.colors.success,
+      borderColor: theme.colors.border,
       shadowColor: theme.colors.shadow,
     }]}>
       <View style={[styles.iconContainer, { backgroundColor: theme.colors.successLight }]}>
@@ -29,6 +30,7 @@ export const toastConfig = (theme) => ({
     <View style={[styles.container, {
       backgroundColor: theme.colors.card,
       borderLeftColor: theme.colors.error,
+      borderColor: theme.colors.border,
       shadowColor: theme.colors.shadow,
     }]}>
       <View style={[styles.iconContainer, { backgroundColor: theme.colors.errorLight }]}>
@@ -51,6 +53,7 @@ export const toastConfig = (theme) => ({
     <View style={[styles.container, {
       backgroundColor: theme.colors.card,
       borderLeftColor: theme.colors.info,
+      borderColor: theme.colors.border,
       shadowColor: theme.colors.shadow,
     }]}>
       <View style={[styles.iconContainer, { backgroundColor: theme.colors.infoLight }]}>
@@ -73,6 +76,7 @@ export const toastConfig = (theme) => ({
     <View style={[styles.container, {
       backgroundColor: theme.colors.card,
       borderLeftColor: theme.colors.warning,
+      borderColor: theme.colors.border,
       shadowColor: theme.colors.shadow,
     }]}>
       <View style={[styles.iconContainer, { backgroundColor: theme.colors.warningLight }]}>
@@ -99,6 +103,7 @@ const styles = StyleSheet.create({
     minHeight: 60,
     marginHorizontal: '5%',
     borderRadius: 12,
+    borderWidth: 1,
     borderLeftWidth: 4,
     flexDirection: 'row',
     alignItems: 'center',

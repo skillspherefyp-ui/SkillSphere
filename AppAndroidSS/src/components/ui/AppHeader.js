@@ -97,7 +97,7 @@ const AppHeader = ({
   const styles = getStyles(theme, isDark, isWeb, isLargeScreen, headerHeight);
 
   // Gradient colors (Section 6.1)
-  const gradientColors = [theme.colors.gradientStart, theme.colors.gradientEnd];
+  const gradientColors = [theme.colors.headerBackground, theme.colors.gradientEnd];
 
   // Header content component
   const HeaderContent = () => (
@@ -117,7 +117,7 @@ const AppHeader = ({
               <Icon
                 name="arrow-back"
                 size={20}
-                color="#FFFFFF"
+                color={theme.colors.headerIcon}
               />
             </TouchableOpacity>
           )}
@@ -127,7 +127,7 @@ const AppHeader = ({
             <View style={styles.dateTimeWrapper}>
               {/* Date Section */}
               <View style={styles.dateContainer}>
-                <Icon name="calendar" size={16} color="#FFFFFF" />
+                <Icon name="calendar" size={16} color={theme.colors.headerIcon} />
                 <Text style={styles.dateText}>
                   {formatDate(currentTime)}
                 </Text>
@@ -139,7 +139,7 @@ const AppHeader = ({
               {/* Time Section */}
               <View style={styles.timeContainer}>
                 <Animated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
-                <Icon name="time" size={16} color="#FFFFFF" />
+                <Icon name="time" size={16} color={theme.colors.headerIcon} />
                 <Text style={styles.timeText}>
                   {formatTime(currentTime)}
                 </Text>
@@ -150,7 +150,7 @@ const AppHeader = ({
 
         <View style={styles.rightSection}>
           {/* Theme Toggle */}
-          <ThemeToggle style={styles.themeToggle} iconColor="#FFFFFF" />
+          <ThemeToggle style={styles.themeToggle} iconColor={theme.colors.headerIcon} />
           {/* Additional right actions */}
           {rightActions}
         </View>
@@ -197,7 +197,7 @@ const getStyles = (theme, isDark, isWeb, isLargeScreen, headerHeight) => StyleSh
     borderBottomLeftRadius: isWeb ? 0 : 20,
     borderBottomRightRadius: isWeb ? 0 : 20,
     // Soft shadow
-    shadowColor: '#000000',
+    shadowColor: theme.colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -227,9 +227,9 @@ const getStyles = (theme, isDark, isWeb, isLargeScreen, headerHeight) => StyleSh
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: theme.colors.headerSurface,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
+    borderColor: theme.colors.headerBorder,
   },
   rightSection: {
     flexDirection: 'row',
@@ -239,18 +239,18 @@ const getStyles = (theme, isDark, isWeb, isLargeScreen, headerHeight) => StyleSh
   dateTimeWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: theme.colors.headerSurface,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 25,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: theme.colors.headerBorder,
     ...(isWeb && {
       backdropFilter: 'blur(10px)',
       WebkitBackdropFilter: 'blur(10px)',
-      boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
+      boxShadow: `0 4px 15px ${theme.colors.shadow}, inset 0 1px 0 ${theme.colors.headerBorder}`,
     }),
-    shadowColor: '#000',
+    shadowColor: theme.colors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
@@ -262,7 +262,7 @@ const getStyles = (theme, isDark, isWeb, isLargeScreen, headerHeight) => StyleSh
     gap: 8,
   },
   dateText: {
-    color: '#FFFFFF',
+    color: theme.colors.headerText,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: 0.5,
@@ -273,7 +273,7 @@ const getStyles = (theme, isDark, isWeb, isLargeScreen, headerHeight) => StyleSh
   dateTimeDivider: {
     width: 1,
     height: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: theme.colors.headerBorder,
     marginHorizontal: 14,
     borderRadius: 1,
   },
@@ -286,15 +286,15 @@ const getStyles = (theme, isDark, isWeb, isLargeScreen, headerHeight) => StyleSh
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#4ADE80',
-    shadowColor: '#4ADE80',
+    backgroundColor: theme.colors.accent,
+    shadowColor: theme.colors.accent,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 4,
     elevation: 3,
   },
   timeText: {
-    color: '#FFFFFF',
+    color: theme.colors.headerText,
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: 0.8,

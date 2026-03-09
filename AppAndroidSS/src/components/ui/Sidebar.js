@@ -140,8 +140,8 @@ const Sidebar = ({
     if (isWeb) {
       return {
         backgroundColor: isDark
-          ? 'rgba(15, 23, 42, 0.85)'
-          : 'rgba(255, 255, 255, 0.85)',
+          ? 'rgba(27, 38, 51, 0.9)'
+          : 'rgba(255, 252, 248, 0.9)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
       };
@@ -150,8 +150,8 @@ const Sidebar = ({
     // Note: True blur requires @react-native-community/blur
     return {
       backgroundColor: isDark
-        ? 'rgba(15, 23, 42, 0.95)'
-        : 'rgba(255, 255, 255, 0.95)',
+        ? 'rgba(27, 38, 51, 0.96)'
+        : 'rgba(255, 252, 248, 0.96)',
     };
   };
 
@@ -360,7 +360,7 @@ const getStyles = (theme, isDark, isWeb, isPersistent) => StyleSheet.create({
     bottom: 0,
     width: SIDEBAR_WIDTH,
     zIndex: 1001,
-    shadowColor: '#000',
+    shadowColor: theme.colors.shadow,
     shadowOffset: { width: 4, height: 0 },
     shadowOpacity: isDark ? 0.4 : 0.15,
     shadowRadius: 20,
@@ -374,8 +374,8 @@ const getStyles = (theme, isDark, isWeb, isPersistent) => StyleSheet.create({
     flex: 1,
     borderRightWidth: 1,
     borderRightColor: isDark
-      ? 'rgba(255, 255, 255, 0.1)'
-      : 'rgba(0, 0, 0, 0.1)',
+      ? theme.colors.border
+      : theme.colors.border,
   },
   logoSection: {
     paddingHorizontal: 16,
@@ -383,8 +383,8 @@ const getStyles = (theme, isDark, isWeb, isPersistent) => StyleSheet.create({
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: isDark
-      ? 'rgba(255, 255, 255, 0.1)'
-      : 'rgba(0, 0, 0, 0.1)',
+      ? theme.colors.border
+      : theme.colors.border,
   },
   logoContainer: {
     flexDirection: 'row',
@@ -419,8 +419,8 @@ const getStyles = (theme, isDark, isWeb, isPersistent) => StyleSheet.create({
   },
   navItemActive: {
     backgroundColor: isDark
-      ? 'rgba(129, 140, 248, 0.15)'
-      : 'rgba(79, 70, 229, 0.1)',
+      ? theme.colors.primaryGlow
+      : theme.colors.primaryGlow,
   },
   activeIndicator: {
     position: 'absolute',
@@ -449,8 +449,8 @@ const getStyles = (theme, isDark, isWeb, isPersistent) => StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 20 : 16,
     borderTopWidth: 1,
     borderTopColor: isDark
-      ? 'rgba(255, 255, 255, 0.1)'
-      : 'rgba(0, 0, 0, 0.1)',
+      ? theme.colors.border
+      : theme.colors.border,
     paddingTop: 12,
   },
   userSection: {
@@ -458,8 +458,8 @@ const getStyles = (theme, isDark, isWeb, isPersistent) => StyleSheet.create({
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: isDark
-      ? 'rgba(255, 255, 255, 0.1)'
-      : 'rgba(0, 0, 0, 0.1)',
+      ? theme.colors.border
+      : theme.colors.border,
   },
   userInfo: {
     flexDirection: 'row',

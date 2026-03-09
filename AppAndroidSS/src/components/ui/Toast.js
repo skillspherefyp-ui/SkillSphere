@@ -134,14 +134,10 @@ const Toast = ({
   const getGlassStyle = () => {
     if (isWeb) {
       return {
-        backgroundColor: isDark
-          ? 'rgba(15, 23, 42, 0.65)'  // Section 27.2: Dark glass
-          : 'rgba(255, 255, 255, 0.65)', // Section 27.2: Light glass
+        backgroundColor: theme.glass.background,
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
-        borderColor: isDark
-          ? 'rgba(255, 255, 255, 0.08)'
-          : 'rgba(0, 0, 0, 0.05)',
+        borderColor: theme.glass.border,
         borderWidth: 1,
       };
     }

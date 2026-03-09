@@ -3,7 +3,7 @@ import { TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../context/ThemeContext';
 
-const ThemeToggle = ({ style, size = 'md' }) => {
+const ThemeToggle = ({ style, size = 'md', iconColor }) => {
   const { theme, toggleTheme, isDark } = useTheme();
   const isWeb = Platform.OS === 'web';
 
@@ -21,12 +21,12 @@ const ThemeToggle = ({ style, size = 'md' }) => {
       style={[
         styles.toggleButton,
         {
-          backgroundColor: theme.colors.surface,
+          backgroundColor: theme.colors.headerSurface || theme.colors.surface,
           width: currentSize.buttonSize,
           height: currentSize.buttonSize,
           borderRadius: currentSize.buttonSize / 2,
           borderWidth: 1,
-          borderColor: theme.colors.border,
+          borderColor: theme.colors.headerBorder || theme.colors.border,
         },
         // Add shadow
         theme.shadows.sm,
@@ -43,7 +43,7 @@ const ThemeToggle = ({ style, size = 'md' }) => {
       <Icon
         name={isDark ? 'sunny' : 'moon'}
         size={currentSize.iconSize}
-        color={theme.colors.primary}
+        color={iconColor || theme.colors.headerIcon || theme.colors.primary}
       />
     </TouchableOpacity>
   );
