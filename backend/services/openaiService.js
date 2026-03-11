@@ -62,12 +62,31 @@ async function generateLecturePackage({
       {
         title: 'string',
         summary: 'string',
+        learningObjective: 'string',
         explanation: 'string',
         examples: ['string'],
         visualSuggestion: 'string',
         whiteboardSuggestion: 'string',
         slideBullets: ['string'],
-        chunks: ['string']
+        chunks: [
+          {
+            title: 'string',
+            learning_objective: 'string',
+            spoken_explanation: 'string',
+            whiteboard_explanation: 'string',
+            slide_bullets: ['string'],
+            key_terms: ['string'],
+            examples: ['string'],
+            analogy_if_helpful: 'string',
+            visual_mode: 'none | slide | whiteboard | diagram | flowchart | comparison_table | mixed',
+            visual_query: 'string',
+            visual_caption: 'string',
+            teaching_sequence: ['speak', 'slide', 'diagram', 'whiteboard', 'visual'],
+            difficulty_level: 'introductory | intermediate | advanced',
+            estimated_duration_seconds: 'integer',
+            checkpoint_question_if_any: 'string'
+          }
+        ]
       }
     ],
     flashcards: [
@@ -97,10 +116,15 @@ ${JSON.stringify(schemaDescription, null, 2)}
 
 Constraints:
 - Produce a complete lecture package for one topic.
-- Make explanations clear, accurate, and directly tied to the topic.
+- Make explanations clear, accurate, teacher-like, and directly tied to the topic.
 - Generate 3 to 6 sections.
 - Generate 2 to 4 chunks per section for incremental delivery.
-- Each chunk should be short enough for live delivery.
+- Each chunk should be rich enough for a tutor to explain conceptually, not just read headings.
+- Every chunk must contain a real spoken explanation in full sentences.
+- Use visual_mode deliberately. Choose whiteboard, slide, diagram, flowchart, comparison_table, mixed, or none based on the concept.
+- Use teaching_sequence to decide the order of teaching actions for that chunk.
+- Include examples, key terms, and analogy_if_helpful when they make the explanation stronger.
+- Include checkpoint_question_if_any whenever the learner should pause and self-check.
 - Generate 4 to 8 flashcards.
 - Generate 4 to 6 multiple choice questions with exactly 4 options each.
 - Ensure correctAnswer is a zero-based option index.

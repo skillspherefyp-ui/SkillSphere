@@ -59,6 +59,11 @@ const AITutorSession = sequelize.define('AITutorSession', {
     allowNull: false,
     defaultValue: false
   },
+  teachingState: {
+    type: DataTypes.JSON,
+    allowNull: false,
+    defaultValue: {}
+  },
   lastActivityAt: {
     type: DataTypes.DATE,
     allowNull: false,

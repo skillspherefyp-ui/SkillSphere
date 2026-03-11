@@ -26,6 +26,24 @@ const AIVisualSuggestion = sequelize.define('AIVisualSuggestion', {
   suggestion: {
     type: DataTypes.TEXT('long'),
     allowNull: false
+  },
+  visualMode: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'diagram'
+  },
+  visualQuery: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  caption: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  structuredData: {
+    type: DataTypes.JSON,
+    allowNull: false,
+    defaultValue: {}
   }
 }, {
   tableName: 'ai_visual_suggestions'

@@ -82,12 +82,16 @@ const LearningScreen = () => {
   const currentSlides = (lecture?.slideOutlines || []).filter((slide) => slide.slideIndex === currentChunk?.sectionIndex);
   const totalChunks = orderedChunks.length || 1;
   const currentSlide = currentSlides[0];
+  const currentDelivery = currentChunk?.delivery || null;
+  const panelContent = currentDelivery?.panel_content || {};
+  const currentNarration = currentDelivery?.narration_text || currentChunk?.spokenExplanation || currentChunk?.text || '';
+  const currentModeLabel = currentDelivery?.current_mode_label || (showQuestionPanel ? 'Answering your question' : voiceMode ? 'Explaining' : 'Teaching in text mode');
   const tutorStatus = lectureCompleted
     ? { label: 'Lecture complete', detail: 'Open the stored quiz when you are ready to continue.', tone: '#10b981' }
     : showQuestionPanel
       ? { label: 'Paused for your question', detail: submittingQuestion ? 'AI Tutor is preparing a contextual answer.' : 'Ask for clarification, then resume from this exact chunk.', tone: '#f59e0b' }
       : isPlaying
-        ? { label: voiceMode ? 'AI Tutor is explaining...' : 'Teaching in text mode', detail: voiceMode ? 'Voice delivery is active for this section.' : 'Stored lecture chunks are advancing in text mode.', tone: '#3b82f6' }
+        ? { label: currentModeLabel, detail: currentDelivery?.next_action ? `Sequence: ${(currentDelivery.teaching_sequence || []).join(' -> ')}.` : (voiceMode ? 'Voice delivery is active for this section.' : 'Stored lecture chunks are advancing in text mode.'), tone: '#3b82f6' }
         : { label: 'Ready to resume', detail: 'Resume when you are ready for the next chunk.', tone: '#6366f1' };
 
   useEffect(() => {
@@ -229,10 +233,11 @@ const LearningScreen = () => {
   };
 
   const playChunk = async () => {
-    if (!currentChunk?.text) return;
+    if (!currentNarration) return;
 
     if (!voiceMode) {
-      scheduleNext(Math.min(9000, Math.max(3200, currentChunk.text.length * 45)));
+      const fallbackDelay = Math.min(12000, Math.max(3600, currentNarration.length * 28));
+      scheduleNext((currentChunk?.estimatedDurationSeconds || 0) > 0 ? currentChunk.estimatedDurationSeconds * 1000 : fallbackDelay);
       return;
     }
 
@@ -242,7 +247,7 @@ const LearningScreen = () => {
           lectureId: lecture?.id,
           sessionId: session?.id,
           assetType: 'lecture_chunk',
-          text: currentChunk.text,
+          text: currentNarration,
         });
 
         if (audioResponse?.asset?.urlPath) {
@@ -257,7 +262,7 @@ const LearningScreen = () => {
       }
 
       if (window?.speechSynthesis) {
-        const utterance = new SpeechSynthesisUtterance(currentChunk.text);
+        const utterance = new SpeechSynthesisUtterance(currentNarration);
         utterance.onend = () => scheduleNext(600);
         utterance.onerror = () => scheduleNext(4000);
         window.speechSynthesis.cancel();
@@ -266,7 +271,7 @@ const LearningScreen = () => {
       }
     }
 
-    scheduleNext(Math.min(9000, Math.max(3200, currentChunk.text.length * 45)));
+    scheduleNext(Math.min(12000, Math.max(3600, currentNarration.length * 28)));
   };
 
   const togglePause = async () => {
@@ -483,6 +488,49 @@ const LearningScreen = () => {
     </View>
   );
 
+  const renderStructuredVisual = () => {
+    const visualType = panelContent.visualType || currentChunk?.visualMode || 'none';
+    const visualData = panelContent.visualData || currentChunk?.visualData || {};
+
+    if (visualType === 'flowchart' && Array.isArray(visualData.steps) && visualData.steps.length > 0) {
+      return visualData.steps.map((step, index) => (
+        <View key={step.id || index} style={[styles.diagramRow, { borderColor: theme.colors.border }]}>
+          <View style={[styles.diagramIndex, { backgroundColor: theme.colors.primary }]}>
+            <Text style={styles.diagramIndexText}>{index + 1}</Text>
+          </View>
+          <Text style={[styles.diagramText, { color: theme.colors.textPrimary }]}>{step.label}</Text>
+        </View>
+      ));
+    }
+
+    if (visualType === 'comparison_table' && Array.isArray(visualData.rows) && visualData.rows.length > 0) {
+      return (
+        <View style={[styles.comparisonTable, { borderColor: theme.colors.border }]}>
+          {visualData.rows.map((row, index) => (
+            <View key={`${row.left}-${index}`} style={[styles.comparisonRow, { borderBottomColor: theme.colors.border }]}>
+              <Text style={[styles.comparisonCellTitle, { color: theme.colors.textPrimary }]}>{row.left}</Text>
+              <Text style={[styles.comparisonCellBody, { color: theme.colors.textSecondary }]}>{row.right}</Text>
+            </View>
+          ))}
+        </View>
+      );
+    }
+
+    if (Array.isArray(visualData.nodes) && visualData.nodes.length > 0) {
+      return (
+        <View style={styles.nodeWrap}>
+          {visualData.nodes.map((node, index) => (
+            <View key={node.id || index} style={[styles.nodeCard, { backgroundColor: isDark ? '#0f172a' : '#eff6ff', borderColor: theme.colors.border }]}>
+              <Text style={[styles.nodeLabel, { color: theme.colors.textPrimary }]}>{node.label}</Text>
+            </View>
+          ))}
+        </View>
+      );
+    }
+
+    return <Text style={[styles.visualBody, { color: theme.colors.textSecondary }]}>{panelContent.visualCaption || currentChunk?.visualCaption || currentVisual?.caption || currentVisual?.suggestion || 'The tutor will use a structured explanation for this concept instead of a raw image.'}</Text>;
+  };
+
   if (!course || !topic) {
     return (
       <MainLayout showSidebar={false} showHeader={true} showBack={true}>
@@ -568,19 +616,33 @@ const LearningScreen = () => {
                 </TouchableOpacity>
               </View>
               <Text style={styles.whiteboardTitle}>{currentChunk.title}</Text>
-              <Text style={styles.whiteboardSummary}>{currentChunk.summary}</Text>
-              <Text style={styles.sectionLabel}>Slide bullets</Text>
-              {(currentChunk.slideBullets || []).map((bullet, index) => (
-                <Text key={`${bullet}-${index}`} style={styles.sectionText}>- {bullet}</Text>
+              <Text style={styles.whiteboardSummary}>{panelContent.learningObjective || currentChunk.learningObjective || currentChunk.summary}</Text>
+              <Text style={styles.sectionLabel}>Whiteboard explanation</Text>
+              <Text style={styles.sectionText}>{panelContent.whiteboardExplanation || currentChunk.whiteboardExplanation || currentChunk.whiteboardSuggestion || 'Break the concept into simple teaching notes for the learner.'}</Text>
+              <Text style={styles.sectionLabel}>Key terms</Text>
+              {(panelContent.keyTerms || currentChunk.keyTerms || []).map((term, index) => (
+                <Text key={`${term}-${index}`} style={styles.sectionText}>- {term}</Text>
               ))}
               <Text style={styles.sectionLabel}>Examples</Text>
-              {(currentChunk.examples || []).map((example, index) => (
+              {(panelContent.examples || currentChunk.examples || []).map((example, index) => (
                 <Text key={`${example}-${index}`} style={styles.sectionText}>- {example}</Text>
               ))}
-              <Text style={styles.sectionLabel}>Visual suggestion</Text>
-              <Text style={styles.sectionText}>{currentVisual?.suggestion || currentChunk.visualSuggestion || 'Use the slide bullets as the diagram structure for this section.'}</Text>
-              <Text style={styles.sectionLabel}>Whiteboard prompt</Text>
-              <Text style={styles.sectionText}>{currentChunk.whiteboardSuggestion || 'Sketch the relationship between the main bullets and example above.'}</Text>
+              {!!(panelContent.analogy || currentChunk.analogyIfHelpful) && (
+                <>
+                  <Text style={styles.sectionLabel}>Analogy</Text>
+                  <Text style={styles.sectionText}>{panelContent.analogy || currentChunk.analogyIfHelpful}</Text>
+                </>
+              )}
+              {!!(panelContent.checkpointQuestion || currentChunk.checkpointQuestion) && (
+                <>
+                  <Text style={styles.sectionLabel}>Checkpoint</Text>
+                  <Text style={styles.sectionText}>{panelContent.checkpointQuestion || currentChunk.checkpointQuestion}</Text>
+                </>
+              )}
+              <Text style={styles.sectionLabel}>Slide bullets</Text>
+              {(panelContent.slideBullets || currentChunk.slideBullets || []).map((bullet, index) => (
+                <Text key={`${bullet}-${index}`} style={styles.sectionText}>- {bullet}</Text>
+              ))}
             </View>
 
             {!isMobile && (
@@ -604,18 +666,21 @@ const LearningScreen = () => {
                 <MaterialIcon name="presentation" size={18} color={theme.colors.primary} />
               </View>
               <Text style={[styles.visualTitle, { color: theme.colors.textPrimary }]}>{currentSlide?.title || currentChunk.title}</Text>
-              <Text style={[styles.visualBody, { color: theme.colors.textSecondary }]}>{currentSlide?.notes || currentChunk.summary || lecture.summary}</Text>
+              <Text style={[styles.visualBody, { color: theme.colors.textSecondary }]}>{currentSlide?.notes || panelContent.learningObjective || currentChunk.learningObjective || currentChunk.summary || lecture.summary}</Text>
+              {(panelContent.slideBullets || currentChunk.slideBullets || []).map((bullet, index) => (
+                <Text key={`${bullet}-${index}`} style={[styles.sectionText, { color: theme.colors.textPrimary }]}>- {bullet}</Text>
+              ))}
             </View>
             <View style={[styles.visualCard, { backgroundColor: isDark ? '#111827' : '#ffffff', borderColor: theme.colors.border }]}>
               <View style={styles.visualHeader}>
                 <Text style={[styles.visualEyebrow, { color: '#10b981' }]}>Teaching Visual</Text>
                 <MaterialIcon name="vector-square" size={18} color="#10b981" />
               </View>
-              <Text style={[styles.visualTitle, { color: theme.colors.textPrimary }]}>Diagram suggestion</Text>
-              <Text style={[styles.visualBody, { color: theme.colors.textSecondary }]}>{currentVisual?.suggestion || currentChunk.visualSuggestion || 'Use the current slide bullets as the structure for a clean teaching diagram.'}</Text>
+              <Text style={[styles.visualTitle, { color: theme.colors.textPrimary }]}>{currentDelivery?.current_mode_label || 'Structured visual support'}</Text>
+              {renderStructuredVisual()}
               <View style={[styles.visualHint, { backgroundColor: isDark ? 'rgba(16,185,129,0.12)' : '#ecfdf5' }]}>
-                <Text style={[styles.visualHintLabel, { color: '#10b981' }]}>Whiteboard hint</Text>
-                <Text style={[styles.visualHintText, { color: theme.colors.textPrimary }]}>{currentChunk.whiteboardSuggestion || 'Sketch the relationship between the main bullets and example above.'}</Text>
+                <Text style={[styles.visualHintLabel, { color: '#10b981' }]}>Visual hint</Text>
+                <Text style={[styles.visualHintText, { color: theme.colors.textPrimary }]}>{panelContent.visualCaption || currentChunk.visualCaption || currentVisual?.caption || currentVisual?.suggestion || 'Use a concise teaching visual instead of dumping raw topic content.'}</Text>
               </View>
             </View>
           </View>
@@ -623,9 +688,9 @@ const LearningScreen = () => {
           <View style={[styles.subtitlesCard, { backgroundColor: isDark ? '#1a1a2e' : '#f1f5f9' }]}>
             <View style={styles.subtitlesHeader}>
               <Text style={[styles.subtitlesTitle, { color: theme.colors.textPrimary }]}>Live Subtitles</Text>
-              <Text style={styles.modeBadge}>{voiceMode ? 'VOICE' : 'TEXT'}</Text>
+              <Text style={styles.modeBadge}>{(currentDelivery?.current_mode || (voiceMode ? 'voice' : 'text')).toUpperCase()}</Text>
             </View>
-            <Text style={[styles.subtitlesText, { color: theme.colors.textPrimary }]}>{currentChunk.text}</Text>
+            <Text style={[styles.subtitlesText, { color: theme.colors.textPrimary }]}>{currentNarration}</Text>
           </View>
 
           {showQuestionPanel && (
@@ -841,6 +906,17 @@ const styles = StyleSheet.create({
   visualHint: { borderRadius: 12, padding: 12, marginTop: 12 },
   visualHintLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginBottom: 4 },
   visualHintText: { fontSize: 13, lineHeight: 20 },
+  diagramRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1 },
+  diagramIndex: { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  diagramIndexText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  diagramText: { flex: 1, fontSize: 13, lineHeight: 20 },
+  comparisonTable: { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
+  comparisonRow: { padding: 12, borderBottomWidth: 1 },
+  comparisonCellTitle: { fontSize: 13, fontWeight: '700', marginBottom: 4 },
+  comparisonCellBody: { fontSize: 12, lineHeight: 18 },
+  nodeWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  nodeCard: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
+  nodeLabel: { fontSize: 12, fontWeight: '600' },
   subtitlesCard: { borderRadius: 16, padding: 16, marginBottom: 16 },
   subtitlesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   subtitlesTitle: { fontSize: 14, fontWeight: '700' },

@@ -21,6 +21,7 @@ const {
   AIAudioAsset
 } = require('../models');
 const openaiService = require('./openaiService');
+const aiTeachingOrchestrator = require('./aiTeachingOrchestrator');
 
 const AUDIO_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'ai-audio');
 
@@ -41,6 +42,72 @@ function splitOutlineIntoPoints(outlineText) {
       .map((line) => line.replace(/^[-*#\d.\s]+/, '').trim())
       .filter((line) => line.length > 3)
   );
+}
+
+function inferVisualMode(text = '') {
+  const lower = `${text}`.toLowerCase();
+  if (/(compare|difference|versus|vs\b)/.test(lower)) return 'comparison_table';
+  if (/(process|lifecycle|sequence|steps|pipeline|chain)/.test(lower)) return 'flowchart';
+  if (/(architecture|network|diagram|topology|map)/.test(lower)) return 'diagram';
+  if (/(draw|sketch|annotate|whiteboard)/.test(lower)) return 'whiteboard';
+  return 'slide';
+}
+
+function buildTeachingSequence(visualMode) {
+  switch (visualMode) {
+    case 'diagram':
+      return ['speak', 'visual', 'whiteboard'];
+    case 'flowchart':
+      return ['speak', 'visual', 'whiteboard'];
+    case 'comparison_table':
+      return ['speak', 'slide', 'visual'];
+    case 'whiteboard':
+      return ['speak', 'whiteboard'];
+    case 'mixed':
+      return ['speak', 'slide', 'visual', 'whiteboard'];
+    case 'slide':
+      return ['speak', 'slide'];
+    default:
+      return ['speak'];
+  }
+}
+
+function buildVisualData(visualMode, title, slideBullets, examples, analogyIfHelpful) {
+  if (visualMode === 'flowchart') {
+    return {
+      type: 'flowchart',
+      steps: (slideBullets || []).map((bullet, index) => ({
+        id: `step-${index + 1}`,
+        label: bullet,
+      })),
+    };
+  }
+
+  if (visualMode === 'comparison_table') {
+    const rows = (slideBullets || []).slice(0, 4).map((bullet, index) => {
+      const parts = bullet.split(':');
+      return {
+        left: parts[0]?.trim() || `Point ${index + 1}`,
+        right: parts.slice(1).join(':').trim() || examples[index] || analogyIfHelpful || 'Key teaching note',
+      };
+    });
+
+    return {
+      type: 'comparison_table',
+      columns: ['Concept', 'Teaching Note'],
+      rows,
+    };
+  }
+
+  return {
+    type: visualMode === 'whiteboard' ? 'whiteboard' : 'diagram',
+    nodes: (slideBullets || []).slice(0, 4).map((bullet, index) => ({
+      id: `node-${index + 1}`,
+      label: bullet,
+      emphasis: index === 0 ? 'primary' : 'secondary',
+    })),
+    caption: `${title} visual map`,
+  };
 }
 
 function buildFallbackLecturePackage({
@@ -75,10 +142,14 @@ function buildFallbackLecturePackage({
     const priorContext = priorTopics?.length
       ? `Connect this with earlier topics such as ${priorTopics.slice(-2).join(' and ')}.`
       : `Start from first principles so learners can build confidence quickly.`;
+    const visualMode = inferVisualMode(`${concept} ${practicalHint}`);
+    const sectionTitle = index === 0 ? `Introduction to ${topic.title}` : `${topic.title}: ${concept}`;
+    const learningObjective = `Understand ${concept.toLowerCase()} and explain how it supports ${topic.title}.`;
 
     return {
-      title: index === 0 ? `Introduction to ${topic.title}` : `${topic.title}: ${concept}`,
+      title: sectionTitle,
       summary: `Clarify ${concept.toLowerCase()} and show how it fits inside ${topic.title}.`,
+      learningObjective,
       explanation: `${concept} is a core part of ${topic.title}. ${priorContext} Use plain language, define the idea, explain why it matters, and anchor it with one concrete example based on ${practicalHint}.`,
       examples: [
         `Walk through a simple example of ${concept.toLowerCase()} in practice.`,
@@ -93,10 +164,54 @@ function buildFallbackLecturePackage({
         `Common mistake to avoid`
       ],
       chunks: [
-        `${concept} introduces one essential part of ${topic.title}. Define it clearly and explain its purpose before moving into detail.`,
-        `Break ${concept.toLowerCase()} into simple steps. Show how a learner should reason through it and what signals they should look for.`,
-        `Use ${practicalHint} as a concrete example so the learner sees how ${concept.toLowerCase()} works in a realistic study context.`
-      ]
+        {
+          title: `${concept} overview`,
+          learning_objective: learningObjective,
+          spoken_explanation: `${concept} introduces one essential part of ${topic.title}. Define it clearly, explain its purpose, and connect it to the learner's real objective before moving into detail.`,
+          whiteboard_explanation: `Write ${concept} at the top, branch out into its purpose, the main signal to watch for, and one worked example from ${practicalHint}.`,
+          slide_bullets: [
+            `${concept}`,
+            `Purpose`,
+            `Real-world signal`,
+            `First example`
+          ],
+          key_terms: [concept, topic.title, 'purpose'],
+          examples: [`Use ${practicalHint} to illustrate the first practical use case.`],
+          analogy_if_helpful: `${concept} works like a map legend: it helps the learner interpret the rest of ${topic.title}.`,
+          visual_mode: visualMode,
+          visual_query: `${topic.title} ${concept} ${visualMode === 'flowchart' ? 'flowchart' : 'diagram'}`,
+          visual_caption: `Overview visual for ${concept}`,
+          teaching_sequence: buildTeachingSequence(visualMode),
+          difficulty_level: index === 0 ? 'introductory' : 'intermediate',
+          estimated_duration_seconds: 55,
+          checkpoint_question_if_any: `In one sentence, what role does ${concept} play in ${topic.title}?`,
+        },
+        {
+          title: `${concept} in action`,
+          learning_objective: `Apply ${concept.toLowerCase()} to a simple scenario.`,
+          spoken_explanation: `Break ${concept.toLowerCase()} into simple steps. Show how a learner should reason through it, what signal they should look for, and why each step matters.`,
+          whiteboard_explanation: `Draw the sequence for ${concept.toLowerCase()} and annotate the decision points the learner must verify.`,
+          slide_bullets: [
+            `Step-by-step reasoning`,
+            `Decision points`,
+            `Expected outcome`,
+            `Typical mistake`
+          ],
+          key_terms: [concept, 'decision point', 'outcome'],
+          examples: [
+            `Use ${practicalHint} as a concrete example.`,
+            `Show the most common mistake and the correct fix.`
+          ],
+          analogy_if_helpful: '',
+          visual_mode: visualMode === 'slide' ? 'whiteboard' : visualMode,
+          visual_query: `${topic.title} ${concept} worked example`,
+          visual_caption: `Worked example for ${concept}`,
+          teaching_sequence: buildTeachingSequence(visualMode === 'slide' ? 'whiteboard' : visualMode),
+          difficulty_level: 'intermediate',
+          estimated_duration_seconds: 65,
+          checkpoint_question_if_any: '',
+        }
+      ],
     };
   });
 
@@ -184,6 +299,25 @@ function validateLecturePackage(candidate) {
     errors.push('quiz.questions must be a non-empty array');
   }
 
+  if (Array.isArray(candidate.sections)) {
+    candidate.sections.forEach((section, index) => {
+      if (!Array.isArray(section?.chunks) || section.chunks.length === 0) {
+        errors.push(`sections[${index}].chunks must be a non-empty array`);
+        return;
+      }
+
+      section.chunks.forEach((chunk, chunkIndex) => {
+        if (typeof chunk === 'string') {
+          return;
+        }
+
+        if (!chunk?.spoken_explanation && !chunk?.spokenExplanation && !chunk?.text && !chunk?.chunkText) {
+          errors.push(`sections[${index}].chunks[${chunkIndex}] spoken explanation is required`);
+        }
+      });
+    });
+  }
+
   return errors;
 }
 
@@ -191,23 +325,98 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
   const sections = Array.isArray(rawPackage.sections) ? rawPackage.sections : [];
   const normalizedSections = sections.map((section, sectionIndex) => {
     const explanation = `${section?.explanation || ''}`.trim();
-    const chunks = Array.isArray(section?.chunks) && section.chunks.length > 0
-      ? section.chunks.filter(Boolean).map((chunk) => `${chunk}`.trim()).filter(Boolean)
+    const rawChunks = Array.isArray(section?.chunks) && section.chunks.length > 0
+      ? section.chunks.filter(Boolean)
       : explanation
           .split(/\n{2,}|(?<=[.!?])\s+(?=[A-Z])/)
           .map((chunk) => chunk.trim())
           .filter(Boolean)
           .slice(0, 4);
 
+    const normalizedChunks = rawChunks.map((chunk, chunkIndex) => {
+      if (typeof chunk === 'string') {
+        const visualMode = inferVisualMode(`${section?.visualSuggestion || ''} ${section?.whiteboardSuggestion || ''}`);
+        const slideBullets = Array.isArray(section?.slideBullets) ? section.slideBullets.map(String).filter(Boolean) : [];
+        const examples = Array.isArray(section?.examples) ? section.examples.map(String).filter(Boolean) : [];
+        return {
+          title: `${section?.title || `${topicTitle} Section ${sectionIndex + 1}`} - Step ${chunkIndex + 1}`.trim(),
+          learningObjective: `${section?.summary || explanation || topicTitle}`.trim(),
+          spokenExplanation: chunk,
+          whiteboardExplanation: `${section?.whiteboardSuggestion || section?.summary || chunk}`.trim(),
+          slideBullets,
+          keyTerms: dedupeStrings([section?.title, topicTitle]),
+          examples,
+          analogyIfHelpful: '',
+          visualMode,
+          visualQuery: `${topicTitle} ${section?.title || ''} ${visualMode}`.trim(),
+          visualCaption: `${section?.visualSuggestion || section?.summary || topicTitle}`.trim(),
+          teachingSequence: buildTeachingSequence(visualMode),
+          difficultyLevel: 'intermediate',
+          estimatedDurationSeconds: Math.min(90, Math.max(40, chunk.length / 3)),
+          checkpointQuestion: chunkIndex === rawChunks.length - 1 ? `What is the key takeaway from ${section?.title || topicTitle}?` : '',
+          visualData: buildVisualData(visualMode, section?.title || topicTitle, slideBullets, examples, ''),
+        };
+      }
+
+      const slideBullets = Array.isArray(chunk?.slide_bullets || chunk?.slideBullets)
+        ? (chunk.slide_bullets || chunk.slideBullets).map(String).filter(Boolean)
+        : Array.isArray(section?.slideBullets)
+          ? section.slideBullets.map(String).filter(Boolean)
+          : [];
+      const examples = Array.isArray(chunk?.examples) ? chunk.examples.map(String).filter(Boolean) : Array.isArray(section?.examples) ? section.examples.map(String).filter(Boolean) : [];
+      const visualMode = `${chunk?.visual_mode || chunk?.visualMode || inferVisualMode(`${chunk?.visual_query || ''} ${chunk?.visual_caption || ''} ${section?.visualSuggestion || ''}`)}`.trim() || 'slide';
+      const analogy = `${chunk?.analogy_if_helpful || chunk?.analogyIfHelpful || ''}`.trim();
+      return {
+        title: `${chunk?.title || section?.title || `${topicTitle} Section ${sectionIndex + 1}`}`.trim(),
+        learningObjective: `${chunk?.learning_objective || chunk?.learningObjective || section?.learningObjective || section?.summary || topicTitle}`.trim(),
+        spokenExplanation: `${chunk?.spoken_explanation || chunk?.spokenExplanation || chunk?.chunkText || chunk?.text || explanation || topicTitle}`.trim(),
+        whiteboardExplanation: `${chunk?.whiteboard_explanation || chunk?.whiteboardExplanation || section?.whiteboardSuggestion || section?.summary || ''}`.trim(),
+        slideBullets,
+        keyTerms: dedupeStrings(chunk?.key_terms || chunk?.keyTerms || [section?.title, topicTitle]),
+        examples,
+        analogyIfHelpful: analogy,
+        visualMode,
+        visualQuery: `${chunk?.visual_query || chunk?.visualQuery || `${topicTitle} ${section?.title || ''} ${visualMode}`}`.trim(),
+        visualCaption: `${chunk?.visual_caption || chunk?.visualCaption || section?.visualSuggestion || section?.summary || topicTitle}`.trim(),
+        teachingSequence: dedupeStrings(chunk?.teaching_sequence || chunk?.teachingSequence || buildTeachingSequence(visualMode)),
+        difficultyLevel: `${chunk?.difficulty_level || chunk?.difficultyLevel || 'intermediate'}`.trim(),
+        estimatedDurationSeconds: Number.isInteger(chunk?.estimated_duration_seconds)
+          ? chunk.estimated_duration_seconds
+          : Number.isInteger(chunk?.estimatedDurationSeconds)
+            ? chunk.estimatedDurationSeconds
+            : Math.min(90, Math.max(40, `${chunk?.spoken_explanation || chunk?.spokenExplanation || ''}`.length / 3)),
+        checkpointQuestion: `${chunk?.checkpoint_question_if_any || chunk?.checkpointQuestionIfAny || chunk?.checkpointQuestion || ''}`.trim(),
+        visualData: chunk?.visual_data || chunk?.visualData || buildVisualData(visualMode, chunk?.title || section?.title || topicTitle, slideBullets, examples, analogy),
+      };
+    });
+
     return {
       title: `${section?.title || `${topicTitle} Section ${sectionIndex + 1}`}`.trim(),
       summary: `${section?.summary || explanation || 'Core concept review.'}`.trim(),
+      learningObjective: `${section?.learningObjective || section?.learning_objective || section?.summary || topicTitle}`.trim(),
       explanation,
       examples: Array.isArray(section?.examples) ? section.examples.map(String).filter(Boolean) : [],
       visualSuggestion: `${section?.visualSuggestion || ''}`.trim(),
       whiteboardSuggestion: `${section?.whiteboardSuggestion || ''}`.trim(),
       slideBullets: Array.isArray(section?.slideBullets) ? section.slideBullets.map(String).filter(Boolean) : [],
-      chunks: chunks.length > 0 ? chunks : [explanation || `${topicTitle} overview.`]
+      chunks: normalizedChunks.length > 0 ? normalizedChunks : [{
+        title: `${section?.title || topicTitle} overview`,
+        learningObjective: `${section?.summary || topicTitle}`.trim(),
+        spokenExplanation: explanation || `${topicTitle} overview.`,
+        whiteboardExplanation: `${section?.whiteboardSuggestion || explanation || topicTitle}`.trim(),
+        slideBullets: Array.isArray(section?.slideBullets) ? section.slideBullets.map(String).filter(Boolean) : [],
+        keyTerms: dedupeStrings([section?.title, topicTitle]),
+        examples: Array.isArray(section?.examples) ? section.examples.map(String).filter(Boolean) : [],
+        analogyIfHelpful: '',
+        visualMode: inferVisualMode(`${section?.visualSuggestion || ''} ${section?.whiteboardSuggestion || ''}`),
+        visualQuery: `${topicTitle} ${section?.title || ''}`.trim(),
+        visualCaption: `${section?.visualSuggestion || section?.summary || topicTitle}`.trim(),
+        teachingSequence: ['speak', 'slide'],
+        difficultyLevel: 'intermediate',
+        estimatedDurationSeconds: 50,
+        checkpointQuestion: '',
+        visualData: {},
+      }]
     };
   });
 
@@ -357,18 +566,31 @@ async function persistLecturePackage({
 
     const sectionRows = [];
     normalizedPackage.sections.forEach((section, sectionIndex) => {
-      section.chunks.forEach((chunkText, chunkIndex) => {
+      section.chunks.forEach((chunk, chunkIndex) => {
         sectionRows.push({
           lectureId: lecture.id,
           sectionIndex,
           chunkIndex,
-          title: section.title,
+          title: chunk.title || section.title,
           summary: section.summary,
-          chunkText,
-          examples: section.examples,
-          visualSuggestion: section.visualSuggestion,
-          whiteboardSuggestion: section.whiteboardSuggestion,
-          slideBullets: section.slideBullets
+          chunkText: chunk.spokenExplanation,
+          learningObjective: chunk.learningObjective,
+          spokenExplanation: chunk.spokenExplanation,
+          whiteboardExplanation: chunk.whiteboardExplanation,
+          keyTerms: chunk.keyTerms,
+          examples: chunk.examples,
+          analogyIfHelpful: chunk.analogyIfHelpful,
+          visualMode: chunk.visualMode,
+          visualQuery: chunk.visualQuery,
+          visualCaption: chunk.visualCaption,
+          visualSuggestion: section.visualSuggestion || chunk.visualCaption,
+          whiteboardSuggestion: section.whiteboardSuggestion || chunk.whiteboardExplanation,
+          slideBullets: chunk.slideBullets,
+          teachingSequence: chunk.teachingSequence,
+          difficultyLevel: chunk.difficultyLevel,
+          estimatedDurationSeconds: chunk.estimatedDurationSeconds,
+          checkpointQuestion: chunk.checkpointQuestion,
+          visualData: chunk.visualData
         });
       });
     });
@@ -392,7 +614,11 @@ async function persistLecturePackage({
       lectureId: lecture.id,
       sectionIndex,
       title: section.title,
-      suggestion: section.visualSuggestion || section.whiteboardSuggestion || `Visual aid for ${section.title}`
+      suggestion: section.visualSuggestion || section.whiteboardSuggestion || `Visual aid for ${section.title}`,
+      visualMode: section.chunks?.[0]?.visualMode || inferVisualMode(section.visualSuggestion),
+      visualQuery: section.chunks?.[0]?.visualQuery || `${section.title} visual`,
+      caption: section.chunks?.[0]?.visualCaption || section.visualSuggestion || section.summary,
+      structuredData: section.chunks?.[0]?.visualData || {}
     }));
     if (visualRows.length > 0) {
       await AIVisualSuggestion.bulkCreate(visualRows, { transaction });
@@ -689,11 +915,46 @@ function mapLectureChunk(lecture, sectionIndex, chunkIndex) {
     chunkIndex: chunk.chunkIndex,
     title: chunk.title,
     summary: chunk.summary,
-    text: chunk.chunkText,
+    text: chunk.spokenExplanation || chunk.chunkText,
+    learningObjective: chunk.learningObjective,
+    spokenExplanation: chunk.spokenExplanation || chunk.chunkText,
+    whiteboardExplanation: chunk.whiteboardExplanation || chunk.whiteboardSuggestion,
+    keyTerms: chunk.keyTerms || [],
     examples: chunk.examples,
+    analogyIfHelpful: chunk.analogyIfHelpful,
+    visualMode: chunk.visualMode,
+    visualQuery: chunk.visualQuery,
+    visualCaption: chunk.visualCaption,
     visualSuggestion: chunk.visualSuggestion,
     whiteboardSuggestion: chunk.whiteboardSuggestion,
-    slideBullets: chunk.slideBullets
+    slideBullets: chunk.slideBullets,
+    teachingSequence: chunk.teachingSequence || [],
+    difficultyLevel: chunk.difficultyLevel,
+    estimatedDurationSeconds: chunk.estimatedDurationSeconds,
+    checkpointQuestion: chunk.checkpointQuestion,
+    visualData: chunk.visualData || {}
+  };
+}
+
+function getVisualSuggestionForChunk(lecture, chunk) {
+  return (lecture?.visualSuggestions || []).find((item) => item.sectionIndex === chunk?.sectionIndex) || null;
+}
+
+function attachTeachingDecision(lecture, session, chunk) {
+  if (!chunk) {
+    return null;
+  }
+
+  const delivery = aiTeachingOrchestrator.getTeachingDecision({
+    lecture,
+    chunk,
+    session,
+    visualSuggestion: getVisualSuggestionForChunk(lecture, chunk)
+  });
+
+  return {
+    ...chunk,
+    delivery,
   };
 }
 
@@ -773,6 +1034,7 @@ async function startTutorSession(userId, topicId, voiceModeEnabled) {
       currentChunkIndex: progress.currentChunkIndex,
       status: progress.lectureCompleted ? 'lecture_completed' : 'in_progress',
       voiceModeEnabled: Boolean(voiceModeEnabled),
+      teachingState: { currentStepIndex: 0 },
       lastActivityAt: new Date()
     });
   } else {
@@ -781,6 +1043,7 @@ async function startTutorSession(userId, topicId, voiceModeEnabled) {
       voiceModeEnabled: Boolean(voiceModeEnabled),
       currentSectionIndex: progress.currentSectionIndex,
       currentChunkIndex: progress.currentChunkIndex,
+      teachingState: { currentStepIndex: 0 },
       lastActivityAt: new Date()
     });
   }
@@ -790,7 +1053,11 @@ async function startTutorSession(userId, topicId, voiceModeEnabled) {
     lastSessionId: session.id
   });
 
-  const chunk = mapLectureChunk(lecture, session.currentSectionIndex, session.currentChunkIndex) || mapLectureChunk(lecture, 0, 0);
+  const chunk = attachTeachingDecision(
+    lecture,
+    session,
+    mapLectureChunk(lecture, session.currentSectionIndex, session.currentChunkIndex) || mapLectureChunk(lecture, 0, 0)
+  );
 
   return {
     session,
@@ -817,7 +1084,7 @@ async function getSessionState(sessionId, userId) {
   }
 
   const lecture = await getLectureByTopicId(session.topicId);
-  const chunk = lecture ? mapLectureChunk(lecture, session.currentSectionIndex, session.currentChunkIndex) : null;
+  const chunk = lecture ? attachTeachingDecision(lecture, session, mapLectureChunk(lecture, session.currentSectionIndex, session.currentChunkIndex)) : null;
   const progress = await AIStudentProgress.findOne({
     where: {
       userId,
@@ -895,6 +1162,7 @@ async function getNextLectureChunk(sessionId, userId) {
     currentSectionIndex: pointer.sectionIndex,
     currentChunkIndex: pointer.chunkIndex,
     status: 'in_progress',
+    teachingState: { currentStepIndex: 0 },
     lastActivityAt: new Date()
   });
 
@@ -917,7 +1185,7 @@ async function getNextLectureChunk(sessionId, userId) {
   return {
     session,
     lectureCompleted: false,
-    chunk: mapLectureChunk(lecture, pointer.sectionIndex, pointer.chunkIndex)
+    chunk: attachTeachingDecision(lecture, session, mapLectureChunk(lecture, pointer.sectionIndex, pointer.chunkIndex))
   };
 }
 
@@ -967,10 +1235,22 @@ async function submitQuestion(sessionId, userId, question) {
   const response = await openaiService.answerLectureQuestion({
     lectureTitle: lecture.title,
     lectureSummary: lecture.summary,
-    currentChunk: currentChunk?.text || '',
+    currentChunk: currentChunk?.spokenExplanation || currentChunk?.text || '',
     currentSection: {
       title: currentChunk?.title || lecture.title,
-      chunks: sectionChunks
+      chunks: sectionChunks,
+      teachingMode: currentChunk?.delivery?.current_mode_label || 'Explaining',
+      learningObjective: currentChunk?.learningObjective || currentChunk?.summary || '',
+      whiteboardExplanation: currentChunk?.whiteboardExplanation || '',
+      slideBullets: currentChunk?.slideBullets || [],
+      examples: currentChunk?.examples || [],
+      analogy: currentChunk?.analogyIfHelpful || '',
+      checkpointQuestion: currentChunk?.checkpointQuestion || '',
+      visual: {
+        mode: currentChunk?.visualMode || 'none',
+        caption: currentChunk?.visualCaption || '',
+        query: currentChunk?.visualQuery || ''
+      }
     },
     recentMessages: (session.messages || []).slice().reverse().map((message) => ({
       sender: message.sender,
