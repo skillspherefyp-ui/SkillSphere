@@ -6,13 +6,29 @@ import { View } from 'react-native';
 const NoopAnimatedView = (props) => React.createElement(View, props, props.children);
 
 const noopAnimBuilder = () => ({
-  delay: () => null,
-  duration: () => ({ delay: () => null }),
+  delay: () => ({
+    duration: noopAnimBuilder,
+  }),
+  duration: () => ({
+    delay: noopAnimBuilder,
+  }),
 });
 
 export default {
   View: NoopAnimatedView,
+  createAnimatedComponent: (Component) => Component,
 };
 
 export const FadeIn = { duration: noopAnimBuilder };
 export const FadeInDown = { duration: noopAnimBuilder };
+export const FadeInUp = { duration: noopAnimBuilder };
+export const SlideInLeft = { duration: noopAnimBuilder };
+export const SlideInRight = { duration: noopAnimBuilder };
+export const ZoomIn = { duration: noopAnimBuilder };
+export const BounceIn = { duration: noopAnimBuilder };
+
+export const useSharedValue = (initialValue) => ({ value: initialValue });
+export const useAnimatedStyle = (factory) => factory();
+export const withSpring = (value) => value;
+export const withRepeat = (value) => value;
+export const withSequence = (...values) => values[values.length - 1];
