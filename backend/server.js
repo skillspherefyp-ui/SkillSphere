@@ -9,6 +9,7 @@ const { User } = require('./models');
 const { sendSuperAdminWelcomeEmail } = require('./services/emailService');
 const syncUserAuthColumns = require('./scripts/syncUserAuthColumns');
 const syncCourseColumns = require('./scripts/syncCourseColumns');
+const syncAITutorColumns = require('./scripts/syncAITutorColumns');
 
 async function initSuperAdmin() {
   try {
@@ -162,6 +163,7 @@ async function startServer() {
     await testConnection();
     await syncUserAuthColumns();
     await syncCourseColumns();
+    await syncAITutorColumns();
     await sequelize.sync();
 
     console.log('Database synced successfully');
