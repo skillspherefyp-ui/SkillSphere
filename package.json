@@ -6,6 +6,6 @@
   ],
   "scripts": {
     "dev:web": "npm run web:dev --workspace AppAndroidSS",
-    "build:web": "npm run build:web --workspace AppAndroidSS"
+    "build:web": "npm run build:web --workspace AppAndroidSS && node scripts/sync-web-build.cjs"
   }
 }
