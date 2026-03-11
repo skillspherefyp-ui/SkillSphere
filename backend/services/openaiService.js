@@ -242,6 +242,72 @@ async function answerLectureQuestion({
   };
 }
 
+async function planChunkTeaching({
+  lectureTitle,
+  lectureSummary,
+  currentChunk,
+  previousChunk,
+  nextChunk,
+  teachingPlanSeed,
+  resumeContext
+}) {
+  const client = getClient();
+  const model = process.env.OPENAI_MODEL_TUTOR_PLANNER || process.env.OPENAI_MODEL_QA;
+
+  if (!model) {
+    throw new Error('OPENAI_MODEL_TUTOR_PLANNER or OPENAI_MODEL_QA is not configured');
+  }
+
+  const completion = await client.chat.completions.create({
+    model,
+    temperature: 0.2,
+    response_format: { type: 'json_object' },
+    messages: [
+      {
+        role: 'system',
+        content: [
+          'You are a lightweight micro-teaching planner for a stored lecture system.',
+          'Return valid JSON only.',
+          'Do not regenerate the lesson.',
+          'Only decide how the current chunk should be taught like a real teacher.'
+        ].join(' ')
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          lectureTitle,
+          lectureSummary,
+          previousChunk,
+          currentChunk,
+          nextChunk,
+          teachingPlanSeed,
+          resumeContext,
+          requiredShape: {
+            teaching_mode: 'brief_explanation | deep_explanation | analogy_driven | example_first | process_flow | compare_contrast',
+            transition_text: 'string',
+            use_visual: 'boolean',
+            visual_type: 'none | slide | whiteboard | diagram | flowchart | comparison_table | mixed',
+            use_slide: 'boolean',
+            use_whiteboard: 'boolean',
+            use_example: 'boolean',
+            use_checkpoint: 'boolean',
+            checkpoint_text: 'string',
+            likely_confusion_points: ['string'],
+            reinforcement_points: ['string'],
+            teacher_tone: ['string'],
+            recommended_duration_seconds: 'integer'
+          }
+        })
+      }
+    ]
+  });
+
+  return {
+    model,
+    plan: getJsonFromCompletion(completion)
+  };
+}
+
 async function answerGeneralChat({
   message,
   chatHistory = [],
@@ -368,6 +434,7 @@ function createAudioCacheKey(parts) {
 module.exports = {
   generateLecturePackage,
   repairLecturePackage,
+  planChunkTeaching,
   answerLectureQuestion,
   answerGeneralChat,
   synthesizeSpeech,

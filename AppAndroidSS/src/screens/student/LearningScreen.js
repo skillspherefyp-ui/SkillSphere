@@ -84,14 +84,24 @@ const LearningScreen = () => {
   const currentSlide = currentSlides[0];
   const currentDelivery = currentChunk?.delivery || null;
   const panelContent = currentDelivery?.panel_content || {};
+  const teachingPlan = currentDelivery?.teaching_plan || currentChunk?.teachingPlan || {};
   const currentNarration = currentDelivery?.narration_text || currentChunk?.spokenExplanation || currentChunk?.text || '';
+  const transitionText = currentDelivery?.transition_text || panelContent.transitionIn || '';
+  const checkpointText = currentDelivery?.checkpoint_text || panelContent.checkpointQuestion || currentChunk?.checkpointQuestion || '';
+  const reinforcementPoints = panelContent.reinforcementPoints || teachingPlan.reinforcement_points || [];
+  const confusionPoints = panelContent.likelyConfusionPoints || teachingPlan.likely_confusion_points || [];
+  const teachingStyleLabel = currentDelivery?.teaching_style_label || panelContent.teachingStyleLabel || 'Brief explanation';
+  const conceptTypeLabel = teachingPlan?.concept_type ? teachingPlan.concept_type.replace(/-/g, ' ') : 'conceptual';
+  const recommendedDurationMs = ((currentDelivery?.recommended_duration_seconds || currentChunk?.estimatedDurationSeconds || 0) > 0
+    ? (currentDelivery?.recommended_duration_seconds || currentChunk?.estimatedDurationSeconds) * 1000
+    : 0);
   const currentModeLabel = currentDelivery?.current_mode_label || (showQuestionPanel ? 'Answering your question' : voiceMode ? 'Explaining' : 'Teaching in text mode');
   const tutorStatus = lectureCompleted
     ? { label: 'Lecture complete', detail: 'Open the stored quiz when you are ready to continue.', tone: '#10b981' }
     : showQuestionPanel
       ? { label: 'Paused for your question', detail: submittingQuestion ? 'AI Tutor is preparing a contextual answer.' : 'Ask for clarification, then resume from this exact chunk.', tone: '#f59e0b' }
       : isPlaying
-        ? { label: currentModeLabel, detail: currentDelivery?.next_action ? `Sequence: ${(currentDelivery.teaching_sequence || []).join(' -> ')}.` : (voiceMode ? 'Voice delivery is active for this section.' : 'Stored lecture chunks are advancing in text mode.'), tone: '#3b82f6' }
+        ? { label: currentModeLabel, detail: transitionText || (currentDelivery?.next_action ? `Sequence: ${(currentDelivery.teaching_sequence || []).join(' -> ')}.` : (voiceMode ? 'Voice delivery is active for this section.' : 'Stored lecture chunks are advancing in text mode.')), tone: '#3b82f6' }
         : { label: 'Ready to resume', detail: 'Resume when you are ready for the next chunk.', tone: '#6366f1' };
 
   useEffect(() => {
@@ -237,7 +247,7 @@ const LearningScreen = () => {
 
     if (!voiceMode) {
       const fallbackDelay = Math.min(12000, Math.max(3600, currentNarration.length * 28));
-      scheduleNext((currentChunk?.estimatedDurationSeconds || 0) > 0 ? currentChunk.estimatedDurationSeconds * 1000 : fallbackDelay);
+      scheduleNext(recommendedDurationMs || fallbackDelay);
       return;
     }
 
@@ -271,7 +281,7 @@ const LearningScreen = () => {
       }
     }
 
-    scheduleNext(Math.min(12000, Math.max(3600, currentNarration.length * 28)));
+    scheduleNext(recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)));
   };
 
   const togglePause = async () => {
@@ -605,7 +615,22 @@ const LearningScreen = () => {
               <Text style={[styles.statusMeta, { color: tutorStatus.tone }]}>{voiceMode ? 'Voice' : 'Text'}</Text>
             </View>
             <Text style={[styles.statusText, { color: theme.colors.textSecondary }]}>{tutorStatus.detail}</Text>
+            <View style={styles.metaPills}>
+              <View style={[styles.metaPill, { backgroundColor: isDark ? '#1f2937' : '#dbeafe' }]}>
+                <Text style={[styles.metaPillText, { color: theme.colors.textPrimary }]}>{teachingStyleLabel}</Text>
+              </View>
+              <View style={[styles.metaPill, { backgroundColor: isDark ? '#1f2937' : '#dcfce7' }]}>
+                <Text style={[styles.metaPillText, { color: theme.colors.textPrimary }]}>{conceptTypeLabel}</Text>
+              </View>
+            </View>
           </View>
+
+          {!!transitionText && (
+            <View style={[styles.transitionCard, { backgroundColor: isDark ? '#14213d' : '#fff7ed', borderColor: isDark ? '#2b3f67' : '#fdba74' }]}>
+              <Text style={[styles.transitionLabel, { color: isDark ? '#93c5fd' : '#c2410c' }]}>Teacher transition</Text>
+              <Text style={[styles.transitionText, { color: theme.colors.textPrimary }]}>{transitionText}</Text>
+            </View>
+          )}
 
           <View style={styles.topRow}>
             <View style={[styles.whiteboard, { backgroundColor: isDark ? '#1a1a2e' : '#1e293b' }]}>
@@ -636,7 +661,15 @@ const LearningScreen = () => {
               {!!(panelContent.checkpointQuestion || currentChunk.checkpointQuestion) && (
                 <>
                   <Text style={styles.sectionLabel}>Checkpoint</Text>
-                  <Text style={styles.sectionText}>{panelContent.checkpointQuestion || currentChunk.checkpointQuestion}</Text>
+                  <Text style={styles.sectionText}>{checkpointText}</Text>
+                </>
+              )}
+              {!!reinforcementPoints.length && (
+                <>
+                  <Text style={styles.sectionLabel}>Reinforcement</Text>
+                  {reinforcementPoints.slice(0, 2).map((point, index) => (
+                    <Text key={`${point}-${index}`} style={styles.sectionText}>- {point}</Text>
+                  ))}
                 </>
               )}
               <Text style={styles.sectionLabel}>Slide bullets</Text>
@@ -685,10 +718,33 @@ const LearningScreen = () => {
             </View>
           </View>
 
+          {(checkpointText || reinforcementPoints.length > 0 || confusionPoints.length > 0) && (
+            <View style={styles.teacherCardsRow}>
+              {!!checkpointText && (
+                <View style={[styles.teacherCard, { backgroundColor: isDark ? '#111827' : '#fffbeb', borderColor: isDark ? '#374151' : '#fde68a' }]}>
+                  <Text style={[styles.teacherCardLabel, { color: '#d97706' }]}>Mini checkpoint</Text>
+                  <Text style={[styles.teacherCardText, { color: theme.colors.textPrimary }]}>{checkpointText}</Text>
+                </View>
+              )}
+              {!!reinforcementPoints.length && (
+                <View style={[styles.teacherCard, { backgroundColor: isDark ? '#0f172a' : '#ecfeff', borderColor: isDark ? '#1e3a8a' : '#a5f3fc' }]}>
+                  <Text style={[styles.teacherCardLabel, { color: '#0891b2' }]}>Takeaway</Text>
+                  <Text style={[styles.teacherCardText, { color: theme.colors.textPrimary }]}>{reinforcementPoints[0]}</Text>
+                </View>
+              )}
+              {!!confusionPoints.length && (
+                <View style={[styles.teacherCard, { backgroundColor: isDark ? '#1f172a' : '#fef2f2', borderColor: isDark ? '#4c1d95' : '#fecaca' }]}>
+                  <Text style={[styles.teacherCardLabel, { color: '#dc2626' }]}>Watch for this</Text>
+                  <Text style={[styles.teacherCardText, { color: theme.colors.textPrimary }]}>{confusionPoints[0]}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
           <View style={[styles.subtitlesCard, { backgroundColor: isDark ? '#1a1a2e' : '#f1f5f9' }]}>
             <View style={styles.subtitlesHeader}>
               <Text style={[styles.subtitlesTitle, { color: theme.colors.textPrimary }]}>Live Subtitles</Text>
-              <Text style={styles.modeBadge}>{(currentDelivery?.current_mode || (voiceMode ? 'voice' : 'text')).toUpperCase()}</Text>
+              <Text style={styles.modeBadge}>{teachingStyleLabel.toUpperCase()}</Text>
             </View>
             <Text style={[styles.subtitlesText, { color: theme.colors.textPrimary }]}>{currentNarration}</Text>
           </View>
@@ -883,6 +939,12 @@ const styles = StyleSheet.create({
   statusTitle: { fontSize: 15, fontWeight: '700' },
   statusMeta: { fontSize: 12, fontWeight: '700' },
   statusText: { fontSize: 13, lineHeight: 20 },
+  metaPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  metaPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  metaPillText: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
+  transitionCard: { borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1 },
+  transitionLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
+  transitionText: { fontSize: 14, lineHeight: 21, fontWeight: '600' },
   topRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
   whiteboard: { flex: 1, borderRadius: 16, padding: 18 },
   tutorPanel: { width: 190, borderRadius: 16, padding: 16, alignItems: 'center' },
@@ -917,6 +979,10 @@ const styles = StyleSheet.create({
   nodeWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   nodeCard: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
   nodeLabel: { fontSize: 12, fontWeight: '600' },
+  teacherCardsRow: { flexDirection: 'row', gap: 12, marginBottom: 16, flexWrap: 'wrap' },
+  teacherCard: { flex: 1, minWidth: 210, borderRadius: 16, padding: 14, borderWidth: 1 },
+  teacherCardLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
+  teacherCardText: { fontSize: 13, lineHeight: 20 },
   subtitlesCard: { borderRadius: 16, padding: 16, marginBottom: 16 },
   subtitlesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   subtitlesTitle: { fontSize: 14, fontWeight: '700' },
