@@ -531,7 +531,7 @@ async function generateCoursePackage(courseId, adminUser) {
         topic,
         outline,
         normalizedPackage: normalized,
-        modelName: generation.model,
+        modelName,
         nextTopicId: topics[index + 1]?.id || null
       });
 
