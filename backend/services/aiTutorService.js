@@ -24,6 +24,148 @@ const openaiService = require('./openaiService');
 
 const AUDIO_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'ai-audio');
 
+function dedupeStrings(values) {
+  return Array.from(
+    new Set(
+      (values || [])
+        .map((value) => `${value || ''}`.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function splitOutlineIntoPoints(outlineText) {
+  return dedupeStrings(
+    `${outlineText || ''}`
+      .split(/\r?\n|[.;]/)
+      .map((line) => line.replace(/^[-*#\d.\s]+/, '').trim())
+      .filter((line) => line.length > 3)
+  );
+}
+
+function buildFallbackLecturePackage({
+  course,
+  topic,
+  materials,
+  priorTopics,
+  nextTopicTitle,
+  outlineText,
+  failureReason
+}) {
+  const materialHints = dedupeStrings(
+    (materials || []).flatMap((material) => [
+      material?.title,
+      material?.description,
+      material?.type ? `${material.type} material` : ''
+    ])
+  );
+
+  const outlinePoints = splitOutlineIntoPoints(outlineText);
+  const conceptPool = dedupeStrings([
+    ...outlinePoints,
+    ...materialHints,
+    topic.title,
+    `${topic.title} fundamentals`,
+    `${topic.title} applications`
+  ]);
+
+  const selectedConcepts = conceptPool.slice(0, 4);
+  const sections = selectedConcepts.map((concept, index) => {
+    const practicalHint = materialHints[index] || materialHints[0] || `${topic.title} example`;
+    const priorContext = priorTopics?.length
+      ? `Connect this with earlier topics such as ${priorTopics.slice(-2).join(' and ')}.`
+      : `Start from first principles so learners can build confidence quickly.`;
+
+    return {
+      title: index === 0 ? `Introduction to ${topic.title}` : `${topic.title}: ${concept}`,
+      summary: `Clarify ${concept.toLowerCase()} and show how it fits inside ${topic.title}.`,
+      explanation: `${concept} is a core part of ${topic.title}. ${priorContext} Use plain language, define the idea, explain why it matters, and anchor it with one concrete example based on ${practicalHint}.`,
+      examples: [
+        `Walk through a simple example of ${concept.toLowerCase()} in practice.`,
+        `Show a common mistake students make with ${concept.toLowerCase()} and correct it.`
+      ],
+      visualSuggestion: `Create a simple teaching visual that highlights ${concept.toLowerCase()} and its relationship to ${topic.title}.`,
+      whiteboardSuggestion: `Sketch ${concept.toLowerCase()} step by step, then annotate the most important decision points.`,
+      slideBullets: [
+        `${concept}`,
+        `Why it matters in ${topic.title}`,
+        `Worked example`,
+        `Common mistake to avoid`
+      ],
+      chunks: [
+        `${concept} introduces one essential part of ${topic.title}. Define it clearly and explain its purpose before moving into detail.`,
+        `Break ${concept.toLowerCase()} into simple steps. Show how a learner should reason through it and what signals they should look for.`,
+        `Use ${practicalHint} as a concrete example so the learner sees how ${concept.toLowerCase()} works in a realistic study context.`
+      ]
+    };
+  });
+
+  const slideOutline = sections.map((section, index) => ({
+    title: section.title,
+    bullets: section.slideBullets,
+    notes: index === sections.length - 1 && nextTopicTitle
+      ? `Close by connecting this topic to the next topic: ${nextTopicTitle}.`
+      : `Reinforce the key point, recap the example, and ask one quick check-for-understanding question.`
+  }));
+
+  const flashcards = sections.map((section, index) => ({
+    front: `What is the main idea of "${section.title}"?`,
+    back: section.summary
+  })).concat([
+    {
+      front: `Why is ${topic.title} important in ${course.name}?`,
+      back: `${topic.title} helps learners build practical understanding that supports progress through the course.`
+    },
+    {
+      front: `What should a student do after learning ${topic.title}?`,
+      back: nextTopicTitle
+        ? `Review the examples, confirm the key terms, and move to ${nextTopicTitle}.`
+        : `Review the examples and confirm the key terms until the concept feels repeatable.`
+    }
+  ]).slice(0, 6);
+
+  const quizQuestions = sections.map((section, index) => ({
+    prompt: `Which option best describes the goal of "${section.title}"?`,
+    options: [
+      `To understand ${section.summary.toLowerCase()}`,
+      `To skip foundational understanding and memorize terms only`,
+      `To ignore examples and move directly to the next topic`,
+      `To avoid connecting the concept with the wider course`
+    ],
+    correctAnswer: 0,
+    explanation: `${section.title} is about understanding the concept clearly, not skipping reasoning or examples.`
+  })).slice(0, 4);
+
+  if (quizQuestions.length < 4) {
+    quizQuestions.push({
+      prompt: `What is the best next step after completing ${topic.title}?`,
+      options: [
+        `Review the examples and connect them to the core idea`,
+        `Delete the notes and rely only on memory`,
+        `Skip the quiz and move on without checking understanding`,
+        `Ignore how the concept applies in practice`
+      ],
+      correctAnswer: 0,
+      explanation: `Review and reflection help students retain the lecture and perform better in the quiz.`
+    });
+  }
+
+  return {
+    title: `${topic.title}`,
+    summary: `A structured lecture package for ${topic.title} in ${course.name}.`,
+    estimatedDurationMinutes: Math.max(8, sections.length * 3),
+    teachingScript: sections.map((section) => `${section.title}\n${section.explanation}`).join('\n\n'),
+    slideOutline,
+    sections,
+    flashcards,
+    quiz: {
+      instructions: `Answer all questions before moving on. ${failureReason ? `This package was generated using the built-in fallback lecturer because the live AI service was unavailable.` : ''}`.trim(),
+      passingThreshold: 70,
+      questions: quizQuestions
+    }
+  };
+}
+
 function validateLecturePackage(candidate) {
   const errors = [];
 
@@ -335,29 +477,53 @@ async function generateCoursePackage(courseId, adminUser) {
     });
 
     try {
-      const generation = await openaiService.generateLecturePackage({
-        course,
-        topic,
-        materials: (topic.materials || []).map((material) => ({
-          title: material.title,
-          description: material.description,
-          type: material.type
-        })),
-        priorTopics,
-        nextTopicTitle,
-        outlineText
-      });
+      const sourceMaterials = (topic.materials || []).map((material) => ({
+        title: material.title,
+        description: material.description,
+        type: material.type
+      }));
 
-      let rawPackage = generation.package;
-      const validationErrors = validateLecturePackage(rawPackage);
-      if (validationErrors.length > 0) {
-        rawPackage = await openaiService.repairLecturePackage(JSON.stringify(rawPackage), validationErrors);
-      }
+      let normalized;
+      let modelName;
 
-      const normalized = normalizeLecturePackage(rawPackage, topic.title);
-      const finalValidationErrors = validateLecturePackage(normalized);
-      if (finalValidationErrors.length > 0) {
-        throw new Error(`Generated lecture package is invalid: ${finalValidationErrors.join(', ')}`);
+      try {
+        const generation = await openaiService.generateLecturePackage({
+          course,
+          topic,
+          materials: sourceMaterials,
+          priorTopics,
+          nextTopicTitle,
+          outlineText
+        });
+
+        let rawPackage = generation.package;
+        const validationErrors = validateLecturePackage(rawPackage);
+        if (validationErrors.length > 0) {
+          rawPackage = await openaiService.repairLecturePackage(JSON.stringify(rawPackage), validationErrors);
+        }
+
+        normalized = normalizeLecturePackage(rawPackage, topic.title);
+        const finalValidationErrors = validateLecturePackage(normalized);
+        if (finalValidationErrors.length > 0) {
+          throw new Error(`Generated lecture package is invalid: ${finalValidationErrors.join(', ')}`);
+        }
+
+        modelName = generation.model;
+      } catch (generationError) {
+        console.error(`Primary AI generation failed for topic ${topic.id}, falling back to template package:`, generationError);
+        normalized = normalizeLecturePackage(
+          buildFallbackLecturePackage({
+            course,
+            topic,
+            materials: sourceMaterials,
+            priorTopics,
+            nextTopicTitle,
+            outlineText,
+            failureReason: generationError.message
+          }),
+          topic.title
+        );
+        modelName = 'fallback-template';
       }
 
       await persistLecturePackage({
@@ -369,8 +535,17 @@ async function generateCoursePackage(courseId, adminUser) {
         nextTopicId: topics[index + 1]?.id || null
       });
 
-      await outline.update({ status: 'ready', errorMessage: null });
-      results.push({ topicId: topic.id, topicTitle: topic.title, status: 'ready' });
+      const usedFallback = modelName === 'fallback-template';
+      await outline.update({
+        status: 'ready',
+        errorMessage: usedFallback ? 'Primary AI generation failed; fallback lecture package was stored.' : null
+      });
+      results.push({
+        topicId: topic.id,
+        topicTitle: topic.title,
+        status: 'ready',
+        usedFallback
+      });
     } catch (error) {
       console.error(`AI generation failed for topic ${topic.id}:`, error);
       await outline.update({ status: 'failed', errorMessage: error.message });
@@ -409,6 +584,87 @@ async function getLectureByTopicId(topicId) {
       { model: Topic, as: 'nextTopic' }
     ]
   });
+}
+
+async function ensureLectureReadyForTopic(topicId) {
+  let lecture = await getLectureByTopicId(topicId);
+  if (lecture && lecture.status === 'ready') {
+    return lecture;
+  }
+
+  const topic = await Topic.findByPk(topicId, {
+    include: [{ model: Material, as: 'materials' }]
+  });
+
+  if (!topic) {
+    throw new Error('Topic not found');
+  }
+
+  const course = await Course.findByPk(topic.courseId);
+  if (!course) {
+    throw new Error('Course not found');
+  }
+
+  const courseTopics = await Topic.findAll({
+    where: { courseId: topic.courseId },
+    order: [['order', 'ASC']]
+  });
+
+  const topicIndex = courseTopics.findIndex((item) => item.id === topic.id);
+  const priorTopics = topicIndex > 0 ? courseTopics.slice(0, topicIndex).map((item) => item.title) : [];
+  const nextTopicId = topicIndex >= 0 ? courseTopics[topicIndex + 1]?.id || null : null;
+  const nextTopicTitle = topicIndex >= 0 ? courseTopics[topicIndex + 1]?.title || null : null;
+  const defaultOutlineText = getOutlineText(topic, topic.materials);
+
+  const [outline] = await AIOutline.findOrCreate({
+    where: { topicId: topic.id },
+    defaults: {
+      courseId: topic.courseId,
+      topicId: topic.id,
+      adminId: null,
+      outlineText: defaultOutlineText,
+      sourceMaterials: [],
+      status: 'draft'
+    }
+  });
+
+  const normalized = normalizeLecturePackage(
+    buildFallbackLecturePackage({
+      course,
+      topic,
+      materials: (topic.materials || []).map((material) => ({
+        title: material.title,
+        description: material.description,
+        type: material.type
+      })),
+      priorTopics,
+      nextTopicTitle,
+      outlineText: outline.outlineText || defaultOutlineText,
+      failureReason: lecture?.errorMessage || 'Lecture package was missing when the student started learning.'
+    }),
+    topic.title
+  );
+
+  await persistLecturePackage({
+    course,
+    topic,
+    outline,
+    normalizedPackage: normalized,
+    modelName: 'fallback-template',
+    nextTopicId
+  });
+
+  await outline.update({
+    status: 'ready',
+    errorMessage: 'Fallback lecture package was auto-generated during session start.'
+  });
+
+  lecture = await getLectureByTopicId(topicId);
+  if (!lecture || lecture.status !== 'ready') {
+    throw new Error('Lecture package is not ready for this topic');
+  }
+
+  return lecture;
 }
 
 function mapLectureChunk(lecture, sectionIndex, chunkIndex) {
@@ -478,10 +734,7 @@ async function ensureStudentEnrollment(userId, courseId) {
 }
 
 async function startTutorSession(userId, topicId, voiceModeEnabled) {
-  const lecture = await getLectureByTopicId(topicId);
-  if (!lecture || lecture.status !== 'ready') {
-    throw new Error('Lecture package is not ready for this topic');
-  }
+  const lecture = await ensureLectureReadyForTopic(topicId);
 
   await ensureStudentEnrollment(userId, lecture.courseId);
 
