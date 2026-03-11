@@ -144,6 +144,7 @@ const LearningScreen = () => {
   const loadLecture = async () => {
     setLoading(true);
     stopPlayback();
+    stopRecognition();
 
     try {
       const enrollment = await checkEnrollment(courseId);
@@ -182,6 +183,9 @@ const LearningScreen = () => {
         text: message.content,
       })));
     } catch (error) {
+      setLecture(null);
+      setSession(null);
+      setCurrentChunk(null);
       Toast.show({
         type: 'error',
         text1: 'Lecture Unavailable',
@@ -193,6 +197,10 @@ const LearningScreen = () => {
   };
 
   const scheduleNext = (delay) => {
+    if (!session?.id) {
+      return;
+    }
+
     stopPlayback();
     playbackRef.current = setTimeout(async () => {
       try {
@@ -299,6 +307,9 @@ const LearningScreen = () => {
 
     try {
       const response = await aiTutorAPI.askQuestion(session.id, prompt);
+      if (!response.success || !response.aiMessage?.content) {
+        throw new Error(response.error || 'I could not answer that question right now.');
+      }
       setChatMessages((prev) => [...prev, { type: 'ai', text: response.aiMessage.content }]);
     } catch (error) {
       setChatMessages((prev) => [...prev, { type: 'ai', text: error.message || 'I could not answer that question right now.' }]);
@@ -417,6 +428,15 @@ const LearningScreen = () => {
   };
 
   const openQuiz = () => {
+    if (!lecture?.id) {
+      Toast.show({
+        type: 'error',
+        text1: 'Quiz Unavailable',
+        text2: 'This lecture package is missing its quiz reference.',
+      });
+      return;
+    }
+
     if (!lectureCompleted) {
       Toast.show({
         type: 'info',
