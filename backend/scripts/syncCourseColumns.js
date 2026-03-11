@@ -1,0 +1,27 @@
+require('dotenv').config();
+const { sequelize } = require('../config/database');
+
+async function syncCourseColumns() {
+  const [rows] = await sequelize.query("SHOW COLUMNS FROM courses");
+  const existingColumns = new Set(rows.map((row) => row.Field));
+
+  if (!existingColumns.has('thumbnailImage')) {
+    console.log('Adding courses.thumbnailImage...');
+    await sequelize.query('ALTER TABLE courses ADD COLUMN thumbnailImage VARCHAR(255) NULL');
+  }
+}
+
+if (require.main === module) {
+  syncCourseColumns()
+    .then(async () => {
+      console.log('Course columns are in sync.');
+      await sequelize.close();
+    })
+    .catch(async (error) => {
+      console.error('Failed to sync course columns:', error);
+      await sequelize.close();
+      process.exitCode = 1;
+    });
+}
+
+module.exports = syncCourseColumns;

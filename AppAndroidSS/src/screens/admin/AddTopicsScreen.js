@@ -26,6 +26,7 @@ import React, { useState, useMemo } from 'react';
   import { useTheme } from '../../context/ThemeContext';
   import { useNavigation, useRoute } from '@react-navigation/native';
   import { resolveFileUrl } from '../../utils/urlHelpers';
+  import { aiTutorAPI } from '../../services/apiClient';
 
   // Color palette for topic cards
   const TOPIC_COLORS = [
@@ -71,6 +72,7 @@ import React, { useState, useMemo } from 'react';
     const [selectedTopicMaterials, setSelectedTopicMaterials] = useState(null);
     const [topicToDelete, setTopicToDelete] = useState(null);
     const [editingTopic, setEditingTopic] = useState(null);
+    const [isGenerating, setIsGenerating] = useState(false);
 
     const topics = course?.topics || [];
 
@@ -266,22 +268,41 @@ import React, { useState, useMemo } from 'react';
       setShowConfirmDialog(true);
     };
 
-    const confirmSubmitForAI = () => {
+    const confirmSubmitForAI = async () => {
       setShowConfirmDialog(false);
-      updateCourse(courseId, { status: 'ai_generating' });
-      Toast.show({
-        type: 'success',
-        text1: 'Success',
-        text2: 'Course submitted for AI generation!',
-      });
-      setTimeout(() => {
-        updateCourse(courseId, { status: 'draft' });
+      setIsGenerating(true);
+
+      try {
+        const response = await aiTutorAPI.generateCoursePackage(courseId);
+        await fetchCourses();
+
+        if (!response.success) {
+          throw new Error(response.error || 'AI generation failed');
+        }
+
+        const failed = (response.results || []).filter((item) => item.status !== 'ready');
+        if (failed.length > 0) {
+          Toast.show({
+            type: 'error',
+            text1: 'Generation Partial',
+            text2: `${response.summary?.ready || 0} topic packages ready, ${failed.length} failed.`,
+          });
+        } else {
+          Toast.show({
+            type: 'success',
+            text1: 'AI Generation Complete',
+            text2: `${response.summary?.ready || 0} topic packages stored successfully.`,
+          });
+        }
+      } catch (error) {
         Toast.show({
-          type: 'info',
-          text1: 'AI Generation Complete',
-          text2: 'Course content has been generated successfully!',
+          type: 'error',
+          text1: 'Generation Failed',
+          text2: error.message || 'Unable to generate AI lecture content',
         });
-      }, 3000);
+      } finally {
+        setIsGenerating(false);
+      }
     };
 
     const styles = getStyles(theme, isDark, isLargeScreen, isTablet, isMobile);
@@ -481,11 +502,13 @@ import React, { useState, useMemo } from 'react';
           {topics.length > 0 && canAddTopics && (
             <Animated.View entering={FadeInDown.duration(400).delay(300)}>
               <AppButton
-                title="Generate Content with AI"
+                title={isGenerating ? "Generating AI Package..." : "Generate Content with AI"}
                 onPress={handleSubmitForAI}
                 variant="primary"
                 style={styles.aiButton}
                 leftIcon="sparkles"
+                disabled={isGenerating}
+                loading={isGenerating}
               />
             </Animated.View>
           )}

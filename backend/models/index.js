@@ -14,6 +14,18 @@ const TemplateCourse = require('./TemplateCourse');
 const Notification = require('./Notification');
 const AIChatSession = require('./AIChatSession');
 const AIChatMessage = require('./AIChatMessage');
+const AIOutline = require('./AIOutline');
+const AILecture = require('./AILecture');
+const AILectureSection = require('./AILectureSection');
+const AISlideOutline = require('./AISlideOutline');
+const AIVisualSuggestion = require('./AIVisualSuggestion');
+const AIFlashcard = require('./AIFlashcard');
+const AIQuiz = require('./AIQuiz');
+const AIQuizQuestion = require('./AIQuizQuestion');
+const AITutorSession = require('./AITutorSession');
+const AITutorMessage = require('./AITutorMessage');
+const AIStudentProgress = require('./AIStudentProgress');
+const AIAudioAsset = require('./AIAudioAsset');
 const { sequelize } = require('../config/database');
 
 // Define associations
@@ -126,6 +138,65 @@ AIChatSession.belongsTo(User, { foreignKey: 'userId', as: 'user', onDelete: 'CAS
 AIChatSession.hasMany(AIChatMessage, { foreignKey: 'sessionId', as: 'messages', onDelete: 'CASCADE' });
 AIChatMessage.belongsTo(AIChatSession, { foreignKey: 'sessionId', as: 'session', onDelete: 'CASCADE' });
 
+// Course / Topic - AI outline and lecture package
+Course.hasMany(AIOutline, { foreignKey: 'courseId', as: 'aiOutlines', onDelete: 'CASCADE' });
+AIOutline.belongsTo(Course, { foreignKey: 'courseId', as: 'course', onDelete: 'CASCADE' });
+Topic.hasOne(AIOutline, { foreignKey: 'topicId', as: 'aiOutline', onDelete: 'CASCADE' });
+AIOutline.belongsTo(Topic, { foreignKey: 'topicId', as: 'topic', onDelete: 'CASCADE' });
+User.hasMany(AIOutline, { foreignKey: 'adminId', as: 'generatedOutlines', onDelete: 'SET NULL' });
+AIOutline.belongsTo(User, { foreignKey: 'adminId', as: 'admin', onDelete: 'SET NULL' });
+
+Course.hasMany(AILecture, { foreignKey: 'courseId', as: 'aiLectures', onDelete: 'CASCADE' });
+AILecture.belongsTo(Course, { foreignKey: 'courseId', as: 'course', onDelete: 'CASCADE' });
+Topic.hasOne(AILecture, { foreignKey: 'topicId', as: 'aiLecture', onDelete: 'CASCADE' });
+AILecture.belongsTo(Topic, { foreignKey: 'topicId', as: 'topic', onDelete: 'CASCADE' });
+AIOutline.hasOne(AILecture, { foreignKey: 'outlineId', as: 'lecture', onDelete: 'SET NULL' });
+AILecture.belongsTo(AIOutline, { foreignKey: 'outlineId', as: 'outline', onDelete: 'SET NULL' });
+AILecture.belongsTo(Topic, { foreignKey: 'nextTopicId', as: 'nextTopic', onDelete: 'SET NULL' });
+
+AILecture.hasMany(AILectureSection, { foreignKey: 'lectureId', as: 'sections', onDelete: 'CASCADE' });
+AILectureSection.belongsTo(AILecture, { foreignKey: 'lectureId', as: 'lecture', onDelete: 'CASCADE' });
+AILecture.hasMany(AISlideOutline, { foreignKey: 'lectureId', as: 'slideOutlines', onDelete: 'CASCADE' });
+AISlideOutline.belongsTo(AILecture, { foreignKey: 'lectureId', as: 'lecture', onDelete: 'CASCADE' });
+AILecture.hasMany(AIVisualSuggestion, { foreignKey: 'lectureId', as: 'visualSuggestions', onDelete: 'CASCADE' });
+AIVisualSuggestion.belongsTo(AILecture, { foreignKey: 'lectureId', as: 'lecture', onDelete: 'CASCADE' });
+AILecture.hasMany(AIFlashcard, { foreignKey: 'lectureId', as: 'flashcards', onDelete: 'CASCADE' });
+AIFlashcard.belongsTo(AILecture, { foreignKey: 'lectureId', as: 'lecture', onDelete: 'CASCADE' });
+
+AILecture.hasOne(AIQuiz, { foreignKey: 'lectureId', as: 'aiQuiz', onDelete: 'CASCADE' });
+AIQuiz.belongsTo(AILecture, { foreignKey: 'lectureId', as: 'lecture', onDelete: 'CASCADE' });
+AIQuiz.hasMany(AIQuizQuestion, { foreignKey: 'quizId', as: 'questions', onDelete: 'CASCADE' });
+AIQuizQuestion.belongsTo(AIQuiz, { foreignKey: 'quizId', as: 'quiz', onDelete: 'CASCADE' });
+
+User.hasMany(AITutorSession, { foreignKey: 'userId', as: 'aiTutorSessions', onDelete: 'CASCADE' });
+AITutorSession.belongsTo(User, { foreignKey: 'userId', as: 'user', onDelete: 'CASCADE' });
+Course.hasMany(AITutorSession, { foreignKey: 'courseId', as: 'aiTutorSessions', onDelete: 'CASCADE' });
+AITutorSession.belongsTo(Course, { foreignKey: 'courseId', as: 'course', onDelete: 'CASCADE' });
+Topic.hasMany(AITutorSession, { foreignKey: 'topicId', as: 'aiTutorSessions', onDelete: 'CASCADE' });
+AITutorSession.belongsTo(Topic, { foreignKey: 'topicId', as: 'topic', onDelete: 'CASCADE' });
+AILecture.hasMany(AITutorSession, { foreignKey: 'lectureId', as: 'sessions', onDelete: 'CASCADE' });
+AITutorSession.belongsTo(AILecture, { foreignKey: 'lectureId', as: 'lecture', onDelete: 'CASCADE' });
+
+AITutorSession.hasMany(AITutorMessage, { foreignKey: 'sessionId', as: 'messages', onDelete: 'CASCADE' });
+AITutorMessage.belongsTo(AITutorSession, { foreignKey: 'sessionId', as: 'session', onDelete: 'CASCADE' });
+
+User.hasMany(AIStudentProgress, { foreignKey: 'userId', as: 'aiProgress', onDelete: 'CASCADE' });
+AIStudentProgress.belongsTo(User, { foreignKey: 'userId', as: 'user', onDelete: 'CASCADE' });
+Course.hasMany(AIStudentProgress, { foreignKey: 'courseId', as: 'aiProgress', onDelete: 'CASCADE' });
+AIStudentProgress.belongsTo(Course, { foreignKey: 'courseId', as: 'course', onDelete: 'CASCADE' });
+Topic.hasMany(AIStudentProgress, { foreignKey: 'topicId', as: 'aiProgress', onDelete: 'CASCADE' });
+AIStudentProgress.belongsTo(Topic, { foreignKey: 'topicId', as: 'topic', onDelete: 'CASCADE' });
+AILecture.hasMany(AIStudentProgress, { foreignKey: 'lectureId', as: 'progressRecords', onDelete: 'CASCADE' });
+AIStudentProgress.belongsTo(AILecture, { foreignKey: 'lectureId', as: 'lecture', onDelete: 'CASCADE' });
+AITutorSession.hasMany(AIStudentProgress, { foreignKey: 'lastSessionId', as: 'progressRecords', onDelete: 'SET NULL' });
+AIStudentProgress.belongsTo(AITutorSession, { foreignKey: 'lastSessionId', as: 'lastSession', onDelete: 'SET NULL' });
+AIStudentProgress.belongsTo(Topic, { foreignKey: 'unlockedNextTopicId', as: 'unlockedNextTopic', onDelete: 'SET NULL' });
+
+AILecture.hasMany(AIAudioAsset, { foreignKey: 'lectureId', as: 'audioAssets', onDelete: 'CASCADE' });
+AIAudioAsset.belongsTo(AILecture, { foreignKey: 'lectureId', as: 'lecture', onDelete: 'CASCADE' });
+AITutorSession.hasMany(AIAudioAsset, { foreignKey: 'sessionId', as: 'audioAssets', onDelete: 'CASCADE' });
+AIAudioAsset.belongsTo(AITutorSession, { foreignKey: 'sessionId', as: 'session', onDelete: 'CASCADE' });
+
 module.exports = {
   sequelize,
   User,
@@ -143,8 +214,18 @@ module.exports = {
   TemplateCourse,
   Notification,
   AIChatSession,
-  AIChatMessage
+  AIChatMessage,
+  AIOutline,
+  AILecture,
+  AILectureSection,
+  AISlideOutline,
+  AIVisualSuggestion,
+  AIFlashcard,
+  AIQuiz,
+  AIQuizQuestion,
+  AITutorSession,
+  AITutorMessage,
+  AIStudentProgress,
+  AIAudioAsset
 };
-
-
 

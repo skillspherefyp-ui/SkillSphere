@@ -7,6 +7,8 @@ const { sequelize, testConnection } = require('./config/database');
 require('./models'); // Load models and associations
 const { User } = require('./models');
 const { sendSuperAdminWelcomeEmail } = require('./services/emailService');
+const syncUserAuthColumns = require('./scripts/syncUserAuthColumns');
+const syncCourseColumns = require('./scripts/syncCourseColumns');
 
 // Initialize SuperAdmin if not exists
 const initSuperAdmin = async () => {
@@ -67,6 +69,7 @@ const certificateRoutes = require('./routes/certificateRoutes');
 const certificateTemplateRoutes = require('./routes/certificateTemplateRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const aiChatRoutes = require('./routes/aiChatRoutes');
+const aiTutorRoutes = require('./routes/aiTutorRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -136,6 +139,7 @@ app.use('/api/certificates', certificateRoutes);
 app.use('/api/certificate-templates', certificateTemplateRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/ai-chat', aiChatRoutes);
+app.use('/api/ai-tutor', aiTutorRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -155,6 +159,10 @@ const startServer = async () => {
   try {
     // Test database connection
     await testConnection();
+
+    // Keep existing auth tables aligned with the current User model in local environments.
+    await syncUserAuthColumns();
+    await syncCourseColumns();
 
     // Sync database (create tables and add new columns if they don't exist)
     // alter: true will modify existing tables to match model definitions
@@ -179,4 +187,3 @@ const startServer = async () => {
 startServer();
 
 module.exports = app;
-

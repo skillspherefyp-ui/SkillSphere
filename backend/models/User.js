@@ -77,6 +77,14 @@ const User = sequelize.define('User', {
     type: DataTypes.ENUM('local', 'google'),
     defaultValue: 'local'
   },
+  privacyPolicyAccepted: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  privacyPolicyAcceptedAt: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
   createdAt: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW

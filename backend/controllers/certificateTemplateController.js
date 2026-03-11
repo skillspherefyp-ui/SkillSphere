@@ -1,19 +1,24 @@
 const { CertificateTemplate, User, Certificate, Course, TemplateCourse } = require('../models');
 const { generateCertificatePDF } = require('../services/certificateService');
 const multer = require('multer');
-const { templateStorage, cloudinary } = require('../config/cloudinary');
+const fs = require('fs');
+const path = require('path');
 
-// Helper: extract Cloudinary public_id from a full URL
-const getPublicIdFromUrl = (url) => {
+// Always use local storage
+const { templateStorage } = require('../config/localStorage');
+
+// Helper: delete local file
+const deleteLocalFile = (filePath) => {
   try {
-    // Cloudinary URLs look like: https://res.cloudinary.com/<cloud>/image/upload/v123/folder/filename.ext
-    const parts = url.split('/upload/');
-    if (parts.length < 2) return null;
-    // Remove version prefix (v123/) and file extension
-    const pathAfterUpload = parts[1].replace(/^v\d+\//, '');
-    return pathAfterUpload.replace(/\.[^/.]+$/, '');
-  } catch {
-    return null;
+    if (filePath && filePath.startsWith('/uploads/')) {
+      const fullPath = path.join(__dirname, '..', filePath);
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+        console.log('✅ Deleted local file:', filePath);
+      }
+    }
+  } catch (e) {
+    console.log('Could not delete local file:', e.message);
   }
 };
 
@@ -333,19 +338,13 @@ exports.deleteTemplate = async (req, res) => {
       return res.status(404).json({ error: 'Template not found' });
     }
 
-    // Delete associated Cloudinary files
+    // Delete associated local files
     if (template.backgroundImage) {
-      const publicId = getPublicIdFromUrl(template.backgroundImage);
-      if (publicId) {
-        try { await cloudinary.uploader.destroy(publicId); } catch (e) { console.log('Could not delete old background from Cloudinary:', e.message); }
-      }
+      deleteLocalFile(template.backgroundImage);
     }
 
     if (template.adminSignature) {
-      const publicId = getPublicIdFromUrl(template.adminSignature);
-      if (publicId) {
-        try { await cloudinary.uploader.destroy(publicId); } catch (e) { console.log('Could not delete old signature from Cloudinary:', e.message); }
-      }
+      deleteLocalFile(template.adminSignature);
     }
 
     await template.destroy();
@@ -370,26 +369,25 @@ exports.uploadBackground = [
 
       const template = await CertificateTemplate.findByPk(id);
 
+      // Local storage path
+      const fileUrl = `/uploads/templates/${req.file.filename}`;
+
       if (!template) {
-        // Delete the uploaded Cloudinary file
-        const publicId = getPublicIdFromUrl(req.file.path);
-        if (publicId) {
-          try { await cloudinary.uploader.destroy(publicId); } catch (e) { /* ignore */ }
-        }
+        // Delete the uploaded file
+        deleteLocalFile(fileUrl);
         return res.status(404).json({ error: 'Template not found' });
       }
 
-      // Delete old background from Cloudinary if exists
+      // Delete old background if exists
       if (template.backgroundImage) {
-        const oldPublicId = getPublicIdFromUrl(template.backgroundImage);
-        if (oldPublicId) {
-          try { await cloudinary.uploader.destroy(oldPublicId); } catch (e) { console.log('Could not delete old background:', e.message); }
-        }
+        deleteLocalFile(template.backgroundImage);
       }
 
-      // Store full Cloudinary URL
-      template.backgroundImage = req.file.path;
+      // Store file URL
+      template.backgroundImage = fileUrl;
       await template.save();
+
+      console.log('✅ Background uploaded (Local):', fileUrl);
 
       res.json({
         success: true,
@@ -398,12 +396,6 @@ exports.uploadBackground = [
       });
     } catch (error) {
       console.error('Upload background error:', error);
-      if (req.file) {
-        const publicId = getPublicIdFromUrl(req.file.path);
-        if (publicId) {
-          try { await cloudinary.uploader.destroy(publicId); } catch (e) { /* ignore */ }
-        }
-      }
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -422,25 +414,24 @@ exports.uploadAdminSignature = [
 
       const template = await CertificateTemplate.findByPk(id);
 
+      // Local storage path
+      const fileUrl = `/uploads/templates/${req.file.filename}`;
+
       if (!template) {
-        const publicId = getPublicIdFromUrl(req.file.path);
-        if (publicId) {
-          try { await cloudinary.uploader.destroy(publicId); } catch (e) { /* ignore */ }
-        }
+        deleteLocalFile(fileUrl);
         return res.status(404).json({ error: 'Template not found' });
       }
 
-      // Delete old signature from Cloudinary if exists
+      // Delete old signature if exists
       if (template.adminSignature) {
-        const oldPublicId = getPublicIdFromUrl(template.adminSignature);
-        if (oldPublicId) {
-          try { await cloudinary.uploader.destroy(oldPublicId); } catch (e) { console.log('Could not delete old signature:', e.message); }
-        }
+        deleteLocalFile(template.adminSignature);
       }
 
-      // Store full Cloudinary URL
-      template.adminSignature = req.file.path;
+      // Store file URL
+      template.adminSignature = fileUrl;
       await template.save();
+
+      console.log('✅ Signature uploaded (Local):', fileUrl);
 
       res.json({
         success: true,
@@ -449,12 +440,6 @@ exports.uploadAdminSignature = [
       });
     } catch (error) {
       console.error('Upload admin signature error:', error);
-      if (req.file) {
-        const publicId = getPublicIdFromUrl(req.file.path);
-        if (publicId) {
-          try { await cloudinary.uploader.destroy(publicId); } catch (e) { /* ignore */ }
-        }
-      }
       res.status(500).json({ error: 'Internal server error' });
     }
   }

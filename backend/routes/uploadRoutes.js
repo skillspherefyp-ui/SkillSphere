@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { generalStorage } = require('../config/cloudinary');
+
+// Always use local storage
+const { generalStorage } = require('../config/localStorage');
 
 // File filter to accept only PDFs and images
 const fileFilter = (req, file, cb) => {
@@ -31,14 +33,15 @@ router.post('/file', upload.single('file'), (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Cloudinary returns the full URL in req.file.path
-    const fileUrl = req.file.path;
+    // Local storage path
+    const fileUrl = `/uploads/${req.file.filename}`;
 
     console.log('✅ File uploaded successfully:');
     console.log('   - Original name:', req.file.originalname);
     console.log('   - URL:', fileUrl);
     console.log('   - Size:', req.file.size, 'bytes');
     console.log('   - Type:', req.file.mimetype);
+    console.log('   - Storage: Local');
 
     res.json({
       success: true,
@@ -63,11 +66,13 @@ router.post('/files', upload.array('files', 10), (req, res) => {
     }
 
     const files = req.files.map(file => ({
-      url: file.path,
+      url: `/uploads/${file.filename}`,
       filename: file.originalname,
       size: file.size,
       mimetype: file.mimetype
     }));
+
+    console.log(`✅ ${files.length} files uploaded (Local)`);
 
     res.json({
       success: true,

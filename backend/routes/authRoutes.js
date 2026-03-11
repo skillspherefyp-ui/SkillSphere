@@ -26,6 +26,10 @@ router.post('/verify-signup-otp', authController.verifySignupOTP);
 // Google OAuth route
 router.post('/google-auth', authController.googleAuth);
 
+// Privacy Policy routes (requires authentication)
+router.post('/accept-privacy-policy', authenticateToken, authController.acceptPrivacyPolicy);
+router.get('/privacy-policy-status', authenticateToken, authController.getPrivacyPolicyStatus);
+
 module.exports = router;
 
 

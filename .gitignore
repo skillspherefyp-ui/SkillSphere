@@ -20,6 +20,7 @@ web-build/
 # IDEs
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
@@ -36,3 +37,7 @@ backend/uploads/*
 # Temporary files
 *.tmp
 *.temp
+
+# Local app metadata
+.expo/
+AppAndroidSS/.expo/

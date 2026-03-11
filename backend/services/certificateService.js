@@ -605,29 +605,30 @@ const generateCertificatePDF = async (data, template = null) => {
  * Save PDF to storage and return URL
  * @param {Buffer} pdfBuffer - PDF buffer
  * @param {string} certificateNumber - Unique certificate number
- * @returns {string} File URL/path (Cloudinary URL)
+ * @returns {string} File URL/path (Local path or Cloudinary URL)
  */
 const saveCertificatePDF = async (pdfBuffer, certificateNumber) => {
   try {
-    const filename = `Certificate_${certificateNumber}`;
+    const filename = `Certificate_${certificateNumber}.pdf`;
 
-    // Upload to Cloudinary as raw resource (PDF)
-    const result = await new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          resource_type: 'raw',
-          folder: 'skillsphere/certificates',
-          public_id: filename,
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
-      uploadStream.end(pdfBuffer);
-    });
+    // Save to local uploads folder
+    const uploadsDir = path.join(__dirname, '..', 'uploads', 'certificates');
 
-    return result.secure_url;
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const filePath = path.join(uploadsDir, filename);
+
+    // Write PDF buffer to file
+    fs.writeFileSync(filePath, pdfBuffer);
+
+    console.log('Certificate saved locally:', filePath);
+
+    // Return local URL path
+    const localUrl = `/uploads/certificates/${filename}`;
+    return localUrl;
   } catch (error) {
     console.error('Error saving certificate PDF:', error);
     throw error;

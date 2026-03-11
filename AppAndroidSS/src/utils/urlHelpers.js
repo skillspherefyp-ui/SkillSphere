@@ -1,5 +1,7 @@
 export const resolveFileUrl = (filePath) => {
   if (!filePath) return null;
   if (filePath.startsWith('http://') || filePath.startsWith('https://')) return filePath;
-  return `https://skillsphere-production-86a9.up.railway.app${filePath}`;
+  // Use localhost for development, production URL for deployed version
+  const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  return `${baseUrl}${filePath}`;
 };

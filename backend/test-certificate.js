@@ -22,7 +22,7 @@ const { sendCertificateEmail } = require('./services/emailService');
 // UPDATE THESE VALUES FOR YOUR TEST
 // ============================================
 const USER_EMAIL = 'talhadragneel178@gmail.com';
-const COURSE_NAME = 'oop'; // partial match works
+const COURSE_NAME = 'ethical hacking'; // partial match works
 // ============================================
 
 async function testCertificate() {

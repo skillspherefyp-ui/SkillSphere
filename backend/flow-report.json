@@ -1,0 +1,169 @@
+Executing (default): SELECT `id`, `courseId`, `topicId`, `outlineId`, `title`, `summary`, `estimatedDurationMinutes`, `teachingScript`, `preparationNotes`, `passingThreshold`, `nextTopicId`, `generationModel`, `status`, `errorMessage`, `createdAt`, `updatedAt` FROM `ai_lectures` AS `AILecture` WHERE `AILecture`.`topicId` = 11;
+Executing (default): SELECT `id`, `courseId`, `topicId`, `outlineId`, `title`, `summary`, `estimatedDurationMinutes`, `teachingScript`, `preparationNotes`, `passingThreshold`, `nextTopicId`, `generationModel`, `status`, `errorMessage`, `createdAt`, `updatedAt` FROM `ai_lectures` AS `AILecture` WHERE `AILecture`.`topicId` = 12;
+Executing (default): SELECT `AIQuiz`.`id`, `AIQuiz`.`lectureId`, `AIQuiz`.`passingThreshold`, `AIQuiz`.`instructions`, `AIQuiz`.`createdAt`, `AIQuiz`.`updatedAt`, `questions`.`id` AS `questions.id`, `questions`.`quizId` AS `questions.quizId`, `questions`.`questionIndex` AS `questions.questionIndex`, `questions`.`prompt` AS `questions.prompt`, `questions`.`options` AS `questions.options`, `questions`.`correctAnswer` AS `questions.correctAnswer`, `questions`.`explanation` AS `questions.explanation`, `questions`.`createdAt` AS `questions.createdAt`, `questions`.`updatedAt` AS `questions.updatedAt` FROM `ai_quizzes` AS `AIQuiz` LEFT OUTER JOIN `ai_quiz_questions` AS `questions` ON `AIQuiz`.`id` = `questions`.`quizId` WHERE `AIQuiz`.`lectureId` = 3;
+Executing (default): SELECT count(*) AS `count` FROM `ai_lectures` AS `AILecture` WHERE `AILecture`.`courseId` = 5;
+Executing (default): SELECT count(*) AS `count` FROM `ai_lecture_sections` AS `AILectureSection` WHERE `AILectureSection`.`lectureId` = 3;
+Executing (default): SELECT count(*) AS `count` FROM `ai_slide_outlines` AS `AISlideOutline` WHERE `AISlideOutline`.`lectureId` = 3;
+Executing (default): SELECT count(*) AS `count` FROM `ai_visual_suggestions` AS `AIVisualSuggestion` WHERE `AIVisualSuggestion`.`lectureId` = 3;
+Executing (default): SELECT count(*) AS `count` FROM `ai_flashcards` AS `AIFlashcard` WHERE `AIFlashcard`.`lectureId` = 3;
+Executing (default): SELECT count(*) AS `count` FROM `ai_quizzes` AS `AIQuiz` WHERE `AIQuiz`.`lectureId` = 3;
+Executing (default): SELECT `id`, `title`, `status`, `completed`, `courseId`, `order`, `createdAt`, `updatedAt` FROM `topics` AS `Topic` WHERE `Topic`.`id` = 12;
+{
+  "adminUserId": 14,
+  "studentUserId": 15,
+  "categoryId": 5,
+  "courseId": 5,
+  "topicIds": [
+    11,
+    12
+  ],
+  "outlineSaveStatus": "updated",
+  "generationSummary": {
+    "total": 2,
+    "ready": 2,
+    "failed": 0
+  },
+  "persistence": {
+    "lectureCount": 2,
+    "sectionCount": 16,
+    "slideCount": 4,
+    "visualCount": 4,
+    "flashcardCount": 8,
+    "quizCount": 1,
+    "quizQuestionCount": 6
+  },
+  "enrollmentId": 2,
+  "startChunk": {
+    "sectionIndex": 0,
+    "chunkIndex": 0
+  },
+  "nextChunk": {
+    "sectionIndex": 0,
+    "chunkIndex": 1
+  },
+  "resumeChunk": {
+    "sectionIndex": 0,
+    "chunkIndex": 1
+  },
+  "questionAnswered": true,
+  "flashcardsFetched": 8,
+  "flashcardExportPreviewBytes": 1305,
+  "ttsAssetUrl": "/uploads/ai-audio/f171c2eaa4375342c69b164973644adefbc97b10.mp3",
+  "transcript": "Variables store values for later use.",
+  "quizQuestions": 6,
+  "failResult": {
+    "score": 0,
+    "passed": false,
+    "correctAnswers": 0,
+    "totalQuestions": 6,
+    "passingThreshold": 70,
+    "gradedQuestions": [
+      {
+        "id": 13,
+        "submittedAnswer": 2,
+        "correctAnswer": 1,
+        "isCorrect": false,
+        "explanation": "A variable is a named storage location that holds data which can be changed during program execution."
+      },
+      {
+        "id": 14,
+        "submittedAnswer": 3,
+        "correctAnswer": 2,
+        "isCorrect": false,
+        "explanation": "Array is a complex data structure, not a primitive data type."
+      },
+      {
+        "id": 15,
+        "submittedAnswer": 3,
+        "correctAnswer": 2,
+        "isCorrect": false,
+        "explanation": "Type safety helps prevent type errors by ensuring operations are done on compatible data types."
+      },
+      {
+        "id": 16,
+        "submittedAnswer": 2,
+        "correctAnswer": 1,
+        "isCorrect": false,
+        "explanation": "Static typing enforces type checks at compile-time before the program runs."
+      },
+      {
+        "id": 17,
+        "submittedAnswer": 1,
+        "correctAnswer": 0,
+        "isCorrect": false,
+        "explanation": "The correct syntax is 'boolean isOpen = true;' using the boolean type and a boolean value."
+      },
+      {
+        "id": 18,
+        "submittedAnswer": 3,
+        "correctAnswer": 2,
+        "isCorrect": false,
+        "explanation": "The '=' symbol is used to assign values to variables."
+      }
+    ],
+    "unlockedTopic": null
+  },
+  "passResult": {
+    "score": 100,
+    "passed": true,
+    "correctAnswers": 6,
+    "totalQuestions": 6,
+    "passingThreshold": 70,
+    "gradedQuestions": [
+      {
+        "id": 13,
+        "submittedAnswer": 1,
+        "correctAnswer": 1,
+        "isCorrect": true,
+        "explanation": "A variable is a named storage location that holds data which can be changed during program execution."
+      },
+      {
+        "id": 14,
+        "submittedAnswer": 2,
+        "correctAnswer": 2,
+        "isCorrect": true,
+        "explanation": "Array is a complex data structure, not a primitive data type."
+      },
+      {
+        "id": 15,
+        "submittedAnswer": 2,
+        "correctAnswer": 2,
+        "isCorrect": true,
+        "explanation": "Type safety helps prevent type errors by ensuring operations are done on compatible data types."
+      },
+      {
+        "id": 16,
+        "submittedAnswer": 1,
+        "correctAnswer": 1,
+        "isCorrect": true,
+        "explanation": "Static typing enforces type checks at compile-time before the program runs."
+      },
+      {
+        "id": 17,
+        "submittedAnswer": 0,
+        "correctAnswer": 0,
+        "isCorrect": true,
+        "explanation": "The correct syntax is 'boolean isOpen = true;' using the boolean type and a boolean value."
+      },
+      {
+        "id": 18,
+        "submittedAnswer": 2,
+        "correctAnswer": 2,
+        "isCorrect": true,
+        "explanation": "The '=' symbol is used to assign values to variables."
+      }
+    ],
+    "unlockedTopic": {
+      "id": 12,
+      "title": "Control flow basics",
+      "status": "unlocked",
+      "completed": false,
+      "courseId": 5,
+      "order": 1,
+      "createdAt": "2026-03-11T13:50:27.000Z",
+      "updatedAt": "2026-03-11T13:51:50.000Z"
+    }
+  },
+  "topic2Status": "unlocked",
+  "topic2Completed": false
+}

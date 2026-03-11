@@ -1,11 +1,12 @@
 /**
- * Google Gemini AI Service
- * Free tier: 15 requests/minute, 1 million tokens/month
+ * Groq AI Service
+ * Using Groq's OpenAI-compatible API
  *
- * Get your API key: https://aistudio.google.com/apikey
+ * Get your API key: https://console.groq.com/keys
  */
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
 // System prompt for SkillSphere general-purpose AI assistant
 const SYSTEM_PROMPT = `You are SkillSphere AI, a friendly, intelligent, and helpful general-purpose assistant for students. You can help with ANY topic or question - not just courses!
@@ -34,74 +35,63 @@ Guidelines:
 Remember: You're a versatile AI assistant here to help students with ANYTHING they need!`;
 
 /**
- * Generate AI response using Google Gemini
+ * Generate AI response using Groq
  * @param {string} userMessage - The user's message
  * @param {Array} chatHistory - Previous messages in the conversation
  * @returns {Promise<string>} - AI response text
  */
 async function generateResponse(userMessage, chatHistory = []) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
 
   if (!apiKey) {
-    console.error('GEMINI_API_KEY is not configured');
+    console.error('GROQ_API_KEY is not configured');
     return getFallbackResponse();
   }
 
   try {
-    // Build conversation history for context
-    const contents = [];
+    // Build messages array for Groq (OpenAI-compatible format)
+    const messages = [];
 
-    // Add system instruction as first user message (Gemini doesn't have system role)
-    contents.push({
-      role: 'user',
-      parts: [{ text: SYSTEM_PROMPT }]
-    });
-    contents.push({
-      role: 'model',
-      parts: [{ text: 'Understood! I\'m SkillSphere AI, your versatile assistant. I can help you with anything - questions, coding, research, creative work, advice, and much more. What would you like to know?' }]
+    // Add system message
+    messages.push({
+      role: 'system',
+      content: SYSTEM_PROMPT
     });
 
     // Add chat history (last 10 messages for context)
     const recentHistory = chatHistory.slice(-10);
     for (const msg of recentHistory) {
-      contents.push({
-        role: msg.sender === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.content }]
+      messages.push({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.content
       });
     }
 
     // Add current user message
-    contents.push({
+    messages.push({
       role: 'user',
-      parts: [{ text: userMessage }]
+      content: userMessage
     });
 
-    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+    const response = await fetch(GROQ_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        contents,
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 1024,
-        },
-        safetySettings: [
-          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-        ]
+        model: GROQ_MODEL,
+        messages,
+        temperature: 0.7,
+        max_tokens: 1024,
+        top_p: 0.95
       })
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('Gemini API error:', data);
+      console.error('Groq API error:', data);
 
       // Handle rate limiting
       if (response.status === 429) {
@@ -111,20 +101,15 @@ async function generateResponse(userMessage, chatHistory = []) {
       return getFallbackResponse();
     }
 
-    // Extract text from response
-    if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-      return data.candidates[0].content.parts[0].text;
-    }
-
-    // Check if blocked by safety filters
-    if (data.candidates?.[0]?.finishReason === 'SAFETY') {
-      return "I can't respond to that particular request. Please try rephrasing your question or ask something else.";
+    // Extract text from response (OpenAI format)
+    if (data.choices && data.choices[0]?.message?.content) {
+      return data.choices[0].message.content;
     }
 
     return getFallbackResponse();
 
   } catch (error) {
-    console.error('Gemini API error:', error.message);
+    console.error('Groq API error:', error.message);
     return getFallbackResponse();
   }
 }
@@ -142,27 +127,31 @@ function getFallbackResponse() {
 }
 
 /**
- * Check if Gemini API is configured and working
+ * Check if Groq API is configured and working
  */
 async function checkHealth() {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
 
   if (!apiKey) {
-    return { status: 'error', message: 'GEMINI_API_KEY not configured' };
+    return { status: 'error', message: 'GROQ_API_KEY not configured' };
   }
 
   try {
-    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+    const response = await fetch(GROQ_API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
       body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: 'Hi' }] }],
-        generationConfig: { maxOutputTokens: 10 }
+        model: GROQ_MODEL,
+        messages: [{ role: 'user', content: 'Hi' }],
+        max_tokens: 10
       })
     });
 
     if (response.ok) {
-      return { status: 'ok', message: 'Gemini API is working' };
+      return { status: 'ok', message: 'Groq API is working' };
     } else {
       const data = await response.json();
       return { status: 'error', message: data.error?.message || 'API error' };

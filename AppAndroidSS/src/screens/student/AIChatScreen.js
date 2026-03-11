@@ -16,6 +16,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import MainLayout from '../../components/ui/MainLayout';
+import MarkdownText from '../../components/ui/MarkdownText';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
@@ -416,14 +417,23 @@ const AIChatScreen = () => {
               },
         ]}
       >
-        <Text
-          style={[
-            styles.messageText,
-            { color: item.sender === 'user' ? '#ffffff' : theme.colors.textPrimary },
-          ]}
-        >
-          {item.content || item.text}
-        </Text>
+        {item.sender === 'user' ? (
+          <Text
+            style={[
+              styles.messageText,
+              { color: '#ffffff' },
+            ]}
+          >
+            {item.content || item.text}
+          </Text>
+        ) : (
+          <MarkdownText
+            style={styles.markdownContainer}
+            textColor={theme.colors.textPrimary}
+          >
+            {item.content || item.text}
+          </MarkdownText>
+        )}
         <Text
           style={[
             styles.messageTime,
@@ -793,6 +803,9 @@ const getStyles = (theme, isDark, isWeb, isPhone, isLargeScreen, width, height) 
     messageText: {
       fontSize: isPhone ? 14 : 15,
       lineHeight: isPhone ? 20 : 24,
+    },
+    markdownContainer: {
+      flex: 1,
     },
     messageTime: {
       fontSize: isPhone ? 10 : 11,

@@ -10,14 +10,16 @@ import {
   RefreshControl,
   Image,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { certificateAPI } from '../../services/apiClient';
+import { certificateAPI, authAPI } from '../../services/apiClient';
 import { resolveFileUrl } from '../../utils/urlHelpers';
+import PrivacyPolicyModal from '../../components/PrivacyPolicyModal';
 
 // UI Components
 import MainLayout from '../../components/ui/MainLayout';
@@ -384,6 +386,10 @@ const StudentDashboard = () => {
   const [stats, setStats] = useState(null);
   const [certificates, setCertificates] = useState([]);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+
+  // Privacy Policy Storage Key (includes user id to track per user)
+  const PRIVACY_POLICY_KEY = `@skillsphere:privacy_accepted_${user?.id || 'unknown'}`;
 
   const isWeb = Platform.OS === 'web';
   const isLargeScreen = width > 1024;
@@ -398,6 +404,61 @@ const StudentDashboard = () => {
     { label: 'AI Assistant', icon: 'sparkles-outline', iconActive: 'sparkles', route: 'AITutor' },
     { label: 'Certificates', icon: 'ribbon-outline', iconActive: 'ribbon', route: 'Certificates' },
   ];
+
+  // Check if privacy policy has been accepted
+  useEffect(() => {
+    checkPrivacyPolicyStatus();
+  }, [user?.id]);
+
+  const checkPrivacyPolicyStatus = async () => {
+    try {
+      // First check local storage for quick response
+      const localAccepted = await AsyncStorage.getItem(PRIVACY_POLICY_KEY);
+      if (localAccepted === 'true') {
+        setShowPrivacyPolicy(false);
+        return;
+      }
+
+      // Then verify with backend (for cross-device sync)
+      try {
+        const response = await authAPI.getPrivacyPolicyStatus();
+        if (response.success && response.privacyPolicyAccepted) {
+          // Sync local storage with backend
+          await AsyncStorage.setItem(PRIVACY_POLICY_KEY, 'true');
+          setShowPrivacyPolicy(false);
+        } else {
+          setShowPrivacyPolicy(true);
+        }
+      } catch (apiError) {
+        console.log('Could not check backend privacy status:', apiError);
+        // If backend check fails, show the modal to be safe
+        setShowPrivacyPolicy(true);
+      }
+    } catch (error) {
+      console.error('Error checking privacy policy status:', error);
+      // Show the modal if we can't determine status
+      setShowPrivacyPolicy(true);
+    }
+  };
+
+  const handleAcceptPrivacyPolicy = async () => {
+    try {
+      // Save to backend first
+      await authAPI.acceptPrivacyPolicy();
+      // Then save to local storage
+      await AsyncStorage.setItem(PRIVACY_POLICY_KEY, 'true');
+      setShowPrivacyPolicy(false);
+    } catch (error) {
+      console.error('Error saving privacy policy acceptance:', error);
+      // Try to save locally even if backend fails
+      try {
+        await AsyncStorage.setItem(PRIVACY_POLICY_KEY, 'true');
+      } catch (localError) {
+        console.error('Error saving locally:', localError);
+      }
+      setShowPrivacyPolicy(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -1085,6 +1146,13 @@ const StudentDashboard = () => {
         )}
 
       </ScrollView>
+
+      {/* Privacy Policy Modal - Shows until user accepts */}
+      <PrivacyPolicyModal
+        visible={showPrivacyPolicy}
+        onAccept={handleAcceptPrivacyPolicy}
+        onCancel={logout}
+      />
     </MainLayout>
   );
 };

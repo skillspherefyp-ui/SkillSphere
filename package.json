@@ -1,8 +1,0 @@
-{
-  "devDependencies": {
-    "@babel/plugin-transform-flow-strip-types": "^7.27.1"
-  },
-  "dependencies": {
-    "claude": "^0.1.1"
-  }
-}

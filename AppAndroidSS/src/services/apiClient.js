@@ -181,6 +181,9 @@ export const authAPI = {
   verifySignupOTP: (email, otp) => post('/auth/verify-signup-otp', { email, otp }, false),
   // Google OAuth
   googleAuth: (idToken) => post('/auth/google-auth', { idToken }, false),
+  // Privacy Policy
+  acceptPrivacyPolicy: () => post('/auth/accept-privacy-policy', {}),
+  getPrivacyPolicyStatus: () => get('/auth/privacy-policy-status'),
 };
 
 // Admin APIs
@@ -372,6 +375,24 @@ export const aiChatAPI = {
   sendMessage: (sessionId, content) => post(`/ai-chat/sessions/${sessionId}/messages`, { content }),
 };
 
+export const aiTutorAPI = {
+  updateOutline: (topicId, outlineText) => put(`/ai-tutor/topics/${topicId}/outline`, { outlineText }),
+  generateCoursePackage: (courseId) => post(`/ai-tutor/courses/${courseId}/generate`, {}),
+  listLectures: (courseId, params) => get(`/ai-tutor/courses/${courseId}/lectures${params ? `?${new URLSearchParams(params)}` : ''}`),
+  getLecturePackage: (topicId) => get(`/ai-tutor/topics/${topicId}/package`),
+  startSession: (topicId, data) => post(`/ai-tutor/topics/${topicId}/start`, data || {}),
+  getSessionState: (sessionId) => get(`/ai-tutor/sessions/${sessionId}`),
+  getNextChunk: (sessionId) => post(`/ai-tutor/sessions/${sessionId}/next`, {}),
+  pauseSession: (sessionId) => post(`/ai-tutor/sessions/${sessionId}/pause`, {}),
+  resumeSession: (sessionId) => post(`/ai-tutor/sessions/${sessionId}/resume`, {}),
+  askQuestion: (sessionId, question) => post(`/ai-tutor/sessions/${sessionId}/questions`, { question }),
+  getFlashcards: (lectureId) => get(`/ai-tutor/lectures/${lectureId}/flashcards`),
+  getQuiz: (lectureId) => get(`/ai-tutor/lectures/${lectureId}/quiz`),
+  submitQuiz: (lectureId, answers) => post(`/ai-tutor/lectures/${lectureId}/quiz/submit`, { answers }),
+  speakText: (data) => post('/ai-tutor/audio/speak', data),
+  smokeTest: () => get('/ai-tutor/smoke-test'),
+};
+
 export default {
   API_BASE,
   HEALTH_URL,
@@ -396,5 +417,6 @@ export default {
   progressAPI,
   feedbackAPI,
   uploadAPI,
-  aiChatAPI
+  aiChatAPI,
+  aiTutorAPI
 };

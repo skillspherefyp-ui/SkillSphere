@@ -623,6 +623,59 @@ exports.verifySignupOTP = async (req, res) => {
 };
 
 // Google OAuth Authentication
+// Accept Privacy Policy
+exports.acceptPrivacyPolicy = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await user.update({
+      privacyPolicyAccepted: true,
+      privacyPolicyAcceptedAt: new Date()
+    });
+
+    console.log('✅ Privacy policy accepted by user:', user.email);
+    res.json({
+      success: true,
+      message: 'Privacy policy accepted successfully',
+      privacyPolicyAccepted: true,
+      privacyPolicyAcceptedAt: user.privacyPolicyAcceptedAt
+    });
+  } catch (error) {
+    console.error('Accept privacy policy error:', error);
+    res.status(500).json({ error: 'Failed to accept privacy policy. Please try again.' });
+  }
+};
+
+// Get Privacy Policy Status
+exports.getPrivacyPolicyStatus = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findByPk(userId, {
+      attributes: ['privacyPolicyAccepted', 'privacyPolicyAcceptedAt']
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      success: true,
+      privacyPolicyAccepted: user.privacyPolicyAccepted || false,
+      privacyPolicyAcceptedAt: user.privacyPolicyAcceptedAt
+    });
+  } catch (error) {
+    console.error('Get privacy policy status error:', error);
+    res.status(500).json({ error: 'Failed to get privacy policy status.' });
+  }
+};
+
 exports.googleAuth = async (req, res) => {
   try {
     const { idToken } = req.body;
