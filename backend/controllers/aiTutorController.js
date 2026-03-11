@@ -143,6 +143,16 @@ exports.getNextChunk = async (req, res) => {
   }
 };
 
+exports.restartSession = async (req, res) => {
+  try {
+    const result = await aiTutorService.restartTutorSession(req.params.sessionId, req.user.id);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('Restart AI tutor session error:', error);
+    res.status(400).json({ error: error.message || 'Internal server error' });
+  }
+};
+
 exports.pauseSession = async (req, res) => {
   try {
     const session = await aiTutorService.setSessionPaused(req.params.sessionId, req.user.id, true);

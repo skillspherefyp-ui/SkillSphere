@@ -54,6 +54,7 @@ const LearningScreen = () => {
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
   const [showTopicsSidebar, setShowTopicsSidebar] = useState(false);
   const [revealedFlashcards, setRevealedFlashcards] = useState({});
+  const [teachingProgress, setTeachingProgress] = useState(0);
 
   const recognitionRef = useRef(null);
   const playbackRef = useRef(null);
@@ -85,6 +86,11 @@ const LearningScreen = () => {
   const currentDelivery = currentChunk?.delivery || null;
   const panelContent = currentDelivery?.panel_content || {};
   const teachingPlan = currentDelivery?.teaching_plan || currentChunk?.teachingPlan || {};
+  const classroomMode = currentDelivery?.classroom_mode || 'narration_only';
+  const classroomModeLabel = currentDelivery?.classroom_mode_label || 'Narration only';
+  const boardContent = currentDelivery?.board_content || panelContent.boardContent || null;
+  const supportPanel = currentDelivery?.support_panel || panelContent.supportPanel || null;
+  const narrationSegments = currentDelivery?.narration_segments || [];
   const currentNarration = currentDelivery?.narration_text || currentChunk?.spokenExplanation || currentChunk?.text || '';
   const transitionText = currentDelivery?.transition_text || panelContent.transitionIn || '';
   const checkpointText = currentDelivery?.checkpoint_text || panelContent.checkpointQuestion || currentChunk?.checkpointQuestion || '';
@@ -96,6 +102,16 @@ const LearningScreen = () => {
     ? (currentDelivery?.recommended_duration_seconds || currentChunk?.estimatedDurationSeconds) * 1000
     : 0);
   const currentModeLabel = currentDelivery?.current_mode_label || (showQuestionPanel ? 'Answering your question' : voiceMode ? 'Explaining' : 'Teaching in text mode');
+  const formatLectureDuration = (minutes) => {
+    const value = Number(minutes);
+    if (!Number.isFinite(value) || value <= 0) return '';
+    if (value < 60) return `${value} min lecture`;
+
+    const hours = Math.floor(value / 60);
+    const remainingMinutes = value % 60;
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m lecture` : `${hours}h lecture`;
+  };
+  const lectureDurationLabel = formatLectureDuration(lecture?.estimatedDurationMinutes);
   const tutorStatus = lectureCompleted
     ? { label: 'Lecture complete', detail: 'Open the stored quiz when you are ready to continue.', tone: '#10b981' }
     : showQuestionPanel
@@ -136,6 +152,28 @@ const LearningScreen = () => {
 
     return () => stopPlayback();
   }, [session?.id, currentChunk?.id, isPlaying, showQuestionPanel, lectureCompleted, voiceMode]);
+
+  useEffect(() => {
+    setTeachingProgress(0);
+  }, [currentChunk?.id]);
+
+  useEffect(() => {
+    if (!currentChunk || !isPlaying || showQuestionPanel || lectureCompleted) {
+      return undefined;
+    }
+
+    const duration = recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28));
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      const nextProgress = Math.min(1, (Date.now() - startedAt) / duration);
+      setTeachingProgress(nextProgress);
+      if (nextProgress >= 1) {
+        clearInterval(timer);
+      }
+    }, 180);
+
+    return () => clearInterval(timer);
+  }, [currentChunk?.id, isPlaying, showQuestionPanel, lectureCompleted, recommendedDurationMs, currentNarration]);
 
   const stopPlayback = () => {
     if (playbackRef.current) {
@@ -472,6 +510,41 @@ const LearningScreen = () => {
     navigation.navigate('Quiz', { courseId, topicId, lectureId: lecture.id });
   };
 
+  const restartLecture = async () => {
+    if (!session?.id) {
+      return;
+    }
+
+    try {
+      stopPlayback();
+      stopRecognition();
+      setShowCompleteDialog(false);
+      const response = await aiTutorAPI.restartSession(session.id);
+      if (!response.success) {
+        throw new Error(response.error || 'Unable to restart this lecture');
+      }
+
+      setSession(response.session);
+      setLecture(response.lecture || lecture);
+      setCurrentChunk(response.chunk);
+      setLectureCompleted(false);
+      setShowQuestionPanel(false);
+      setIsPlaying(true);
+      setTeachingProgress(0);
+      Toast.show({
+        type: 'success',
+        text1: 'Lecture Restarted',
+        text2: 'Starting again from the first chunk.',
+      });
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Restart Failed',
+        text2: error.message || 'Unable to restart this lecture right now.',
+      });
+    }
+  };
+
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <Text style={[styles.sidebarTitle, { color: theme.colors.textPrimary }]}>Course Progress</Text>
@@ -488,6 +561,9 @@ const LearningScreen = () => {
               <Text style={[styles.sidebarItemText, { color: item.status === 'locked' ? theme.colors.textTertiary : theme.colors.textPrimary }]}>
                 {item.title}
               </Text>
+              {isCurrent && !!lectureDurationLabel && (
+                <Text style={[styles.sidebarItemDuration, { color: theme.colors.textSecondary }]}>{lectureDurationLabel}</Text>
+              )}
               <Text style={[styles.sidebarItemStatus, { color: item.completed ? '#10B981' : isCurrent ? theme.colors.primary : theme.colors.textTertiary }]}>
                 {item.completed ? 'Done' : item.status === 'locked' ? 'Locked' : isCurrent ? `${progress}%` : 'Ready'}
               </Text>
@@ -498,47 +574,115 @@ const LearningScreen = () => {
     </View>
   );
 
-  const renderStructuredVisual = () => {
-    const visualType = panelContent.visualType || currentChunk?.visualMode || 'none';
-    const visualData = panelContent.visualData || currentChunk?.visualData || {};
+  const getProgressiveItems = (items, minimum = 1) => {
+    const list = Array.isArray(items) ? items.filter(Boolean) : [];
+    if (!list.length) return [];
+    return list.slice(0, Math.min(list.length, Math.max(minimum, Math.ceil(list.length * Math.max(teachingProgress, 0.18)))));
+  };
 
-    if (visualType === 'flowchart' && Array.isArray(visualData.steps) && visualData.steps.length > 0) {
-      return visualData.steps.map((step, index) => (
-        <View key={step.id || index} style={[styles.diagramRow, { borderColor: theme.colors.border }]}>
-          <View style={[styles.diagramIndex, { backgroundColor: theme.colors.primary }]}>
-            <Text style={styles.diagramIndexText}>{index + 1}</Text>
+  const getVisibleNarration = () => {
+    if (!currentNarration) return '';
+    const words = currentNarration.split(/\s+/).filter(Boolean);
+    const visibleWordCount = Math.min(words.length, Math.max(1, Math.ceil(words.length * Math.max(teachingProgress, isPlaying ? 0.08 : 1))));
+    return words.slice(0, visibleWordCount).join(' ');
+  };
+
+  const liveNarration = getVisibleNarration();
+
+  const renderBoardSurface = () => {
+    if (!boardContent) {
+      return <Text style={[styles.boardBodyText, { color: '#cbd5e1' }]}>{currentChunk.learningObjective || currentChunk.summary}</Text>;
+    }
+
+    if (boardContent.type === 'flowchart') {
+      return getProgressiveItems(boardContent.steps).map((step, index) => (
+        <View key={step.id || index} style={styles.flowStep}>
+          <View style={[styles.flowStepBadge, { backgroundColor: theme.colors.primary }]}>
+            <Text style={styles.flowStepBadgeText}>{index + 1}</Text>
           </View>
-          <Text style={[styles.diagramText, { color: theme.colors.textPrimary }]}>{step.label}</Text>
+          <Text style={styles.flowStepText}>{step.label}</Text>
         </View>
       ));
     }
 
-    if (visualType === 'comparison_table' && Array.isArray(visualData.rows) && visualData.rows.length > 0) {
+    if (boardContent.type === 'comparison_table') {
       return (
-        <View style={[styles.comparisonTable, { borderColor: theme.colors.border }]}>
-          {visualData.rows.map((row, index) => (
-            <View key={`${row.left}-${index}`} style={[styles.comparisonRow, { borderBottomColor: theme.colors.border }]}>
-              <Text style={[styles.comparisonCellTitle, { color: theme.colors.textPrimary }]}>{row.left}</Text>
-              <Text style={[styles.comparisonCellBody, { color: theme.colors.textSecondary }]}>{row.right}</Text>
+        <View style={[styles.boardTable, { borderColor: theme.colors.border }]}>
+          {getProgressiveItems(boardContent.rows).map((row, index) => (
+            <View key={`${row.left}-${index}`} style={[styles.boardTableRow, { borderBottomColor: theme.colors.border }]}>
+              <Text style={styles.boardTableTitle}>{row.left}</Text>
+              <Text style={[styles.boardTableBody, { color: '#cbd5e1' }]}>{row.right}</Text>
             </View>
           ))}
         </View>
       );
     }
 
-    if (Array.isArray(visualData.nodes) && visualData.nodes.length > 0) {
+    if (boardContent.type === 'diagram') {
       return (
         <View style={styles.nodeWrap}>
-          {visualData.nodes.map((node, index) => (
-            <View key={node.id || index} style={[styles.nodeCard, { backgroundColor: isDark ? '#0f172a' : '#eff6ff', borderColor: theme.colors.border }]}>
-              <Text style={[styles.nodeLabel, { color: theme.colors.textPrimary }]}>{node.label}</Text>
+          {getProgressiveItems(boardContent.nodes).map((node, index) => (
+            <View key={node.id || index} style={[styles.liveNodeCard, { borderColor: 'rgba(255,255,255,0.12)' }]}>
+              <Text style={styles.liveNodeText}>{node.label}</Text>
             </View>
           ))}
         </View>
       );
     }
 
-    return <Text style={[styles.visualBody, { color: theme.colors.textSecondary }]}>{panelContent.visualCaption || currentChunk?.visualCaption || currentVisual?.caption || currentVisual?.suggestion || 'The tutor will use a structured explanation for this concept instead of a raw image.'}</Text>;
+    if (boardContent.type === 'code') {
+      const lines = `${boardContent.snippet || ''}`.split(/\r?\n/).filter(Boolean);
+      const visibleLines = getProgressiveItems(lines, Math.min(2, lines.length || 1));
+      return (
+        <View style={[styles.codePanel, { borderColor: 'rgba(255,255,255,0.12)' }]}>
+          <Text style={styles.codeLanguage}>{(boardContent.snippetLanguage || 'text').toUpperCase()}</Text>
+          <Text style={styles.codeText}>{visibleLines.join('\n')}</Text>
+          {!!boardContent.snippetExplanation && <Text style={styles.codeHint}>{boardContent.snippetExplanation}</Text>}
+        </View>
+      );
+    }
+
+    if (boardContent.type === 'checkpoint') {
+      return <Text style={styles.boardQuestion}>{boardContent.question}</Text>;
+    }
+
+    if (boardContent.type === 'slide_summary' || boardContent.type === 'recap') {
+      return getProgressiveItems(boardContent.bullets).map((bullet, index) => (
+        <Text key={`${bullet}-${index}`} style={styles.boardBullet}>- {bullet}</Text>
+      ));
+    }
+
+    if (boardContent.type === 'whiteboard_notes' || boardContent.type === 'narration') {
+      return (
+        <View>
+          {getProgressiveItems(boardContent.notes).map((note, index) => (
+            <Text key={`${note}-${index}`} style={styles.boardBullet}>- {note}</Text>
+          ))}
+          {!!boardContent.emphasis && <Text style={styles.boardEmphasis}>{boardContent.emphasis}</Text>}
+        </View>
+      );
+    }
+
+    return <Text style={styles.boardBodyText}>{currentChunk.learningObjective || currentChunk.summary}</Text>;
+  };
+
+  const renderSupportPanel = () => {
+    if (!supportPanel) {
+      return null;
+    }
+
+    const accent = supportPanel.type === 'checkpoint'
+      ? '#f59e0b'
+      : supportPanel.type === 'watch_for_this'
+        ? '#ef4444'
+        : '#06b6d4';
+
+    return (
+      <View style={[styles.supportCard, { backgroundColor: isDark ? '#101827' : '#ffffff', borderColor: `${accent}55` }]}>
+        <Text style={[styles.supportLabel, { color: accent }]}>{supportPanel.title}</Text>
+        <Text style={[styles.supportText, { color: theme.colors.textPrimary }]}>{supportPanel.text}</Text>
+      </View>
+    );
   };
 
   if (!course || !topic) {
@@ -592,7 +736,7 @@ const LearningScreen = () => {
       customMenuIcon="book-open-variant"
     >
       <View style={[styles.container, { backgroundColor: isDark ? '#0f0f1a' : theme.colors.background }]}>
-        <View style={styles.progressRow}>
+          <View style={styles.progressRow}>
           <TouchableOpacity style={[styles.iconButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : theme.colors.surface }]} onPress={() => navigation.goBack()}>
             <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
           </TouchableOpacity>
@@ -605,6 +749,13 @@ const LearningScreen = () => {
           <Text style={[styles.progressValue, { color: theme.colors.primary }]}>{progress}%</Text>
         </View>
 
+        {!!lectureDurationLabel && (
+          <View style={[styles.lectureTimeBanner, { backgroundColor: isDark ? '#111827' : '#eff6ff', borderColor: isDark ? '#1f2937' : '#bfdbfe' }]}>
+            <Icon name="time-outline" size={16} color={theme.colors.primary} />
+            <Text style={[styles.lectureTimeBannerText, { color: theme.colors.textPrimary }]}>{lectureDurationLabel}</Text>
+          </View>
+        )}
+
         <ScrollView showsVerticalScrollIndicator={false}>
           <View style={[styles.statusCard, { backgroundColor: isDark ? '#121a2b' : '#eef4ff', borderColor: `${tutorStatus.tone}33` }]}>
             <View style={styles.statusHeader}>
@@ -616,6 +767,9 @@ const LearningScreen = () => {
             </View>
             <Text style={[styles.statusText, { color: theme.colors.textSecondary }]}>{tutorStatus.detail}</Text>
             <View style={styles.metaPills}>
+              <View style={[styles.metaPill, { backgroundColor: isDark ? '#1f2937' : '#ede9fe' }]}>
+                <Text style={[styles.metaPillText, { color: theme.colors.textPrimary }]}>{classroomModeLabel}</Text>
+              </View>
               <View style={[styles.metaPill, { backgroundColor: isDark ? '#1f2937' : '#dbeafe' }]}>
                 <Text style={[styles.metaPillText, { color: theme.colors.textPrimary }]}>{teachingStyleLabel}</Text>
               </View>
@@ -632,121 +786,61 @@ const LearningScreen = () => {
             </View>
           )}
 
-          <View style={styles.topRow}>
-            <View style={[styles.whiteboard, { backgroundColor: isDark ? '#1a1a2e' : '#1e293b' }]}>
+          <View style={[styles.topRow, isMobile && styles.topRowStack]}>
+            <View style={[styles.whiteboard, styles.liveBoard, { backgroundColor: isDark ? '#1a1a2e' : '#1e293b' }]}>
               <View style={styles.cardHeader}>
-                <Text style={styles.cardHeaderText}>Virtual Whiteboard</Text>
+                <Text style={styles.cardHeaderText}>Live Classroom Board</Text>
                 <TouchableOpacity onPress={() => setShowNotesModal(true)}>
                   <Icon name="document-text-outline" size={18} color="#9ca3af" />
                 </TouchableOpacity>
               </View>
-              <Text style={styles.whiteboardTitle}>{currentChunk.title}</Text>
-              <Text style={styles.whiteboardSummary}>{panelContent.learningObjective || currentChunk.learningObjective || currentChunk.summary}</Text>
-              <Text style={styles.sectionLabel}>Whiteboard explanation</Text>
-              <Text style={styles.sectionText}>{panelContent.whiteboardExplanation || currentChunk.whiteboardExplanation || currentChunk.whiteboardSuggestion || 'Break the concept into simple teaching notes for the learner.'}</Text>
-              <Text style={styles.sectionLabel}>Key terms</Text>
-              {(panelContent.keyTerms || currentChunk.keyTerms || []).map((term, index) => (
-                <Text key={`${term}-${index}`} style={styles.sectionText}>- {term}</Text>
-              ))}
-              <Text style={styles.sectionLabel}>Examples</Text>
-              {(panelContent.examples || currentChunk.examples || []).map((example, index) => (
-                <Text key={`${example}-${index}`} style={styles.sectionText}>- {example}</Text>
-              ))}
-              {!!(panelContent.analogy || currentChunk.analogyIfHelpful) && (
-                <>
-                  <Text style={styles.sectionLabel}>Analogy</Text>
-                  <Text style={styles.sectionText}>{panelContent.analogy || currentChunk.analogyIfHelpful}</Text>
-                </>
-              )}
-              {!!(panelContent.checkpointQuestion || currentChunk.checkpointQuestion) && (
-                <>
-                  <Text style={styles.sectionLabel}>Checkpoint</Text>
-                  <Text style={styles.sectionText}>{checkpointText}</Text>
-                </>
-              )}
-              {!!reinforcementPoints.length && (
-                <>
-                  <Text style={styles.sectionLabel}>Reinforcement</Text>
-                  {reinforcementPoints.slice(0, 2).map((point, index) => (
-                    <Text key={`${point}-${index}`} style={styles.sectionText}>- {point}</Text>
-                  ))}
-                </>
-              )}
-              <Text style={styles.sectionLabel}>Slide bullets</Text>
-              {(panelContent.slideBullets || currentChunk.slideBullets || []).map((bullet, index) => (
-                <Text key={`${bullet}-${index}`} style={styles.sectionText}>- {bullet}</Text>
-              ))}
+              <View style={styles.boardHeaderRow}>
+                <View style={[styles.boardModeBadge, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
+                  <Text style={styles.boardModeText}>{classroomModeLabel}</Text>
+                </View>
+                <Text style={styles.boardObjective}>{panelContent.learningObjective || currentChunk.learningObjective || currentChunk.summary}</Text>
+              </View>
+              <Text style={styles.whiteboardTitle}>{boardContent?.title || currentChunk.title}</Text>
+              <View style={styles.boardSurface}>
+                {renderBoardSurface()}
+              </View>
             </View>
 
             {!isMobile && (
-              <View style={[styles.tutorPanel, { backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }]}>
-                <Text style={[styles.tutorLabel, { color: theme.colors.textPrimary }]}>AI Tutor</Text>
-                <RNAnimated.View style={[styles.avatarRing, { transform: [{ scale: pulseAnim }] }]}>
-                  <View style={styles.avatarInner}>
-                    <Text style={styles.avatarText}>AI</Text>
-                  </View>
-                </RNAnimated.View>
-                <Text style={[styles.tutorMeta, { color: theme.colors.textSecondary }]}>{lecture.title}</Text>
-                <Text style={[styles.tutorMeta, { color: theme.colors.textSecondary }]}>Section {currentChunk.sectionIndex + 1} | Chunk {currentChunk.chunkIndex + 1}</Text>
+              <View style={styles.sideStack}>
+                <View style={[styles.tutorPanel, { backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }]}>
+                  <Text style={[styles.tutorLabel, { color: theme.colors.textPrimary }]}>AI Tutor</Text>
+                  <RNAnimated.View style={[styles.avatarRing, { transform: [{ scale: pulseAnim }] }]}>
+                    <View style={styles.avatarInner}>
+                      <Text style={styles.avatarText}>AI</Text>
+                    </View>
+                  </RNAnimated.View>
+                  <Text style={[styles.tutorMeta, { color: theme.colors.textSecondary }]}>{lecture.title}</Text>
+                  <Text style={[styles.tutorMeta, { color: theme.colors.textSecondary }]}>Section {currentChunk.sectionIndex + 1} | Chunk {currentChunk.chunkIndex + 1}</Text>
+                  <Text style={[styles.tutorMeta, { color: theme.colors.primary }]}>{classroomModeLabel}</Text>
+                </View>
+                {renderSupportPanel()}
               </View>
             )}
           </View>
 
-          <View style={styles.visualRow}>
-            <View style={[styles.visualCard, { backgroundColor: isDark ? '#131c31' : '#ffffff', borderColor: theme.colors.border }]}>
-              <View style={styles.visualHeader}>
-                <Text style={[styles.visualEyebrow, { color: theme.colors.primary }]}>Slide Outline</Text>
-                <MaterialIcon name="presentation" size={18} color={theme.colors.primary} />
-              </View>
-              <Text style={[styles.visualTitle, { color: theme.colors.textPrimary }]}>{currentSlide?.title || currentChunk.title}</Text>
-              <Text style={[styles.visualBody, { color: theme.colors.textSecondary }]}>{currentSlide?.notes || panelContent.learningObjective || currentChunk.learningObjective || currentChunk.summary || lecture.summary}</Text>
-              {(panelContent.slideBullets || currentChunk.slideBullets || []).map((bullet, index) => (
-                <Text key={`${bullet}-${index}`} style={[styles.sectionText, { color: theme.colors.textPrimary }]}>- {bullet}</Text>
-              ))}
-            </View>
-            <View style={[styles.visualCard, { backgroundColor: isDark ? '#111827' : '#ffffff', borderColor: theme.colors.border }]}>
-              <View style={styles.visualHeader}>
-                <Text style={[styles.visualEyebrow, { color: '#10b981' }]}>Teaching Visual</Text>
-                <MaterialIcon name="vector-square" size={18} color="#10b981" />
-              </View>
-              <Text style={[styles.visualTitle, { color: theme.colors.textPrimary }]}>{currentDelivery?.current_mode_label || 'Structured visual support'}</Text>
-              {renderStructuredVisual()}
-              <View style={[styles.visualHint, { backgroundColor: isDark ? 'rgba(16,185,129,0.12)' : '#ecfdf5' }]}>
-                <Text style={[styles.visualHintLabel, { color: '#10b981' }]}>Visual hint</Text>
-                <Text style={[styles.visualHintText, { color: theme.colors.textPrimary }]}>{panelContent.visualCaption || currentChunk.visualCaption || currentVisual?.caption || currentVisual?.suggestion || 'Use a concise teaching visual instead of dumping raw topic content.'}</Text>
-              </View>
-            </View>
-          </View>
-
-          {(checkpointText || reinforcementPoints.length > 0 || confusionPoints.length > 0) && (
-            <View style={styles.teacherCardsRow}>
-              {!!checkpointText && (
-                <View style={[styles.teacherCard, { backgroundColor: isDark ? '#111827' : '#fffbeb', borderColor: isDark ? '#374151' : '#fde68a' }]}>
-                  <Text style={[styles.teacherCardLabel, { color: '#d97706' }]}>Mini checkpoint</Text>
-                  <Text style={[styles.teacherCardText, { color: theme.colors.textPrimary }]}>{checkpointText}</Text>
-                </View>
-              )}
-              {!!reinforcementPoints.length && (
-                <View style={[styles.teacherCard, { backgroundColor: isDark ? '#0f172a' : '#ecfeff', borderColor: isDark ? '#1e3a8a' : '#a5f3fc' }]}>
-                  <Text style={[styles.teacherCardLabel, { color: '#0891b2' }]}>Takeaway</Text>
-                  <Text style={[styles.teacherCardText, { color: theme.colors.textPrimary }]}>{reinforcementPoints[0]}</Text>
-                </View>
-              )}
-              {!!confusionPoints.length && (
-                <View style={[styles.teacherCard, { backgroundColor: isDark ? '#1f172a' : '#fef2f2', borderColor: isDark ? '#4c1d95' : '#fecaca' }]}>
-                  <Text style={[styles.teacherCardLabel, { color: '#dc2626' }]}>Watch for this</Text>
-                  <Text style={[styles.teacherCardText, { color: theme.colors.textPrimary }]}>{confusionPoints[0]}</Text>
-                </View>
-              )}
-            </View>
-          )}
+          {isMobile && renderSupportPanel()}
 
           <View style={[styles.subtitlesCard, { backgroundColor: isDark ? '#1a1a2e' : '#f1f5f9' }]}>
             <View style={styles.subtitlesHeader}>
-              <Text style={[styles.subtitlesTitle, { color: theme.colors.textPrimary }]}>Live Subtitles</Text>
-              <Text style={styles.modeBadge}>{teachingStyleLabel.toUpperCase()}</Text>
+              <Text style={[styles.subtitlesTitle, { color: theme.colors.textPrimary }]}>Live Teaching Text</Text>
+              <Text style={styles.modeBadge}>{classroomModeLabel.toUpperCase()}</Text>
             </View>
-            <Text style={[styles.subtitlesText, { color: theme.colors.textPrimary }]}>{currentNarration}</Text>
+            <Text style={[styles.subtitlesText, { color: theme.colors.textPrimary }]}>{liveNarration}</Text>
+            {!!narrationSegments.length && (
+              <View style={styles.segmentRow}>
+                {narrationSegments.slice(0, 4).map((segment, index) => (
+                  <View key={`${segment}-${index}`} style={[styles.segmentPill, { backgroundColor: index === 0 ? `${theme.colors.primary}22` : isDark ? '#111827' : '#e2e8f0' }]}>
+                    <Text style={[styles.segmentText, { color: theme.colors.textSecondary }]} numberOfLines={1}>{segment}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
 
           {showQuestionPanel && (
@@ -804,6 +898,12 @@ const LearningScreen = () => {
 
           {!showQuestionPanel && (
             <View style={styles.actions}>
+              {lectureCompleted && (
+                <TouchableOpacity style={[styles.action, { backgroundColor: '#0f766e' }]} onPress={restartLecture}>
+                  <Icon name="refresh" size={20} color="#fff" />
+                  <Text style={styles.actionText}>Take Again</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={[styles.action, { backgroundColor: '#3b82f6' }]} onPress={() => setShowNotesModal(true)}>
                 <Icon name="document-text" size={20} color="#fff" />
                 <Text style={styles.actionText}>Notes</Text>
@@ -852,7 +952,7 @@ const LearningScreen = () => {
       <ConfirmDialog
         visible={showCompleteDialog}
         title="Lecture Complete"
-        message="The lecture is finished. Open the quiz to unlock the next topic."
+        message="The lecture is finished. Open the quiz to unlock the next topic, or take the lecture again from the beginning."
         confirmText="Open Quiz"
         confirmVariant="primary"
         onConfirm={() => {
@@ -932,6 +1032,8 @@ const styles = StyleSheet.create({
   progressBar: { height: 8, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.12)', overflow: 'hidden' },
   progressFill: { height: '100%' },
   progressValue: { fontSize: 13, fontWeight: '700' },
+  lectureTimeBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16, alignSelf: 'flex-start' },
+  lectureTimeBannerText: { fontSize: 13, fontWeight: '700' },
   statusCard: { borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1 },
   statusHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 12 },
   statusTitleWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
@@ -946,12 +1048,24 @@ const styles = StyleSheet.create({
   transitionLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
   transitionText: { fontSize: 14, lineHeight: 21, fontWeight: '600' },
   topRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
+  topRowStack: { flexDirection: 'column' },
   whiteboard: { flex: 1, borderRadius: 16, padding: 18 },
+  liveBoard: { minHeight: 360 },
+  sideStack: { width: 220, gap: 12 },
   tutorPanel: { width: 190, borderRadius: 16, padding: 16, alignItems: 'center' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   cardHeaderText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  boardHeaderRow: { marginBottom: 14, gap: 10 },
+  boardModeBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  boardModeText: { color: '#fff', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
+  boardObjective: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },
   whiteboardTitle: { color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: 8 },
   whiteboardSummary: { color: '#cbd5e1', fontSize: 14, lineHeight: 22, marginBottom: 12 },
+  boardSurface: { flex: 1, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.04)', padding: 16, gap: 10, justifyContent: 'center' },
+  boardBodyText: { color: '#e2e8f0', fontSize: 15, lineHeight: 24 },
+  boardBullet: { color: '#e2e8f0', fontSize: 15, lineHeight: 24, marginBottom: 8 },
+  boardEmphasis: { color: '#93c5fd', fontSize: 14, lineHeight: 22, marginTop: 12, fontStyle: 'italic' },
+  boardQuestion: { color: '#fef3c7', fontSize: 22, lineHeight: 30, fontWeight: '700' },
   sectionLabel: { color: '#fff', fontSize: 13, fontWeight: '700', marginTop: 10, marginBottom: 4 },
   sectionText: { color: '#cbd5e1', fontSize: 13, lineHeight: 21 },
   tutorLabel: { fontSize: 14, fontWeight: '700', marginBottom: 16 },
@@ -972,6 +1086,14 @@ const styles = StyleSheet.create({
   diagramIndex: { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   diagramIndexText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   diagramText: { flex: 1, fontSize: 13, lineHeight: 20 },
+  flowStep: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  flowStepBadge: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  flowStepBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  flowStepText: { flex: 1, color: '#e2e8f0', fontSize: 14, lineHeight: 21 },
+  boardTable: { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
+  boardTableRow: { padding: 12, borderBottomWidth: 1 },
+  boardTableTitle: { color: '#fff', fontSize: 13, fontWeight: '700', marginBottom: 4 },
+  boardTableBody: { fontSize: 12, lineHeight: 18 },
   comparisonTable: { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
   comparisonRow: { padding: 12, borderBottomWidth: 1 },
   comparisonCellTitle: { fontSize: 13, fontWeight: '700', marginBottom: 4 },
@@ -979,15 +1101,27 @@ const styles = StyleSheet.create({
   nodeWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   nodeCard: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
   nodeLabel: { fontSize: 12, fontWeight: '600' },
+  liveNodeCard: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.06)' },
+  liveNodeText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  codePanel: { borderWidth: 1, borderRadius: 14, padding: 14, backgroundColor: 'rgba(15,23,42,0.92)' },
+  codeLanguage: { color: '#93c5fd', fontSize: 11, fontWeight: '700', marginBottom: 10, letterSpacing: 1 },
+  codeText: { color: '#e5e7eb', fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier', fontSize: 13, lineHeight: 20 },
+  codeHint: { color: '#cbd5e1', fontSize: 12, lineHeight: 18, marginTop: 12 },
   teacherCardsRow: { flexDirection: 'row', gap: 12, marginBottom: 16, flexWrap: 'wrap' },
   teacherCard: { flex: 1, minWidth: 210, borderRadius: 16, padding: 14, borderWidth: 1 },
   teacherCardLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
   teacherCardText: { fontSize: 13, lineHeight: 20 },
+  supportCard: { borderWidth: 1, borderRadius: 16, padding: 14 },
+  supportLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
+  supportText: { fontSize: 13, lineHeight: 20 },
   subtitlesCard: { borderRadius: 16, padding: 16, marginBottom: 16 },
   subtitlesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   subtitlesTitle: { fontSize: 14, fontWeight: '700' },
   modeBadge: { color: '#fff', backgroundColor: '#3b82f6', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, fontSize: 10, fontWeight: '700' },
   subtitlesText: { fontSize: 15, lineHeight: 24 },
+  segmentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  segmentPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, maxWidth: '100%' },
+  segmentText: { fontSize: 11, fontWeight: '600' },
   qaCard: { borderRadius: 16, padding: 16, marginBottom: 16, maxHeight: 340 },
   qaHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   qaTitle: { fontSize: 15, fontWeight: '700' },
@@ -1015,6 +1149,7 @@ const styles = StyleSheet.create({
   sidebarTitle: { fontSize: 14, fontWeight: '700', padding: 16 },
   sidebarItem: { borderLeftWidth: 3, borderLeftColor: 'transparent', padding: 12, marginHorizontal: 8, marginBottom: 4, borderRadius: 10 },
   sidebarItemText: { fontSize: 13, fontWeight: '600', marginBottom: 4 },
+  sidebarItemDuration: { fontSize: 11, marginBottom: 4 },
   sidebarItemStatus: { fontSize: 11 },
   modalOverlay: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(15,23,42,0.72)', padding: 20 },
   modalCard: { borderRadius: 16, padding: 20, maxHeight: '85%' },

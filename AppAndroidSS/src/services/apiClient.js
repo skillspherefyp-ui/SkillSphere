@@ -383,6 +383,7 @@ export const aiTutorAPI = {
   startSession: (topicId, data) => post(`/ai-tutor/topics/${topicId}/start`, data || {}),
   getSessionState: (sessionId) => get(`/ai-tutor/sessions/${sessionId}`),
   getNextChunk: (sessionId) => post(`/ai-tutor/sessions/${sessionId}/next`, {}),
+  restartSession: (sessionId) => post(`/ai-tutor/sessions/${sessionId}/restart`, {}),
   pauseSession: (sessionId) => post(`/ai-tutor/sessions/${sessionId}/pause`, {}),
   resumeSession: (sessionId) => post(`/ai-tutor/sessions/${sessionId}/resume`, {}),
   askQuestion: (sessionId, question) => post(`/ai-tutor/sessions/${sessionId}/questions`, { question }),

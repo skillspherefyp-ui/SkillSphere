@@ -110,8 +110,56 @@ function buildVisualData(visualMode, title, slideBullets, examples, analogyIfHel
   };
 }
 
+function guessSnippetLanguage(text = '') {
+  const source = `${text}`.toLowerCase();
+  if (/select\b|insert\b|update\b|delete\b|from\b|where\b/.test(source)) return 'sql';
+  if (/^\s*[{[]|json|\"[A-Za-z0-9_-]+\"\s*:/.test(source)) return 'json';
+  if (/docker|kubectl|curl|nmap|ssh|sudo|grep|chmod|npm|yarn|pip|python|git|bash|shell|terminal/.test(source)) return 'bash';
+  if (/const |let |function |=>|console\.log|javascript|node/.test(source)) return 'javascript';
+  if (/def |print\(|import |python/.test(source)) return 'python';
+  if (/apiVersion:|kind:|metadata:|spec:|yaml/.test(source)) return 'yaml';
+  if (/<[A-Za-z][\s\S]*>/.test(source)) return 'html';
+  return 'text';
+}
+
+function isTechnicalChunkText(text = '') {
+  return /(code|command|terminal|script|query|sql|api|curl|nmap|bash|shell|config|configuration|json|yaml|docker|kubectl|firewall|scan|tool|cli|syntax|packet|token|jwt|endpoint)/i.test(`${text}`);
+}
+
+function extractSnippetCandidate(candidates = []) {
+  return (candidates || []).find((candidate) => /[`$]|^\s*(curl|nmap|ssh|sudo|git|npm|docker|kubectl|select|insert|update|delete|python|node|export|set\s+)/i.test(`${candidate || ''}`.trim())) || '';
+}
+
+function buildSnippetData({
+  chunkTitle = '',
+  spokenExplanation = '',
+  slideBullets = [],
+  examples = [],
+  rawChunk = {}
+}) {
+  const explicitCodeSnippet = `${rawChunk?.code_snippet || rawChunk?.codeSnippet || ''}`.trim();
+  const explicitCommandExample = `${rawChunk?.command_example || rawChunk?.commandExample || ''}`.trim();
+  const explicitLanguage = `${rawChunk?.snippet_language || rawChunk?.snippetLanguage || ''}`.trim();
+  const explicitExplanation = `${rawChunk?.snippet_explanation || rawChunk?.snippetExplanation || ''}`.trim();
+  const detectedSnippet = extractSnippetCandidate([explicitCodeSnippet, explicitCommandExample, ...examples, ...slideBullets]);
+  const snippetText = explicitCodeSnippet || explicitCommandExample || detectedSnippet;
+  const technicalSignal = isTechnicalChunkText(`${chunkTitle} ${spokenExplanation} ${(slideBullets || []).join(' ')} ${(examples || []).join(' ')}`);
+
+  if (!snippetText && !technicalSignal) {
+    return null;
+  }
+
+  return {
+    codeSnippet: explicitCodeSnippet || '',
+    commandExample: explicitCommandExample || (!explicitCodeSnippet ? detectedSnippet : ''),
+    snippetLanguage: explicitLanguage || guessSnippetLanguage(snippetText || `${chunkTitle} ${spokenExplanation}`),
+    snippetExplanation: explicitExplanation || (technicalSignal ? `Walk through the command or snippet in ${chunkTitle} and explain what each important part does.` : ''),
+  };
+}
+
 function inferConceptType({ title = '', learningObjective = '', spokenExplanation = '', visualMode = 'slide', keyTerms = [] }) {
   const text = `${title} ${learningObjective} ${spokenExplanation} ${(keyTerms || []).join(' ')}`.toLowerCase();
+  if (isTechnicalChunkText(text)) return 'technical';
   if (visualMode === 'comparison_table' || /(compare|contrast|difference|versus|vs\b)/.test(text)) return 'comparison-based';
   if (visualMode === 'flowchart' || /(process|steps|workflow|sequence|procedure|pipeline|lifecycle)/.test(text)) return 'procedural';
   if (/(memorize|remember|definition|terminology|facts|formula|vocabulary)/.test(text)) return 'memorization-heavy';
@@ -164,9 +212,12 @@ function deriveTeachingPlan({
   const hasAnalogy = Boolean(`${chunk.analogyIfHelpful || ''}`.trim());
   const keyTerms = Array.isArray(chunk.keyTerms) ? chunk.keyTerms.filter(Boolean) : [];
   const spokenLength = `${chunk.spokenExplanation || ''}`.length;
+  const hasSnippet = Boolean(chunk.snippetData?.codeSnippet || chunk.snippetData?.commandExample);
 
   let teachingStyle = 'brief_explanation';
-  if (conceptType === 'procedural') {
+  if (conceptType === 'technical') {
+    teachingStyle = hasSnippet ? 'example_first' : 'process_flow';
+  } else if (conceptType === 'procedural') {
     teachingStyle = examples.length > 0 ? 'example_first' : 'process_flow';
   } else if (conceptType === 'comparison-based') {
     teachingStyle = 'compare_contrast';
@@ -214,6 +265,7 @@ function deriveTeachingPlan({
     explanation_depth: explanationDepth,
     use_example: examples.length > 0 && conceptType !== 'memorization-heavy',
     use_analogy: hasAnalogy && conceptType !== 'memorization-heavy',
+    use_snippet: hasSnippet,
     use_visual: visualPriority !== 'none',
     visual_priority: visualPriority,
     use_whiteboard: ['whiteboard', 'mixed', 'flowchart', 'diagram'].includes(visualPriority) || conceptType === 'procedural',
@@ -482,6 +534,12 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
         const visualMode = inferVisualMode(`${section?.visualSuggestion || ''} ${section?.whiteboardSuggestion || ''}`);
         const slideBullets = Array.isArray(section?.slideBullets) ? section.slideBullets.map(String).filter(Boolean) : [];
         const examples = Array.isArray(section?.examples) ? section.examples.map(String).filter(Boolean) : [];
+        const snippetData = buildSnippetData({
+          chunkTitle: `${section?.title || `${topicTitle} Section ${sectionIndex + 1}`} - Step ${chunkIndex + 1}`.trim(),
+          spokenExplanation: chunk,
+          slideBullets,
+          examples
+        });
         const teachingPlan = deriveTeachingPlan({
           sectionTitle: section?.title || topicTitle,
           previousChunkTitle,
@@ -494,6 +552,7 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
             examples,
             analogyIfHelpful: '',
             visualMode,
+            snippetData,
             estimatedDurationSeconds: Math.min(90, Math.max(40, chunk.length / 3)),
             checkpointQuestion: chunkIndex === rawChunks.length - 1 ? `What is the key takeaway from ${section?.title || topicTitle}?` : '',
           }
@@ -515,7 +574,10 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
           estimatedDurationSeconds: Math.min(90, Math.max(40, chunk.length / 3)),
           checkpointQuestion: chunkIndex === rawChunks.length - 1 ? `What is the key takeaway from ${section?.title || topicTitle}?` : '',
           visualData: attachTeachingPlanToVisualData(
-            buildVisualData(visualMode, section?.title || topicTitle, slideBullets, examples, ''),
+            {
+              ...buildVisualData(visualMode, section?.title || topicTitle, slideBullets, examples, ''),
+              snippetData: snippetData || undefined
+            },
             teachingPlan
           ),
           teachingPlan,
@@ -530,6 +592,13 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
       const examples = Array.isArray(chunk?.examples) ? chunk.examples.map(String).filter(Boolean) : Array.isArray(section?.examples) ? section.examples.map(String).filter(Boolean) : [];
       const visualMode = `${chunk?.visual_mode || chunk?.visualMode || inferVisualMode(`${chunk?.visual_query || ''} ${chunk?.visual_caption || ''} ${section?.visualSuggestion || ''}`)}`.trim() || 'slide';
       const analogy = `${chunk?.analogy_if_helpful || chunk?.analogyIfHelpful || ''}`.trim();
+      const snippetData = buildSnippetData({
+        chunkTitle: `${chunk?.title || section?.title || `${topicTitle} Section ${sectionIndex + 1}`}`.trim(),
+        spokenExplanation: `${chunk?.spoken_explanation || chunk?.spokenExplanation || chunk?.chunkText || chunk?.text || explanation || topicTitle}`.trim(),
+        slideBullets,
+        examples,
+        rawChunk: chunk
+      });
       const normalizedChunk = {
         title: `${chunk?.title || section?.title || `${topicTitle} Section ${sectionIndex + 1}`}`.trim(),
         learningObjective: `${chunk?.learning_objective || chunk?.learningObjective || section?.learningObjective || section?.summary || topicTitle}`.trim(),
@@ -550,7 +619,11 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
             ? chunk.estimatedDurationSeconds
             : Math.min(90, Math.max(40, `${chunk?.spoken_explanation || chunk?.spokenExplanation || ''}`.length / 3)),
         checkpointQuestion: `${chunk?.checkpoint_question_if_any || chunk?.checkpointQuestionIfAny || chunk?.checkpointQuestion || ''}`.trim(),
-        visualData: chunk?.visual_data || chunk?.visualData || buildVisualData(visualMode, chunk?.title || section?.title || topicTitle, slideBullets, examples, analogy),
+        visualData: {
+          ...(chunk?.visual_data || chunk?.visualData || buildVisualData(visualMode, chunk?.title || section?.title || topicTitle, slideBullets, examples, analogy)),
+          ...(snippetData ? { snippetData } : {})
+        },
+        snippetData,
       };
       const teachingPlan = deriveTeachingPlan({
         sectionTitle: section?.title || topicTitle,
@@ -1431,6 +1504,59 @@ async function getNextLectureChunk(sessionId, userId) {
   };
 }
 
+async function restartTutorSession(sessionId, userId) {
+  const session = await AITutorSession.findOne({
+    where: { id: sessionId, userId }
+  });
+
+  if (!session) {
+    throw new Error('Tutor session not found');
+  }
+
+  const lecture = await getLectureByTopicId(session.topicId);
+  if (!lecture) {
+    throw new Error('Lecture package not found');
+  }
+
+  const firstChunk = mapLectureChunk(lecture, 0, 0);
+  if (!firstChunk) {
+    throw new Error('Lecture package does not contain any chunks');
+  }
+
+  const [progress] = await AIStudentProgress.findOrCreate({
+    where: {
+      userId,
+      courseId: session.courseId,
+      topicId: session.topicId
+    },
+    defaults: { lectureId: lecture.id }
+  });
+
+  await progress.update({
+    lectureId: lecture.id,
+    currentSectionIndex: 0,
+    currentChunkIndex: 0,
+    lectureCompleted: false,
+    lastSessionId: session.id
+  });
+
+  await session.update({
+    lectureId: lecture.id,
+    currentSectionIndex: 0,
+    currentChunkIndex: 0,
+    status: 'in_progress',
+    teachingState: { currentStepIndex: 0 },
+    lastActivityAt: new Date()
+  });
+
+  return {
+    session,
+    lecture,
+    progress,
+    chunk: await attachTeachingDecision(lecture, session, firstChunk)
+  };
+}
+
 async function submitQuestion(sessionId, userId, question) {
   const session = await AITutorSession.findOne({
     where: { id: sessionId, userId },
@@ -1713,6 +1839,7 @@ module.exports = {
   startTutorSession,
   getSessionState,
   getNextLectureChunk,
+  restartTutorSession,
   setSessionPaused,
   submitQuestion,
   getFlashcards,

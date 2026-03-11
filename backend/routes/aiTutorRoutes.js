@@ -13,6 +13,7 @@ router.get('/topics/:topicId/package', aiTutorController.getLecturePackage);
 router.post('/topics/:topicId/start', aiTutorController.startSession);
 router.get('/sessions/:sessionId', aiTutorController.getSessionState);
 router.post('/sessions/:sessionId/next', aiTutorController.getNextChunk);
+router.post('/sessions/:sessionId/restart', aiTutorController.restartSession);
 router.post('/sessions/:sessionId/pause', aiTutorController.pauseSession);
 router.post('/sessions/:sessionId/resume', aiTutorController.resumeSession);
 router.post('/sessions/:sessionId/questions', aiTutorController.submitQuestion);

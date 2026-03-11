@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
   import {
     View,
     Text,
@@ -75,8 +75,35 @@ import React, { useState, useMemo } from 'react';
     const [editingTopic, setEditingTopic] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationReport, setGenerationReport] = useState([]);
+    const [lectureMetaByTopic, setLectureMetaByTopic] = useState({});
 
     const topics = course?.topics || [];
+
+    useEffect(() => {
+      let active = true;
+
+      const loadLectureMeta = async () => {
+        if (!courseId) return;
+
+        try {
+          const response = await aiTutorAPI.listLectures(courseId);
+          if (!active || !response.success) return;
+
+          setLectureMetaByTopic(
+            (response.lectures || []).reduce((acc, lecture) => {
+              acc[lecture.topicId] = lecture;
+              return acc;
+            }, {})
+          );
+        } catch (_) {
+        }
+      };
+
+      loadLectureMeta();
+      return () => {
+        active = false;
+      };
+    }, [courseId, topics.length]);
 
     // Sidebar navigation items based on user role
     const sidebarItems = isSuperAdmin ? [
@@ -107,6 +134,16 @@ import React, { useState, useMemo } from 'react';
     // Get color for topic based on index
     const getTopicColor = (index) => {
       return TOPIC_COLORS[index % TOPIC_COLORS.length];
+    };
+
+    const formatLectureDuration = (minutes) => {
+      const value = Number(minutes);
+      if (!Number.isFinite(value) || value <= 0) return '';
+      if (value < 60) return `${value} min lecture`;
+
+      const hours = Math.floor(value / 60);
+      const remainingMinutes = value % 60;
+      return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m lecture` : `${hours}h lecture`;
     };
 
     const handleNavigate = (navRoute) => {
@@ -296,6 +333,15 @@ import React, { useState, useMemo } from 'react';
       try {
         const response = await aiTutorAPI.generateCoursePackage(courseId);
         await fetchCourses();
+        const lectureResponse = await aiTutorAPI.listLectures(courseId);
+        if (lectureResponse.success) {
+          setLectureMetaByTopic(
+            (lectureResponse.lectures || []).reduce((acc, lecture) => {
+              acc[lecture.topicId] = lecture;
+              return acc;
+            }, {})
+          );
+        }
 
         if (!response.success) {
           throw new Error(response.error || 'AI generation failed');
@@ -354,6 +400,10 @@ import React, { useState, useMemo } from 'react';
     const renderTopicCard = (topic, index) => {
       const color = getTopicColor(index);
       const materialsCount = topic.materials?.length || 0;
+      const lectureMeta = lectureMetaByTopic[topic.id];
+      const estimatedLectureTime = lectureMeta?.status === 'ready'
+        ? formatLectureDuration(lectureMeta.estimatedDurationMinutes)
+        : '';
 
       return (
         <Animated.View
@@ -406,6 +456,13 @@ import React, { useState, useMemo } from 'react';
             <Text style={[styles.topicName, { color: theme.colors.textPrimary }]} numberOfLines={2}>
               {topic.title}
             </Text>
+
+            {!!estimatedLectureTime && (
+              <View style={[styles.lectureTimeChip, { backgroundColor: color + '12', borderColor: color + '30' }]}>
+                <Icon name="time-outline" size={14} color={color} />
+                <Text style={[styles.lectureTimeText, { color }]}>{estimatedLectureTime}</Text>
+              </View>
+            )}
 
             {/* Status Badge */}
             <View style={styles.statusContainer}>
@@ -1024,6 +1081,22 @@ import React, { useState, useMemo } from 'react';
         fontFamily: theme.typography?.fontFamily?.semiBold,
         marginBottom: 8,
         paddingRight: 80,
+      },
+      lectureTimeChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        gap: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
+        borderWidth: 1,
+        marginBottom: 10,
+      },
+      lectureTimeText: {
+        fontSize: 12,
+        fontWeight: '700',
+        fontFamily: theme.typography?.fontFamily?.semiBold,
       },
       statusContainer: {
         marginBottom: 12,
