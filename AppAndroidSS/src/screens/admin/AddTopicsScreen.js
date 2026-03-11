@@ -69,10 +69,12 @@ import React, { useState, useMemo } from 'react';
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showMaterialsModal, setShowMaterialsModal] = useState(false);
+    const [showGenerationReportModal, setShowGenerationReportModal] = useState(false);
     const [selectedTopicMaterials, setSelectedTopicMaterials] = useState(null);
     const [topicToDelete, setTopicToDelete] = useState(null);
     const [editingTopic, setEditingTopic] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [generationReport, setGenerationReport] = useState([]);
 
     const topics = course?.topics || [];
 
@@ -299,21 +301,44 @@ import React, { useState, useMemo } from 'react';
           throw new Error(response.error || 'AI generation failed');
         }
 
+        const reportItems = (response.results || []).map((item) => ({
+          ...item,
+          displayStatus: item.status !== 'ready'
+            ? 'failed'
+            : item.usedFallback
+              ? 'fallback used'
+              : 'ready',
+          displayMessage: item.message || item.error || 'No additional details were provided.',
+        }));
+
+        setGenerationReport(reportItems);
+        setShowGenerationReportModal(true);
+
         const failed = (response.results || []).filter((item) => item.status !== 'ready');
+        const fallbackCount = (response.results || []).filter((item) => item.usedFallback).length;
         if (failed.length > 0) {
           Toast.show({
             type: 'error',
             text1: 'Generation Partial',
-            text2: `${response.summary?.ready || 0} topic packages ready, ${failed.length} failed.`,
+            text2: `${response.summary?.ready || 0} ready, ${fallbackCount} fallback, ${failed.length} failed.`,
           });
         } else {
           Toast.show({
-            type: 'success',
-            text1: 'AI Generation Complete',
-            text2: `${response.summary?.ready || 0} topic packages stored successfully.`,
+            type: fallbackCount > 0 ? 'info' : 'success',
+            text1: fallbackCount > 0 ? 'Fallback Generation Used' : 'AI Generation Complete',
+            text2: fallbackCount > 0
+              ? `${fallbackCount} topics used fallback packages. Open the report for exact details.`
+              : `${response.summary?.ready || 0} topic packages stored successfully.`,
           });
         }
       } catch (error) {
+        setGenerationReport([{
+          topicId: 'request',
+          topicTitle: course?.name || 'Course',
+          displayStatus: 'failed',
+          displayMessage: error.message || 'Unable to generate AI lecture content',
+        }]);
+        setShowGenerationReportModal(true);
         Toast.show({
           type: 'error',
           text1: 'Generation Failed',
@@ -727,6 +752,70 @@ import React, { useState, useMemo } from 'react';
           onAddMaterial={handleAddTopicMaterial}
         />
 
+        <Modal
+          visible={showGenerationReportModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowGenerationReportModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, styles.reportModalContent, { backgroundColor: isDark ? theme.colors.card : theme.colors.background }]}>
+              <View style={styles.modalHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
+                    AI Generation Report
+                  </Text>
+                  <Text style={[styles.modalSubtitle, { color: theme.colors.textSecondary }]}>
+                    Exact per-topic generation results for this course.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.modalCloseButton}
+                  onPress={() => setShowGenerationReportModal(false)}
+                >
+                  <Icon name="close" size={24} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalBodyScroll} showsVerticalScrollIndicator={false}>
+                <View style={styles.reportList}>
+                  {generationReport.map((item, index) => (
+                    <View
+                      key={`${item.topicId}-${index}`}
+                      style={[
+                        styles.reportItem,
+                        {
+                          backgroundColor: isDark ? theme.colors.backgroundSecondary : theme.colors.surface,
+                          borderColor: theme.colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={styles.reportHeader}>
+                        <Text style={[styles.reportTopicTitle, { color: theme.colors.textPrimary }]}>
+                          {item.topicTitle || `Topic ${index + 1}`}
+                        </Text>
+                        <StatusBadge status={item.displayStatus || item.status || 'info'} />
+                      </View>
+                      <Text style={[styles.reportMessage, { color: theme.colors.textSecondary }]}>
+                        {item.displayMessage}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                <AppButton
+                  title="Close"
+                  onPress={() => setShowGenerationReportModal(false)}
+                  variant="outline"
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         {/* Delete Confirmation Dialog */}
         <ConfirmDialog
           visible={showDeleteDialog}
@@ -982,6 +1071,9 @@ import React, { useState, useMemo } from 'react';
         padding: 24,
         ...theme.shadows.lg,
       },
+      reportModalContent: {
+        maxWidth: 720,
+      },
       modalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -1120,6 +1212,32 @@ import React, { useState, useMemo } from 'react';
       },
       noMaterialsText: {
         fontSize: 14,
+      },
+      reportList: {
+        gap: 12,
+      },
+      reportItem: {
+        borderWidth: 1,
+        borderRadius: 12,
+        padding: 14,
+      },
+      reportHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        gap: 12,
+        marginBottom: 8,
+      },
+      reportTopicTitle: {
+        flex: 1,
+        fontSize: 15,
+        fontWeight: '700',
+        fontFamily: theme.typography?.fontFamily?.semiBold,
+      },
+      reportMessage: {
+        fontSize: 13,
+        lineHeight: 20,
+        fontFamily: theme.typography?.fontFamily?.regular,
       },
     });
 

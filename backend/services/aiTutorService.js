@@ -544,7 +544,10 @@ async function generateCoursePackage(courseId, adminUser) {
         topicId: topic.id,
         topicTitle: topic.title,
         status: 'ready',
-        usedFallback
+        usedFallback,
+        message: usedFallback
+          ? 'Primary AI generation failed; a fallback lecture package was stored and can be used immediately.'
+          : 'Lecture package generated successfully.'
       });
     } catch (error) {
       console.error(`AI generation failed for topic ${topic.id}:`, error);
