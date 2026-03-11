@@ -1,5 +1,5 @@
 import React from 'react';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 
 // Minimal shim for react-native-reanimated on web to avoid runtime crashes
 // It provides Animated.View and no-op entering animations used in the app.
@@ -16,6 +16,7 @@ const noopAnimBuilder = () => ({
 
 export default {
   View: NoopAnimatedView,
+  Text,
   createAnimatedComponent: (Component) => Component,
 };
 
