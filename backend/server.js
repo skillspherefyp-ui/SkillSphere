@@ -4,28 +4,27 @@ const path = require('path');
 require('dotenv').config();
 
 const { sequelize, testConnection } = require('./config/database');
-require('./models'); // Load models and associations
+require('./models');
 const { User } = require('./models');
 const { sendSuperAdminWelcomeEmail } = require('./services/emailService');
 const syncUserAuthColumns = require('./scripts/syncUserAuthColumns');
 const syncCourseColumns = require('./scripts/syncCourseColumns');
 
-// Initialize SuperAdmin if not exists
-const initSuperAdmin = async () => {
+async function initSuperAdmin() {
   try {
     const superadminEmail = process.env.SUPER_ADMIN_EMAIL;
     const superadminPassword = process.env.SUPER_ADMIN_PASSWORD;
     const superadminName = process.env.SUPER_ADMIN_NAME || 'Super Admin';
 
     if (!superadminEmail || !superadminPassword) {
-      console.log('⚠️  SUPER_ADMIN_EMAIL or SUPER_ADMIN_PASSWORD not set in .env - skipping superadmin creation');
+      console.log('SUPER_ADMIN_EMAIL or SUPER_ADMIN_PASSWORD not set in .env - skipping superadmin creation');
       return;
     }
 
     const existingSuperAdmin = await User.findOne({ where: { role: 'superadmin' } });
 
     if (!existingSuperAdmin) {
-      const superAdmin = await User.create({
+      await User.create({
         name: superadminName,
         email: superadminEmail,
         password: superadminPassword,
@@ -34,25 +33,23 @@ const initSuperAdmin = async () => {
         emailVerified: true,
         authProvider: 'local'
       });
-      console.log('✅ SuperAdmin created successfully');
-      console.log(`   Email: ${superadminEmail}`);
+      console.log('SuperAdmin created successfully');
+      console.log(`Email: ${superadminEmail}`);
 
-      // Send welcome email
       try {
         await sendSuperAdminWelcomeEmail(superadminEmail, superadminName, superadminPassword);
-        console.log('📧 Welcome email sent to SuperAdmin');
+        console.log('Welcome email sent to SuperAdmin');
       } catch (emailError) {
-        console.log('⚠️  Could not send welcome email:', emailError.message);
+        console.log('Could not send welcome email:', emailError.message);
       }
     } else {
-      console.log('ℹ️  SuperAdmin already exists');
+      console.log('SuperAdmin already exists');
     }
   } catch (error) {
-    console.error('❌ Error creating SuperAdmin:', error.message);
+    console.error('Error creating SuperAdmin:', error.message);
   }
-};
+}
 
-// Import routes
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -74,34 +71,45 @@ const aiTutorRoutes = require('./routes/aiTutorRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// CORS Configuration
+function normalizeOrigin(origin) {
+  return `${origin || ''}`.trim().replace(/\/$/, '');
+}
+
+function isAllowedVercelOrigin(origin) {
+  const normalizedOrigin = normalizeOrigin(origin);
+  return /^https:\/\/([a-z0-9-]+\.)?vercel\.app$/i.test(normalizedOrigin)
+    && (normalizedOrigin.includes('skill-sphere') || normalizedOrigin.includes('skillsphere'));
+}
+
 const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+  origin(origin, callback) {
+    const normalizedOrigin = normalizeOrigin(origin);
+
+    if (!normalizedOrigin) {
+      callback(null, true);
+      return;
+    }
 
     const allowedOrigins = [
       'http://localhost:3000',
       'http://localhost:19006',
       'http://10.0.2.2:3000',
-      process.env.FRONTEND_URL, // Vercel frontend URL
-    ].filter(Boolean); // Remove undefined values
+      'https://skill-sphere-app.vercel.app',
+      process.env.FRONTEND_URL,
+    ].map(normalizeOrigin).filter(Boolean);
 
-    // Check exact match first
-    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+    if (allowedOrigins.includes(normalizedOrigin) || process.env.NODE_ENV === 'development') {
       callback(null, true);
       return;
     }
 
-    // Allow all Vercel preview deployments for skillsphere app
-    // Patterns: skill-sphere-*.vercel.app, skillsphere-*.vercel.app
-    if (origin.includes('.vercel.app') && (origin.includes('skill-sphere') || origin.includes('skillsphere'))) {
-      console.log('✅ CORS: Allowing Vercel preview deployment:', origin);
+    if (isAllowedVercelOrigin(normalizedOrigin)) {
+      console.log('CORS allowing Vercel deployment:', normalizedOrigin);
       callback(null, true);
       return;
     }
 
-    console.log('❌ CORS: Blocked origin:', origin);
+    console.log('CORS blocked origin:', normalizedOrigin);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
@@ -109,20 +117,17 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
-// Middleware
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Health check route
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });
 });
 
-// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admins', adminRoutes);
 app.use('/api/users', userRoutes);
@@ -141,7 +146,6 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/ai-chat', aiChatRoutes);
 app.use('/api/ai-tutor', aiTutorRoutes);
 
-// Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
   res.status(err.status || 500).json({
@@ -149,40 +153,30 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-// Start server
-const startServer = async () => {
+async function startServer() {
   try {
-    // Test database connection
     await testConnection();
-
-    // Keep existing auth tables aligned with the current User model in local environments.
     await syncUserAuthColumns();
     await syncCourseColumns();
-
-    // Sync database (create tables and add new columns if they don't exist)
-    // alter: true will modify existing tables to match model definitions
-    // In production, use migrations instead
     await sequelize.sync();
 
-    console.log('✅ Database synced successfully');
+    console.log('Database synced successfully');
 
-    // Initialize SuperAdmin
     await initSuperAdmin();
 
     app.listen(PORT, () => {
-      console.log(`🚀 Server is running on http://localhost:${PORT}`);
-      console.log(`📚 API endpoints available at http://localhost:${PORT}/api`);
+      console.log(`Server is running on http://localhost:${PORT}`);
+      console.log(`API endpoints available at http://localhost:${PORT}/api`);
     });
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
+    console.error('Failed to start server:', error);
     process.exit(1);
   }
-};
+}
 
 startServer();
 
