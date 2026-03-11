@@ -218,6 +218,60 @@ async function answerLectureQuestion({
   };
 }
 
+async function answerGeneralChat({
+  message,
+  chatHistory = [],
+  userContext = {}
+}) {
+  const client = getClient();
+  const model = process.env.OPENAI_MODEL_QA;
+
+  if (!model) {
+    throw new Error('OPENAI_MODEL_QA is not configured');
+  }
+
+  const recentHistory = chatHistory.slice(-12).map((entry) => ({
+    role: entry.sender === 'user' ? 'user' : 'assistant',
+    content: entry.content
+  }));
+
+  const completion = await client.chat.completions.create({
+    model,
+    temperature: 0.4,
+    messages: [
+      {
+        role: 'system',
+        content: 'You are SkillSphere AI, a calm, professional, general academic assistant for students. Answer clearly, be practical, admit uncertainty when needed, and use concise structure when it helps.'
+      },
+      {
+        role: 'system',
+        content: JSON.stringify({
+          userContext: {
+            id: userContext.id,
+            name: userContext.name,
+            role: userContext.role
+          }
+        })
+      },
+      ...recentHistory,
+      {
+        role: 'user',
+        content: message
+      }
+    ]
+  });
+
+  const answer = completion?.choices?.[0]?.message?.content?.trim();
+  if (!answer) {
+    throw new Error('OpenAI returned an empty general chat response');
+  }
+
+  return {
+    model,
+    answer
+  };
+}
+
 async function synthesizeSpeech(text, outputPath) {
   const client = getClient();
   const model = process.env.OPENAI_TTS_MODEL;
@@ -291,6 +345,7 @@ module.exports = {
   generateLecturePackage,
   repairLecturePackage,
   answerLectureQuestion,
+  answerGeneralChat,
   synthesizeSpeech,
   transcribeAudio,
   smokeTest,

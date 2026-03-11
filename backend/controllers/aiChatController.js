@@ -1,7 +1,8 @@
-const { AIChatSession, AIChatMessage, User } = require('../models');
-const geminiService = require('../services/geminiService');
+const { AIChatSession, AIChatMessage } = require('../models');
+const openaiService = require('../services/openaiService');
 
-// Create a new chat session
+const WELCOME_MESSAGE = "Hello! I'm SkillSphere AI, your academic assistant. I can help with studying, coding, writing, research, course questions, and general learning support. Ask me anything you want to work through.";
+
 exports.createSession = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -13,10 +14,9 @@ exports.createSession = async (req, res) => {
       lastMessageAt: new Date()
     });
 
-    // Create the initial AI welcome message
     const welcomeMessage = await AIChatMessage.create({
       sessionId: session.id,
-      content: "Hello! I'm SkillSphere AI, your personal assistant. I can help you with anything:\n\n• Answer any question on any topic\n• Help with coding and programming\n• Explain concepts in any subject\n• Assist with writing and research\n• Provide advice and guidance\n• Creative ideas and brainstorming\n\nAsk me anything - I'm here to help!",
+      content: WELCOME_MESSAGE,
       sender: 'ai',
       timestamp: new Date()
     });
@@ -34,7 +34,6 @@ exports.createSession = async (req, res) => {
   }
 };
 
-// Get all chat sessions for user
 exports.getSessions = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -57,7 +56,6 @@ exports.getSessions = async (req, res) => {
   }
 };
 
-// Get a specific session with all messages
 exports.getSession = async (req, res) => {
   try {
     const { id } = req.params;
@@ -67,8 +65,7 @@ exports.getSession = async (req, res) => {
       where: { id, userId },
       include: [{
         model: AIChatMessage,
-        as: 'messages',
-        order: [['timestamp', 'ASC']]
+        as: 'messages'
       }]
     });
 
@@ -76,32 +73,38 @@ exports.getSession = async (req, res) => {
       return res.status(404).json({ error: 'Chat session not found' });
     }
 
-    res.json({ success: true, session });
+    const orderedMessages = (session.messages || [])
+      .slice()
+      .sort((a, b) => new Date(a.timestamp || a.createdAt) - new Date(b.timestamp || b.createdAt));
+
+    res.json({
+      success: true,
+      session: {
+        ...session.toJSON(),
+        messages: orderedMessages
+      }
+    });
   } catch (error) {
     console.error('Get chat session error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-// Send a message to a session
 exports.sendMessage = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
-    const { content } = req.body;
+    const content = req.body.content?.trim();
 
-    if (!content || !content.trim()) {
+    if (!content) {
       return res.status(400).json({ error: 'Message content is required' });
     }
 
-    // Verify session belongs to user
     const session = await AIChatSession.findOne({
       where: { id, userId },
       include: [{
         model: AIChatMessage,
-        as: 'messages',
-        order: [['timestamp', 'ASC']],
-        limit: 20 // Get last 20 messages for context
+        as: 'messages'
       }]
     });
 
@@ -109,24 +112,37 @@ exports.sendMessage = async (req, res) => {
       return res.status(404).json({ error: 'Chat session not found' });
     }
 
-    // Create user message
+    const orderedMessages = (session.messages || [])
+      .slice()
+      .sort((a, b) => new Date(a.timestamp || a.createdAt) - new Date(b.timestamp || b.createdAt));
+
     const userMessage = await AIChatMessage.create({
       sessionId: id,
-      content: content.trim(),
+      content,
       sender: 'user',
       timestamp: new Date()
     });
 
-    // Get chat history for context (exclude the welcome message)
-    const chatHistory = (session.messages || [])
-      .filter(msg => msg.sender === 'user' || !msg.content.includes("I'm SkillSphere AI"))
-      .map(msg => ({
-        sender: msg.sender,
-        content: msg.content
+    const chatHistory = orderedMessages
+      .filter((message) => message.sender === 'user' || message.content !== WELCOME_MESSAGE)
+      .slice(-12)
+      .map((message) => ({
+        sender: message.sender,
+        content: message.content
       }));
 
-    // Generate AI response using Gemini
-    const aiResponseContent = await geminiService.generateResponse(content.trim(), chatHistory);
+    let aiResponseContent;
+    try {
+      const response = await openaiService.answerGeneralChat({
+        message: content,
+        chatHistory,
+        userContext: req.user
+      });
+      aiResponseContent = response.answer;
+    } catch (error) {
+      console.error('OpenAI chat generation error:', error);
+      aiResponseContent = "I'm having trouble reaching the AI service right now. Please try again in a moment.";
+    }
 
     const aiMessage = await AIChatMessage.create({
       sessionId: id,
@@ -135,14 +151,11 @@ exports.sendMessage = async (req, res) => {
       timestamp: new Date()
     });
 
-    // Update session title if it's the first user message and still has default title
     if (session.title === 'New Chat') {
-      // Create a title from the first message (truncate to 50 chars)
-      const newTitle = content.trim().substring(0, 50) + (content.length > 50 ? '...' : '');
+      const newTitle = content.substring(0, 50) + (content.length > 50 ? '...' : '');
       await session.update({ title: newTitle });
     }
 
-    // Update last message timestamp
     await session.update({ lastMessageAt: new Date() });
 
     res.json({
@@ -156,7 +169,6 @@ exports.sendMessage = async (req, res) => {
   }
 };
 
-// Update session title
 exports.updateSession = async (req, res) => {
   try {
     const { id } = req.params;
@@ -184,7 +196,6 @@ exports.updateSession = async (req, res) => {
   }
 };
 
-// Delete a chat session
 exports.deleteSession = async (req, res) => {
   try {
     const { id } = req.params;
@@ -198,12 +209,10 @@ exports.deleteSession = async (req, res) => {
       return res.status(404).json({ error: 'Chat session not found' });
     }
 
-    // Delete all messages first (due to foreign key constraint)
     await AIChatMessage.destroy({
       where: { sessionId: id }
     });
 
-    // Delete the session
     await session.destroy();
 
     res.json({ success: true, message: 'Chat session deleted successfully' });
@@ -212,4 +221,3 @@ exports.deleteSession = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-

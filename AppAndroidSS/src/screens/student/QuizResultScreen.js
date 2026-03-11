@@ -23,32 +23,48 @@ const QuizResultScreen = () => {
     passed,
     passingThreshold,
     unlockedTopic,
-  } = route.params;
+  } = route.params || {};
 
   const isWeb = Platform.OS === 'web';
   const maxWidth = isWeb && width > 1200 ? 1200 : '100%';
   const scoreColor = passed ? theme.colors.success : theme.colors.warning;
+  const canReviewLecture = Boolean(courseId && topicId);
+  const canOpenNext = Boolean(courseId && passed && unlockedTopic?.id);
+  const scoreLabel = passed ? 'Passed' : 'Retry Needed';
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <AppHeader title="Quiz Results" />
       <ScrollView style={styles.scrollView} contentContainerStyle={[styles.contentContainer, { maxWidth, alignSelf: 'center', width: '100%' }]}>
         <Animated.View entering={FadeIn.duration(600)}>
-          <AppCard style={styles.resultCard}>
+          <AppCard style={[styles.resultCard, { backgroundColor: theme.colors.card }]}>
+            <View style={[styles.resultBadge, { backgroundColor: `${scoreColor}18` }]}>
+              <Text style={[styles.resultBadgeText, { color: scoreColor }]}>{scoreLabel}</Text>
+            </View>
             <View style={[styles.scoreCircle, { borderColor: scoreColor }]}>
               <Text style={[styles.scoreText, { color: scoreColor }]}>{score}%</Text>
             </View>
-            <Text style={[styles.scoreMessage, { color: theme.colors.textPrimary }]}>{passed ? 'Lecture Passed' : 'Retry Needed'}</Text>
+            <Text style={[styles.scoreMessage, { color: theme.colors.textPrimary }]}>{passed ? 'Lecture Passed' : 'Review and Retry'}</Text>
             <Text style={[styles.scoreDetails, { color: theme.colors.textSecondary }]}>
               You answered {correctAnswers} out of {totalQuestions} questions correctly.
             </Text>
             <Text style={[styles.scoreDetails, { color: theme.colors.textSecondary }]}>
               Passing threshold: {passingThreshold}%
             </Text>
+            <View style={styles.scoreSummaryRow}>
+              <View style={[styles.scoreSummaryCard, { backgroundColor: theme.colors.backgroundSecondary }]}>
+                <Text style={[styles.scoreSummaryLabel, { color: theme.colors.textSecondary }]}>Correct</Text>
+                <Text style={[styles.scoreSummaryValue, { color: theme.colors.textPrimary }]}>{correctAnswers}</Text>
+              </View>
+              <View style={[styles.scoreSummaryCard, { backgroundColor: theme.colors.backgroundSecondary }]}>
+                <Text style={[styles.scoreSummaryLabel, { color: theme.colors.textSecondary }]}>Questions</Text>
+                <Text style={[styles.scoreSummaryValue, { color: theme.colors.textPrimary }]}>{totalQuestions}</Text>
+              </View>
+            </View>
           </AppCard>
         </Animated.View>
 
-        <AppCard style={styles.feedbackCard}>
+        <AppCard style={[styles.feedbackCard, { backgroundColor: theme.colors.card }]}>
           <Icon name={passed ? 'checkmark-circle' : 'refresh-circle'} size={32} color={scoreColor} />
           <Text style={[styles.feedbackTitle, { color: theme.colors.textPrimary }]}>{passed ? 'Next Topic Unlocked' : 'Review and Retry'}</Text>
           <Text style={[styles.feedbackText, { color: theme.colors.textSecondary }]}>
@@ -63,16 +79,17 @@ const QuizResultScreen = () => {
         <View style={styles.actions}>
           <AppButton
             title="Review Lecture"
-            onPress={() => navigation.navigate('Learning', { courseId, topicId, lectureId })}
+            onPress={() => canReviewLecture && navigation.navigate('Learning', { courseId, topicId, lectureId })}
             variant="outline"
             fullWidth
+            disabled={!canReviewLecture}
             icon={<Icon name="book" size={16} color={theme.colors.primary} />}
             iconPosition="left"
             style={styles.actionButton}
           />
           <AppButton
             title={passed && unlockedTopic ? 'Open Next Topic' : 'Back to Course'}
-            onPress={() => navigation.navigate(passed && unlockedTopic ? 'Learning' : 'CourseDetail', passed && unlockedTopic ? { courseId, topicId: unlockedTopic.id } : { courseId })}
+            onPress={() => navigation.navigate(canOpenNext ? 'Learning' : 'CourseDetail', canOpenNext ? { courseId, topicId: unlockedTopic.id } : { courseId })}
             variant="primary"
             fullWidth
             icon={<Icon name="arrow-forward" size={16} color="#ffffff" />}
@@ -90,10 +107,16 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   contentContainer: { padding: 20 },
   resultCard: { alignItems: 'center', marginBottom: 20 },
+  resultBadge: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 14 },
+  resultBadgeText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
   scoreCircle: { width: 120, height: 120, borderRadius: 60, borderWidth: 4, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   scoreText: { fontSize: 36, fontWeight: 'bold' },
   scoreMessage: { fontSize: 24, fontWeight: 'bold', marginBottom: 8 },
   scoreDetails: { fontSize: 16, textAlign: 'center', marginBottom: 4 },
+  scoreSummaryRow: { flexDirection: 'row', gap: 12, marginTop: 18 },
+  scoreSummaryCard: { minWidth: 110, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center' },
+  scoreSummaryLabel: { fontSize: 12, fontWeight: '600', marginBottom: 4 },
+  scoreSummaryValue: { fontSize: 20, fontWeight: '700' },
   feedbackCard: { alignItems: 'center', marginBottom: 20 },
   feedbackTitle: { fontSize: 20, fontWeight: 'bold', marginTop: 12, marginBottom: 8 },
   feedbackText: { fontSize: 16, textAlign: 'center', lineHeight: 24 },

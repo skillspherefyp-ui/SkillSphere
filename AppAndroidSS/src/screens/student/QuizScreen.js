@@ -18,7 +18,7 @@ const QuizScreen = () => {
   const { theme } = useTheme();
   const { width } = useWindowDimensions();
   const { fetchCourses } = useData();
-  const { courseId, topicId, lectureId } = route.params;
+  const { courseId, topicId, lectureId } = route.params || {};
   const [quiz, setQuiz] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -30,8 +30,12 @@ const QuizScreen = () => {
   const questions = quiz?.questions || [];
   const question = questions[currentQuestion];
   const totalQuestions = questions.length;
-
   useEffect(() => {
+    if (!lectureId) {
+      setLoading(false);
+      return;
+    }
+
     loadQuiz();
   }, [lectureId]);
 
@@ -76,7 +80,7 @@ const QuizScreen = () => {
   };
 
   const handleSubmit = async () => {
-    if (!quiz) return;
+    if (!quiz || !lectureId) return;
     setSubmitting(true);
 
     try {
@@ -139,6 +143,18 @@ const QuizScreen = () => {
       <ProgressBar progress={((currentQuestion + 1) / totalQuestions) * 100} style={styles.progressBar} />
 
       <ScrollView style={styles.content} contentContainerStyle={[styles.contentContainer, { maxWidth, alignSelf: 'center', width: '100%' }]}>
+        <AppCard style={[styles.summaryCard, { backgroundColor: theme.colors.card }]}>
+          <View style={styles.summaryRow}>
+            <View>
+              <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Stored lecture quiz</Text>
+              <Text style={[styles.summaryValue, { color: theme.colors.textPrimary }]}>Question {currentQuestion + 1} of {totalQuestions}</Text>
+            </View>
+            <View style={[styles.summaryBadge, { backgroundColor: canAdvance ? `${theme.colors.primary}18` : theme.colors.border }]}>
+              <Text style={[styles.summaryBadgeText, { color: canAdvance ? theme.colors.primary : theme.colors.textTertiary }]}>{canAdvance ? 'Answered' : 'Select one answer'}</Text>
+            </View>
+          </View>
+        </AppCard>
+
         <AppCard style={styles.questionContainer}>
           <Text style={[styles.questionNumber, { color: theme.colors.primary }]}>Question {currentQuestion + 1}</Text>
           <Text style={[styles.questionText, { color: theme.colors.textPrimary }]}>{question.prompt}</Text>
@@ -153,7 +169,7 @@ const QuizScreen = () => {
                   style={[
                     styles.option,
                     {
-                      backgroundColor: theme.colors.card,
+                      backgroundColor: isSelected ? `${theme.colors.primary}12` : theme.colors.card,
                       borderColor: isSelected ? theme.colors.primary : theme.colors.border,
                     },
                   ]}
@@ -163,7 +179,10 @@ const QuizScreen = () => {
                     <View style={styles.optionIndicator}>
                       <Icon name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={22} color={isSelected ? theme.colors.primary : theme.colors.textTertiary} />
                     </View>
-                    <Text style={[styles.optionText, { color: theme.colors.textPrimary }]}>{option}</Text>
+                    <View style={styles.optionTextWrap}>
+                      <Text style={[styles.optionLabel, { color: isSelected ? theme.colors.primary : theme.colors.textSecondary }]}>{String.fromCharCode(65 + index)}</Text>
+                      <Text style={[styles.optionText, { color: theme.colors.textPrimary }]}>{option}</Text>
+                    </View>
                   </View>
                 </TouchableOpacity>
               </Animated.View>
@@ -203,13 +222,21 @@ const styles = StyleSheet.create({
   contentContainer: { padding: 20 },
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   loadingText: { fontSize: 15 },
+  summaryCard: { marginBottom: 16 },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  summaryLabel: { fontSize: 12, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.6 },
+  summaryValue: { fontSize: 16, fontWeight: '700' },
+  summaryBadge: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  summaryBadgeText: { fontSize: 11, fontWeight: '700' },
   questionContainer: { marginBottom: 24 },
   questionNumber: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
   questionText: { fontSize: 20, fontWeight: '600', lineHeight: 28 },
   optionsContainer: { gap: 12 },
-  option: { borderRadius: 12, padding: 16, borderWidth: 2 },
+  option: { borderRadius: 16, padding: 16, borderWidth: 2 },
   optionContent: { flexDirection: 'row', alignItems: 'center' },
   optionIndicator: { marginRight: 12 },
+  optionTextWrap: { flex: 1 },
+  optionLabel: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
   optionText: { flex: 1, fontSize: 16 },
   footer: { flexDirection: 'row', padding: 20, borderTopWidth: 1, gap: 12 },
   footerButton: { flex: 1 },

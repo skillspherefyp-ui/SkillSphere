@@ -43,8 +43,8 @@ import React, { useState, useMemo } from 'react';
   const AddTopicsScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
-    const { courseId } = route.params;
-    const { courses, updateCourse, addTopic, updateTopic, deleteTopic, fetchCourses } = useData();
+    const { courseId } = route.params || {};
+    const { courses, addTopic, updateTopic, deleteTopic, fetchCourses } = useData();
     const { user, logout } = useAuth();
     const { theme, isDark } = useTheme();
     const { width } = useWindowDimensions();
@@ -170,6 +170,22 @@ import React, { useState, useMemo } from 'react';
       }
     };
 
+    const syncOutline = async (topicId, outlineText) => {
+      if (!topicId || !outlineText?.trim()) {
+        return;
+      }
+
+      try {
+        await aiTutorAPI.updateOutline(topicId, outlineText.trim());
+      } catch (error) {
+        Toast.show({
+          type: 'info',
+          text1: 'Outline Not Synced',
+          text2: error.message || 'The topic was saved, but the AI outline could not be updated yet.',
+        });
+      }
+    };
+
     const handleSaveTopic = async () => {
       if (!topicTitle.trim()) {
         Toast.show({
@@ -187,9 +203,14 @@ import React, { useState, useMemo } from 'react';
         description: material.description || '',
       }));
 
-      if (editingTopic) {
-        const result = await updateTopic(editingTopic.id, { title: topicTitle });
-        if (result.success) {
+      try {
+        if (editingTopic) {
+          const result = await updateTopic(editingTopic.id, { title: topicTitle });
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to update topic');
+          }
+
+          await syncOutline(editingTopic.id, topicTitle);
           handleCloseModal();
           Toast.show({
             type: 'success',
@@ -197,35 +218,33 @@ import React, { useState, useMemo } from 'react';
             text2: 'Topic updated successfully!',
           });
           await fetchCourses();
-        } else {
-          Toast.show({
-            type: 'error',
-            text1: 'Error',
-            text2: result.error || 'Failed to update topic',
-          });
+          return;
         }
-      } else {
+
         const result = await addTopic({
           courseId: courseId,
           title: topicTitle,
           materials: formattedMaterials,
         });
 
-        if (result.success) {
-          handleCloseModal();
-          Toast.show({
-            type: 'success',
-            text1: 'Success',
-            text2: 'Topic added successfully!',
-          });
-          await fetchCourses();
-        } else {
-          Toast.show({
-            type: 'error',
-            text1: 'Error',
-            text2: result.error || 'Failed to add topic',
-          });
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to add topic');
         }
+
+        await syncOutline(result.topic?.id, topicTitle);
+        handleCloseModal();
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Topic added successfully!',
+        });
+        await fetchCourses();
+      } catch (error) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: error.message || 'Unable to save this topic.',
+        });
       }
     };
 

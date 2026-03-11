@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import MaterialIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import MainLayout from '../../components/ui/MainLayout';
@@ -42,6 +43,11 @@ const AIChatScreen = () => {
   const flatListRef = useRef(null);
   const recognitionRef = useRef(null);
   const isWeb = Platform.OS === 'web';
+  const assistantSubtitle = isTyping
+    ? 'Thinking through your question'
+    : sendingMessage
+      ? 'Sending your message'
+      : 'General academic help, study support, and course guidance';
 
   // Responsive breakpoints
   const isPhone = width < 768;
@@ -51,6 +57,12 @@ const AIChatScreen = () => {
   // Fetch chat sessions on mount
   useEffect(() => {
     fetchSessions();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop?.();
+    };
   }, []);
 
   const fetchSessions = async () => {
@@ -72,7 +84,7 @@ const AIChatScreen = () => {
       // If error, show default welcome message
       setMessages([{
         id: '1',
-        content: "Hello! I'm SkillSphere AI, your personal assistant. I can help you with anything:\n\n• Answer any question on any topic\n• Help with coding and programming\n• Explain concepts in any subject\n• Assist with writing and research\n• Provide advice and guidance\n\nAsk me anything - I'm here to help!",
+        content: "Hello! I'm SkillSphere AI, your academic assistant. I can help with studying, coding, writing, research, course questions, and general learning support. Ask me anything you want to work through.",
         sender: 'ai',
         timestamp: new Date(),
       }]);
@@ -122,7 +134,7 @@ const AIChatScreen = () => {
       // Fallback to local message
       setMessages([{
         id: '1',
-        content: "Hello! I'm SkillSphere AI, your personal assistant. I can help you with anything:\n\n• Answer any question on any topic\n• Help with coding and programming\n• Explain concepts in any subject\n• Assist with writing and research\n• Provide advice and guidance\n\nAsk me anything - I'm here to help!",
+        content: "Hello! I'm SkillSphere AI, your academic assistant. I can help with studying, coding, writing, research, course questions, and general learning support. Ask me anything you want to work through.",
         sender: 'ai',
         timestamp: new Date(),
       }]);
@@ -202,7 +214,7 @@ const AIChatScreen = () => {
         setTimeout(() => {
           const aiMessage = {
             id: (Date.now() + 1).toString(),
-            content: "Thank you for your question! I'm here to help you learn better. This is a simulated response - in the full implementation, I would provide detailed answers based on your enrolled courses and learning materials.\n\nIs there anything specific you'd like to know more about?",
+            content: "I couldn't reach the live assistant just now, so this fallback response was shown instead. Please try again in a moment for a full AI answer.",
             sender: 'ai',
             timestamp: new Date(),
           };
@@ -531,10 +543,13 @@ const AIChatScreen = () => {
                   {currentSession?.title || 'AI Learning Assistant'}
                 </Text>
                 <Text style={[styles.chatHeaderSubtitle, { color: theme.colors.textSecondary }]}>
-                  Ask me anything about your courses
+                  {assistantSubtitle}
                 </Text>
               </View>
-              <View style={[styles.onlineIndicator, { backgroundColor: theme.colors.success }]} />
+              <View style={[styles.statusPill, { backgroundColor: isTyping ? `${theme.colors.primary}18` : `${theme.colors.success}18` }]}>
+                <View style={[styles.onlineIndicator, { backgroundColor: isTyping ? theme.colors.primary : theme.colors.success }]} />
+                <Text style={[styles.statusPillText, { color: isTyping ? theme.colors.primary : theme.colors.success }]}>{isTyping ? 'Thinking' : 'Ready'}</Text>
+              </View>
             </View>
 
             {/* Chat Messages */}
@@ -547,6 +562,13 @@ const AIChatScreen = () => {
               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
               showsVerticalScrollIndicator={false}
               ListFooterComponent={renderTypingIndicator}
+              ListEmptyComponent={(
+                <View style={styles.emptyChatState}>
+                  <MaterialIcon name="book-open-page-variant-outline" size={26} color={theme.colors.primary} />
+                  <Text style={[styles.emptyChatTitle, { color: theme.colors.textPrimary }]}>Start a focused conversation</Text>
+                  <Text style={[styles.emptyChatText, { color: theme.colors.textSecondary }]}>Ask for study help, explanations, summaries, or coding support.</Text>
+                </View>
+              )}
             />
 
             {/* Input Area */}
@@ -759,14 +781,42 @@ const getStyles = (theme, isDark, isWeb, isPhone, isLargeScreen, width, height) 
       fontSize: isPhone ? 11 : 13,
       marginTop: 2,
     },
+    statusPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+    },
     onlineIndicator: {
       width: isPhone ? 8 : 10,
       height: isPhone ? 8 : 10,
       borderRadius: isPhone ? 4 : 5,
     },
+    statusPillText: {
+      fontSize: 11,
+      fontWeight: '700',
+    },
     messagesList: {
       padding: isPhone ? 12 : 20,
       paddingBottom: 8,
+    },
+    emptyChatState: {
+      alignItems: 'center',
+      paddingVertical: 32,
+      paddingHorizontal: 20,
+    },
+    emptyChatTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      marginTop: 10,
+      marginBottom: 6,
+    },
+    emptyChatText: {
+      fontSize: 13,
+      textAlign: 'center',
+      lineHeight: 20,
     },
     messageContainer: {
       flexDirection: 'row',

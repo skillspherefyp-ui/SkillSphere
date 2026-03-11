@@ -29,7 +29,7 @@ const LearningScreen = () => {
   const route = useRoute();
   const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
-  const { courseId, topicId } = route.params;
+  const { courseId, topicId } = route.params || {};
   const { courses, checkEnrollment, fetchCourses } = useData();
   const course = courses.find((item) => item.id === courseId);
   const topic = course?.topics?.find((item) => item.id === topicId);
@@ -51,6 +51,7 @@ const LearningScreen = () => {
   const [lectureCompleted, setLectureCompleted] = useState(false);
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
   const [showTopicsSidebar, setShowTopicsSidebar] = useState(false);
+  const [revealedFlashcards, setRevealedFlashcards] = useState({});
 
   const recognitionRef = useRef(null);
   const playbackRef = useRef(null);
@@ -77,6 +78,15 @@ const LearningScreen = () => {
   const progress = orderedChunks.length ? Math.min(100, Math.round(((currentIndex + (lectureCompleted ? 1 : 0)) / orderedChunks.length) * 100)) : 0;
   const currentVisual = (lecture?.visualSuggestions || []).find((item) => item.sectionIndex === currentChunk?.sectionIndex);
   const currentSlides = (lecture?.slideOutlines || []).filter((slide) => slide.slideIndex === currentChunk?.sectionIndex);
+  const totalChunks = orderedChunks.length || 1;
+  const currentSlide = currentSlides[0];
+  const tutorStatus = lectureCompleted
+    ? { label: 'Lecture complete', detail: 'Open the stored quiz when you are ready to continue.', tone: '#10b981' }
+    : showQuestionPanel
+      ? { label: 'Paused for your question', detail: submittingQuestion ? 'AI Tutor is preparing a contextual answer.' : 'Ask for clarification, then resume from this exact chunk.', tone: '#f59e0b' }
+      : isPlaying
+        ? { label: voiceMode ? 'AI Tutor is explaining...' : 'Teaching in text mode', detail: voiceMode ? 'Voice delivery is active for this section.' : 'Stored lecture chunks are advancing in text mode.', tone: '#3b82f6' }
+        : { label: 'Ready to resume', detail: 'Resume when you are ready for the next chunk.', tone: '#6366f1' };
 
   useEffect(() => {
     const pulse = RNAnimated.loop(
@@ -91,8 +101,15 @@ const LearningScreen = () => {
 
   useEffect(() => {
     loadLecture();
-    return () => stopPlayback();
+    return () => {
+      stopPlayback();
+      stopRecognition();
+    };
   }, [topicId, voiceMode]);
+
+  useEffect(() => {
+    setRevealedFlashcards({});
+  }, [lecture?.id]);
 
   useEffect(() => {
     if (session && currentChunk && isPlaying && !showQuestionPanel && !lectureCompleted) {
@@ -142,7 +159,21 @@ const LearningScreen = () => {
         throw new Error(response.error || 'Unable to start tutor session');
       }
 
-      setLecture(response.lecture);
+      let nextLecture = response.lecture;
+      if (response.lecture?.id && !(response.lecture.flashcards || []).length) {
+        try {
+          const flashcardResponse = await aiTutorAPI.getFlashcards(response.lecture.id);
+          if (flashcardResponse.success) {
+            nextLecture = {
+              ...response.lecture,
+              flashcards: flashcardResponse.flashcards || [],
+            };
+          }
+        } catch (_) {
+        }
+      }
+
+      setLecture(nextLecture);
       setSession(response.session);
       setCurrentChunk(response.chunk);
       setLectureCompleted(response.session?.status === 'lecture_completed');
@@ -233,12 +264,18 @@ const LearningScreen = () => {
 
     try {
       if (isPlaying) {
-        await aiTutorAPI.pauseSession(session.id);
+        const response = await aiTutorAPI.pauseSession(session.id);
+        if (!response.success) {
+          throw new Error(response.error || 'Unable to pause tutor session');
+        }
         stopPlayback();
         setShowQuestionPanel(true);
         setIsPlaying(false);
       } else {
         const response = await aiTutorAPI.resumeSession(session.id);
+        if (!response.success) {
+          throw new Error(response.error || 'Unable to resume tutor session');
+        }
         setSession(response.session);
         setCurrentChunk(response.chunk);
         setShowQuestionPanel(false);
@@ -333,6 +370,50 @@ const LearningScreen = () => {
     link.download = `${lecture.title.replace(/\s+/g, '-').toLowerCase()}-flashcards.json`;
     link.click();
     window.URL.revokeObjectURL(url);
+  };
+
+  const goToNextChunk = async () => {
+    if (!session?.id || lectureCompleted) return;
+
+    stopPlayback();
+    setIsPlaying(false);
+
+    try {
+      const response = await aiTutorAPI.getNextChunk(session.id);
+      if (response.lectureCompleted || !response.chunk) {
+        setLectureCompleted(true);
+        setShowCompleteDialog(true);
+        await fetchCourses();
+        return;
+      }
+
+      setSession(response.session);
+      setCurrentChunk(response.chunk);
+      setShowQuestionPanel(false);
+      setIsPlaying(true);
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Next Chunk Unavailable',
+        text2: error.message || 'Unable to advance to the next lecture chunk.',
+      });
+    }
+  };
+
+  const openQuestionPanel = async () => {
+    if (!session || !isPlaying) {
+      setShowQuestionPanel(true);
+      return;
+    }
+
+    await togglePause();
+  };
+
+  const toggleFlashcardReveal = (cardId) => {
+    setRevealedFlashcards((prev) => ({
+      ...prev,
+      [cardId]: !prev[cardId],
+    }));
   };
 
   const openQuiz = () => {
@@ -430,6 +511,7 @@ const LearningScreen = () => {
             <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
           </TouchableOpacity>
           <View style={styles.progressBarWrap}>
+            <Text style={[styles.progressLabel, { color: theme.colors.textSecondary }]}>Chunk {Math.min(currentIndex + 1, totalChunks)} of {totalChunks}</Text>
             <View style={styles.progressBar}>
               <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: theme.colors.primary }]} />
             </View>
@@ -438,6 +520,17 @@ const LearningScreen = () => {
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
+          <View style={[styles.statusCard, { backgroundColor: isDark ? '#121a2b' : '#eef4ff', borderColor: `${tutorStatus.tone}33` }]}>
+            <View style={styles.statusHeader}>
+              <View style={styles.statusTitleWrap}>
+                <View style={[styles.statusDot, { backgroundColor: tutorStatus.tone }]} />
+                <Text style={[styles.statusTitle, { color: theme.colors.textPrimary }]}>{tutorStatus.label}</Text>
+              </View>
+              <Text style={[styles.statusMeta, { color: tutorStatus.tone }]}>{voiceMode ? 'Voice' : 'Text'}</Text>
+            </View>
+            <Text style={[styles.statusText, { color: theme.colors.textSecondary }]}>{tutorStatus.detail}</Text>
+          </View>
+
           <View style={styles.topRow}>
             <View style={[styles.whiteboard, { backgroundColor: isDark ? '#1a1a2e' : '#1e293b' }]}>
               <View style={styles.cardHeader}>
@@ -450,11 +543,11 @@ const LearningScreen = () => {
               <Text style={styles.whiteboardSummary}>{currentChunk.summary}</Text>
               <Text style={styles.sectionLabel}>Slide bullets</Text>
               {(currentChunk.slideBullets || []).map((bullet, index) => (
-                <Text key={`${bullet}-${index}`} style={styles.sectionText}>• {bullet}</Text>
+                <Text key={`${bullet}-${index}`} style={styles.sectionText}>- {bullet}</Text>
               ))}
               <Text style={styles.sectionLabel}>Examples</Text>
               {(currentChunk.examples || []).map((example, index) => (
-                <Text key={`${example}-${index}`} style={styles.sectionText}>• {example}</Text>
+                <Text key={`${example}-${index}`} style={styles.sectionText}>- {example}</Text>
               ))}
               <Text style={styles.sectionLabel}>Visual suggestion</Text>
               <Text style={styles.sectionText}>{currentVisual?.suggestion || currentChunk.visualSuggestion || 'Use the slide bullets as the diagram structure for this section.'}</Text>
@@ -471,9 +564,32 @@ const LearningScreen = () => {
                   </View>
                 </RNAnimated.View>
                 <Text style={[styles.tutorMeta, { color: theme.colors.textSecondary }]}>{lecture.title}</Text>
-                <Text style={[styles.tutorMeta, { color: theme.colors.textSecondary }]}>Section {currentChunk.sectionIndex + 1} · Chunk {currentChunk.chunkIndex + 1}</Text>
+                <Text style={[styles.tutorMeta, { color: theme.colors.textSecondary }]}>Section {currentChunk.sectionIndex + 1} | Chunk {currentChunk.chunkIndex + 1}</Text>
               </View>
             )}
+          </View>
+
+          <View style={styles.visualRow}>
+            <View style={[styles.visualCard, { backgroundColor: isDark ? '#131c31' : '#ffffff', borderColor: theme.colors.border }]}>
+              <View style={styles.visualHeader}>
+                <Text style={[styles.visualEyebrow, { color: theme.colors.primary }]}>Slide Outline</Text>
+                <MaterialIcon name="presentation" size={18} color={theme.colors.primary} />
+              </View>
+              <Text style={[styles.visualTitle, { color: theme.colors.textPrimary }]}>{currentSlide?.title || currentChunk.title}</Text>
+              <Text style={[styles.visualBody, { color: theme.colors.textSecondary }]}>{currentSlide?.notes || currentChunk.summary || lecture.summary}</Text>
+            </View>
+            <View style={[styles.visualCard, { backgroundColor: isDark ? '#111827' : '#ffffff', borderColor: theme.colors.border }]}>
+              <View style={styles.visualHeader}>
+                <Text style={[styles.visualEyebrow, { color: '#10b981' }]}>Teaching Visual</Text>
+                <MaterialIcon name="vector-square" size={18} color="#10b981" />
+              </View>
+              <Text style={[styles.visualTitle, { color: theme.colors.textPrimary }]}>Diagram suggestion</Text>
+              <Text style={[styles.visualBody, { color: theme.colors.textSecondary }]}>{currentVisual?.suggestion || currentChunk.visualSuggestion || 'Use the current slide bullets as the structure for a clean teaching diagram.'}</Text>
+              <View style={[styles.visualHint, { backgroundColor: isDark ? 'rgba(16,185,129,0.12)' : '#ecfdf5' }]}>
+                <Text style={[styles.visualHintLabel, { color: '#10b981' }]}>Whiteboard hint</Text>
+                <Text style={[styles.visualHintText, { color: theme.colors.textPrimary }]}>{currentChunk.whiteboardSuggestion || 'Sketch the relationship between the main bullets and example above.'}</Text>
+              </View>
+            </View>
           </View>
 
           <View style={[styles.subtitlesCard, { backgroundColor: isDark ? '#1a1a2e' : '#f1f5f9' }]}>
@@ -492,14 +608,28 @@ const LearningScreen = () => {
                   <Icon name="close" size={20} color={theme.colors.textSecondary} />
                 </TouchableOpacity>
               </View>
-              <ScrollView style={styles.chatScroll}>
+              <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatScrollContent}>
+                {!chatMessages.length && !submittingQuestion && (
+                  <View style={[styles.chatEmptyState, { borderColor: theme.colors.border }]}>
+                    <MaterialIcon name="chat-processing-outline" size={20} color={theme.colors.primary} />
+                    <Text style={[styles.chatEmptyTitle, { color: theme.colors.textPrimary }]}>Ask about this lecture point</Text>
+                    <Text style={[styles.chatEmptyText, { color: theme.colors.textSecondary }]}>The AI Tutor will answer from the current lecture context and then you can resume from this chunk.</Text>
+                  </View>
+                )}
                 {chatMessages.map((message, index) => (
-                  <View key={`${message.type}-${index}`} style={[styles.chatBubble, message.type === 'user' ? styles.chatBubbleUser : styles.chatBubbleAi]}>
-                    <Text style={{ color: message.type === 'user' ? '#fff' : theme.colors.textPrimary }}>{message.text}</Text>
+                  <View key={`${message.type}-${index}`} style={[styles.chatBubble, message.type === 'user' ? styles.chatBubbleUser : [styles.chatBubbleAi, { borderColor: theme.colors.border }]]}>
+                    <Text style={[styles.chatRole, { color: message.type === 'user' ? 'rgba(255,255,255,0.75)' : theme.colors.primary }]}>{message.type === 'user' ? 'You' : 'AI Tutor'}</Text>
+                    <Text style={{ color: message.type === 'user' ? '#fff' : theme.colors.textPrimary, lineHeight: 21 }}>{message.text}</Text>
                   </View>
                 ))}
+                {submittingQuestion && (
+                  <View style={[styles.chatBubble, styles.chatBubbleAi, { borderColor: theme.colors.border }]}>
+                    <Text style={[styles.chatRole, { color: theme.colors.primary }]}>AI Tutor</Text>
+                    <Text style={{ color: theme.colors.textSecondary }}>Preparing a contextual explanation...</Text>
+                  </View>
+                )}
               </ScrollView>
-              <View style={styles.inputRow}>
+              <View style={[styles.inputRow, { borderColor: theme.colors.border, backgroundColor: isDark ? '#111827' : '#f8fafc' }]}>
                 <TouchableOpacity style={[styles.iconButton, { backgroundColor: isRecording ? theme.colors.error : theme.colors.primary }]} onPress={startVoiceInput}>
                   <Icon name={isRecording ? 'stop' : 'mic'} size={18} color="#fff" />
                 </TouchableOpacity>
@@ -514,6 +644,7 @@ const LearningScreen = () => {
                   onSubmitEditing={askQuestion}
                   placeholder={isRecording ? 'Listening...' : 'Type your question...'}
                   placeholderTextColor={theme.colors.textTertiary}
+                  multiline
                 />
                 <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.primary }]} onPress={askQuestion} disabled={submittingQuestion}>
                   {submittingQuestion ? <ActivityIndicator size="small" color="#fff" /> : <Icon name="send" size={18} color="#fff" />}
@@ -545,20 +676,20 @@ const LearningScreen = () => {
         </ScrollView>
 
         <View style={styles.footer}>
-          <TouchableOpacity style={[styles.pauseButton, { backgroundColor: '#10b981' }]} onPress={togglePause}>
+          <TouchableOpacity style={[styles.pauseButton, { backgroundColor: isPlaying ? '#10b981' : '#4f46e5' }]} onPress={togglePause}>
             <Icon name={isPlaying ? 'pause' : 'play'} size={18} color="#fff" />
-            <Text style={styles.pauseText}>{isPlaying ? 'Pause & Ask' : 'Resume'}</Text>
+            <Text style={styles.pauseText}>{isPlaying ? 'Pause' : 'Resume'}</Text>
           </TouchableOpacity>
           <View style={styles.footerControls}>
+            <TouchableOpacity style={[styles.iconButton, styles.footerIcon, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]} onPress={goToNextChunk} disabled={lectureCompleted}>
+              <Icon name="play-skip-forward" size={18} color={lectureCompleted ? theme.colors.textTertiary : theme.colors.textSecondary} />
+            </TouchableOpacity>
             <TouchableOpacity style={[styles.iconButton, styles.footerIcon, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]} onPress={() => setVoiceMode((prev) => !prev)}>
               <MaterialIcon name={voiceMode ? 'volume-high' : 'volume-off'} size={18} color={theme.colors.textSecondary} />
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.iconButton, styles.footerIcon, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]}
-              onPress={() => {
-                setShowQuestionPanel(true);
-                if (isPlaying) togglePause();
-              }}
+              onPress={openQuestionPanel}
             >
               <Icon name="chatbubble-outline" size={18} color={theme.colors.textSecondary} />
             </TouchableOpacity>
@@ -592,14 +723,21 @@ const LearningScreen = () => {
               </TouchableOpacity>
             </View>
             <ScrollView>
-              {(lecture.flashcards || []).map((card, index) => (
-                <View key={card.id || index} style={[styles.flashcard, { borderColor: theme.colors.border }]}>
-                  <Text style={[styles.flashcardLabel, { color: theme.colors.primary }]}>Front</Text>
-                  <Text style={[styles.flashcardText, { color: theme.colors.textPrimary }]}>{card.frontText}</Text>
-                  <Text style={[styles.flashcardLabel, { color: theme.colors.primary }]}>Back</Text>
-                  <Text style={[styles.flashcardText, { color: theme.colors.textSecondary }]}>{card.backText}</Text>
-                </View>
-              ))}
+              {(lecture.flashcards || []).map((card, index) => {
+                const cardId = card.id || index;
+                const revealed = Boolean(revealedFlashcards[cardId]);
+                return (
+                  <TouchableOpacity key={cardId} activeOpacity={0.92} onPress={() => toggleFlashcardReveal(cardId)} style={[styles.flashcard, { borderColor: theme.colors.border, backgroundColor: isDark ? '#101827' : '#f8fafc' }]}>
+                    <View style={styles.flashcardHeader}>
+                      <Text style={[styles.flashcardLabel, { color: theme.colors.primary }]}>{revealed ? 'Answer' : 'Prompt'}</Text>
+                      <Text style={[styles.flashcardHint, { color: theme.colors.textTertiary }]}>{revealed ? 'Tap to hide' : 'Tap to reveal'}</Text>
+                    </View>
+                    <Text style={[styles.flashcardFront, { color: theme.colors.textPrimary }]}>{revealed ? card.backText : card.frontText}</Text>
+                    <View style={[styles.flashcardDivider, { backgroundColor: theme.colors.border }]} />
+                    <Text style={[styles.flashcardMeta, { color: theme.colors.textSecondary }]}>{revealed ? 'Use this answer to confirm your recall.' : 'Try answering from memory before revealing the back.'}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
             <AppButton title="Export Flashcards" onPress={exportFlashcards} variant="outline" />
           </View>
@@ -622,7 +760,7 @@ const LearningScreen = () => {
                 <View key={slide.id || index} style={styles.noteSection}>
                   <Text style={[styles.noteSectionTitle, { color: theme.colors.primary }]}>{slide.title}</Text>
                   {(slide.bullets || []).map((bullet, bulletIndex) => (
-                    <Text key={`${slide.id || index}-${bulletIndex}`} style={[styles.notesBody, { color: theme.colors.textPrimary }]}>• {bullet}</Text>
+                    <Text key={`${slide.id || index}-${bulletIndex}`} style={[styles.notesBody, { color: theme.colors.textPrimary }]}>- {bullet}</Text>
                   ))}
                   {!!slide.notes && <Text style={[styles.notesBody, { color: theme.colors.textSecondary }]}>{slide.notes}</Text>}
                 </View>
@@ -641,9 +779,17 @@ const styles = StyleSheet.create({
   loadingText: { marginTop: 16, fontSize: 16 },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   progressBarWrap: { flex: 1 },
+  progressLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6 },
   progressBar: { height: 8, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.12)', overflow: 'hidden' },
   progressFill: { height: '100%' },
   progressValue: { fontSize: 13, fontWeight: '700' },
+  statusCard: { borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1 },
+  statusHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 12 },
+  statusTitleWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  statusDot: { width: 10, height: 10, borderRadius: 5 },
+  statusTitle: { fontSize: 15, fontWeight: '700' },
+  statusMeta: { fontSize: 12, fontWeight: '700' },
+  statusText: { fontSize: 13, lineHeight: 20 },
   topRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
   whiteboard: { flex: 1, borderRadius: 16, padding: 18 },
   tutorPanel: { width: 190, borderRadius: 16, padding: 16, alignItems: 'center' },
@@ -658,6 +804,15 @@ const styles = StyleSheet.create({
   avatarInner: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#a855f7', justifyContent: 'center', alignItems: 'center' },
   avatarText: { color: '#fff', fontSize: 32, fontWeight: '700' },
   tutorMeta: { fontSize: 11, textAlign: 'center', marginTop: 8 },
+  visualRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
+  visualCard: { flex: 1, borderRadius: 16, padding: 16, borderWidth: 1 },
+  visualHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  visualEyebrow: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
+  visualTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
+  visualBody: { fontSize: 13, lineHeight: 21 },
+  visualHint: { borderRadius: 12, padding: 12, marginTop: 12 },
+  visualHintLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginBottom: 4 },
+  visualHintText: { fontSize: 13, lineHeight: 20 },
   subtitlesCard: { borderRadius: 16, padding: 16, marginBottom: 16 },
   subtitlesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   subtitlesTitle: { fontSize: 14, fontWeight: '700' },
@@ -667,11 +822,16 @@ const styles = StyleSheet.create({
   qaHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   qaTitle: { fontSize: 15, fontWeight: '700' },
   chatScroll: { maxHeight: 180, marginBottom: 12 },
-  chatBubble: { padding: 12, borderRadius: 12, marginBottom: 8, maxWidth: '88%' },
-  chatBubbleUser: { backgroundColor: '#4F46E5', alignSelf: 'flex-end' },
+  chatScrollContent: { paddingBottom: 4 },
+  chatEmptyState: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 14, padding: 14, alignItems: 'center', marginBottom: 10 },
+  chatEmptyTitle: { fontSize: 14, fontWeight: '700', marginTop: 8, marginBottom: 6 },
+  chatEmptyText: { fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  chatBubble: { padding: 12, borderRadius: 14, marginBottom: 8, maxWidth: '92%', borderWidth: 1 },
+  chatBubbleUser: { backgroundColor: '#4F46E5', alignSelf: 'flex-end', borderColor: '#4F46E5' },
   chatBubbleAi: { backgroundColor: 'rgba(79,70,229,0.1)', alignSelf: 'flex-start' },
-  inputRow: { flexDirection: 'row', gap: 8 },
-  input: { flex: 1, height: 44, borderWidth: 1, borderRadius: 22, paddingHorizontal: 16 },
+  chatRole: { fontSize: 11, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.6 },
+  inputRow: { flexDirection: 'row', gap: 8, borderWidth: 1, borderRadius: 18, padding: 10, alignItems: 'flex-end' },
+  input: { flex: 1, minHeight: 44, maxHeight: 92, borderWidth: 1, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 10 },
   actions: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   action: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', gap: 6 },
   actionText: { color: '#fff', fontSize: 12, fontWeight: '700' },
@@ -690,9 +850,13 @@ const styles = StyleSheet.create({
   modalCard: { borderRadius: 16, padding: 20, maxHeight: '85%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   modalTitle: { fontSize: 18, fontWeight: '700' },
-  flashcard: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 12 },
-  flashcardLabel: { fontSize: 12, fontWeight: '700', marginBottom: 4 },
-  flashcardText: { fontSize: 14, lineHeight: 22, marginBottom: 10 },
+  flashcard: { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 12 },
+  flashcardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12 },
+  flashcardLabel: { fontSize: 12, fontWeight: '700' },
+  flashcardHint: { fontSize: 11, fontWeight: '600' },
+  flashcardFront: { fontSize: 16, lineHeight: 24, marginBottom: 12, fontWeight: '600' },
+  flashcardDivider: { height: 1, marginBottom: 12 },
+  flashcardMeta: { fontSize: 12, lineHeight: 18 },
   notesTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
   notesBody: { fontSize: 14, lineHeight: 22, marginBottom: 6 },
   noteSection: { marginBottom: 14 },
