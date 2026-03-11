@@ -24,6 +24,8 @@ import { useTheme } from '../../context/ThemeContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { aiTutorAPI, API_BASE } from '../../services/apiClient';
 
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+
 const LearningScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -91,8 +93,8 @@ const LearningScreen = () => {
   useEffect(() => {
     const pulse = RNAnimated.loop(
       RNAnimated.sequence([
-        RNAnimated.timing(pulseAnim, { toValue: 1.08, duration: 900, useNativeDriver: true }),
-        RNAnimated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+        RNAnimated.timing(pulseAnim, { toValue: 1.08, duration: 900, useNativeDriver: USE_NATIVE_DRIVER }),
+        RNAnimated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: USE_NATIVE_DRIVER }),
       ])
     );
     if (voiceMode) pulse.start();

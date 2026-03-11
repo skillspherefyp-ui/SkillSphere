@@ -6,6 +6,8 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../../context/ThemeContext';
 import ThemeToggle from '../ThemeToggle';
 
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+
 // Helper functions to format date and time separately
 const formatDate = (date) => {
   const options = {
@@ -59,12 +61,12 @@ const AppHeader = ({
         Animated.timing(pulseAnim, {
           toValue: 0.4,
           duration: 800,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
         Animated.timing(pulseAnim, {
           toValue: 1,
           duration: 800,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
       ])
     );

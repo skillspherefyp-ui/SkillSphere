@@ -10,6 +10,8 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../../context/ThemeContext';
 
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+
 // Section 10 - Form Elements
 // Search input with icon, clear button, and optional filters
 
@@ -44,7 +46,7 @@ const SearchBar = ({
     setIsFocused(true);
     Animated.spring(scaleAnim, {
       toValue: 1.02,
-      useNativeDriver: true,
+      useNativeDriver: USE_NATIVE_DRIVER,
       friction: 8,
     }).start();
   };
@@ -53,7 +55,7 @@ const SearchBar = ({
     setIsFocused(false);
     Animated.spring(scaleAnim, {
       toValue: 1,
-      useNativeDriver: true,
+      useNativeDriver: USE_NATIVE_DRIVER,
       friction: 8,
     }).start();
   };

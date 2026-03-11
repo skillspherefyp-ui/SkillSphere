@@ -11,6 +11,8 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../../context/ThemeContext';
 
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+
 // Section 20 - Toast Notifications
 // Section 27 - Global Glassmorphism
 
@@ -70,12 +72,12 @@ const Toast = ({
         Animated.timing(slideAnim, {
           toValue: 0,
           duration: ANIMATION_DURATION,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
         Animated.timing(opacityAnim, {
           toValue: 1,
           duration: ANIMATION_DURATION,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
       ]).start();
 
@@ -94,12 +96,12 @@ const Toast = ({
       Animated.timing(slideAnim, {
         toValue: -100,
         duration: ANIMATION_DURATION,
-        useNativeDriver: true,
+        useNativeDriver: USE_NATIVE_DRIVER,
       }),
       Animated.timing(opacityAnim, {
         toValue: 0,
         duration: ANIMATION_DURATION,
-        useNativeDriver: true,
+        useNativeDriver: USE_NATIVE_DRIVER,
       }),
     ]).start(() => {
       setIsVisible(false);

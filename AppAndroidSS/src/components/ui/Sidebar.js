@@ -22,6 +22,7 @@ const LogoImage = require('../../assets/images/skillsphere-logo.png');
 const SIDEBAR_WIDTH = 260;       // Section 4.2: Width 260px
 const TRIGGER_ZONE = 12;         // Section 4.2: Collapsed trigger zone 12px
 const ANIMATION_DURATION = 220;  // Section 22.2: Slide-in duration 220ms
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 const Sidebar = ({
   items = [],
@@ -75,12 +76,12 @@ const Sidebar = ({
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: ANIMATION_DURATION,
-        useNativeDriver: true,
+        useNativeDriver: USE_NATIVE_DRIVER,
       }),
       Animated.timing(overlayOpacity, {
         toValue: 0.5,
         duration: ANIMATION_DURATION,
-        useNativeDriver: true,
+        useNativeDriver: USE_NATIVE_DRIVER,
       }),
     ]).start();
   };
@@ -92,12 +93,12 @@ const Sidebar = ({
       Animated.timing(slideAnim, {
         toValue: -SIDEBAR_WIDTH,
         duration: ANIMATION_DURATION,
-        useNativeDriver: true,
+        useNativeDriver: USE_NATIVE_DRIVER,
       }),
       Animated.timing(overlayOpacity, {
         toValue: 0,
         duration: ANIMATION_DURATION,
-        useNativeDriver: true,
+        useNativeDriver: USE_NATIVE_DRIVER,
       }),
     ]).start(() => {
       setIsVisible(false);
