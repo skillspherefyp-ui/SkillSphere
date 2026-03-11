@@ -318,7 +318,13 @@ const LearningScreen = () => {
     }
   };
 
-  const startVoiceInput = () => {
+  const startVoiceInput = async () => {
+    if (session && isPlaying) {
+      await openQuestionPanel();
+    } else {
+      setShowQuestionPanel(true);
+    }
+
     if (Platform.OS !== 'web') {
       Toast.show({
         type: 'info',

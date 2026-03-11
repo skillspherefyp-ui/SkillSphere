@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,13 +19,11 @@ import Toast from 'react-native-toast-message';
 import MainLayout from '../../components/ui/MainLayout';
 import MarkdownText from '../../components/ui/MarkdownText';
 import { useTheme } from '../../context/ThemeContext';
-import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { aiChatAPI } from '../../services/apiClient';
 
 const AIChatScreen = () => {
   const { theme, isDark } = useTheme();
-  const { user, logout } = useAuth();
   const navigation = useNavigation();
   const { width, height } = useWindowDimensions();
 
@@ -78,6 +76,8 @@ const AIChatScreen = () => {
           // Create a new session if none exist
           handleNewChat();
         }
+      } else {
+        throw new Error(response.error || 'Failed to load chat sessions');
       }
     } catch (error) {
       console.error('Error fetching sessions:', error);
@@ -96,15 +96,17 @@ const AIChatScreen = () => {
   const loadSession = async (sessionId) => {
     try {
       const response = await aiChatAPI.getSession(sessionId);
-      if (response.success && response.session) {
-        setCurrentSession(response.session);
-        const formattedMessages = (response.session.messages || []).map(msg => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp || msg.createdAt),
-        }));
-        setMessages(formattedMessages);
-        setShowChatSidebar(false);
+      if (!response.success || !response.session) {
+        throw new Error(response.error || 'Failed to load chat session');
       }
+
+      setCurrentSession(response.session);
+      const formattedMessages = (response.session.messages || []).map(msg => ({
+        ...msg,
+        timestamp: new Date(msg.timestamp || msg.createdAt),
+      }));
+      setMessages(formattedMessages);
+      setShowChatSidebar(false);
     } catch (error) {
       console.error('Error loading session:', error);
       Toast.show({
@@ -118,17 +120,18 @@ const AIChatScreen = () => {
   const handleNewChat = async () => {
     try {
       const response = await aiChatAPI.createSession({ title: 'New Chat' });
-      if (response.success && response.session) {
-        setCurrentSession(response.session);
-        const formattedMessages = (response.session.messages || []).map(msg => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp || msg.createdAt),
-        }));
-        setMessages(formattedMessages);
-        // Add the new session to the list
-        setSessions(prev => [response.session, ...prev]);
-        setShowChatSidebar(false);
+      if (!response.success || !response.session) {
+        throw new Error(response.error || 'Failed to create a new chat');
       }
+
+      setCurrentSession(response.session);
+      const formattedMessages = (response.session.messages || []).map(msg => ({
+        ...msg,
+        timestamp: new Date(msg.timestamp || msg.createdAt),
+      }));
+      setMessages(formattedMessages);
+      setSessions(prev => [response.session, ...prev]);
+      setShowChatSidebar(false);
     } catch (error) {
       console.error('Error creating session:', error);
       // Fallback to local message
@@ -191,24 +194,24 @@ const AIChatScreen = () => {
     try {
       if (currentSession?.id) {
         const response = await aiChatAPI.sendMessage(currentSession.id, userMessageText);
-        if (response.success) {
-          // Replace temp message with real one and add AI response
-          setMessages(prev => {
-            const filtered = prev.filter(m => m.id !== tempUserMessage.id);
-            return [
-              ...filtered,
-              { ...response.userMessage, timestamp: new Date(response.userMessage.timestamp || response.userMessage.createdAt) },
-              { ...response.aiMessage, timestamp: new Date(response.aiMessage.timestamp || response.aiMessage.createdAt) },
-            ];
-          });
-
-          // Update session in list with new title if changed
-          setSessions(prev => prev.map(s =>
-            s.id === currentSession.id
-              ? { ...s, lastMessageAt: new Date(), title: userMessageText.substring(0, 50) + (userMessageText.length > 50 ? '...' : '') }
-              : s
-          ));
+        if (!response.success || !response.userMessage || !response.aiMessage) {
+          throw new Error(response.error || 'Failed to send message');
         }
+
+        setMessages(prev => {
+          const filtered = prev.filter(m => m.id !== tempUserMessage.id);
+          return [
+            ...filtered,
+            { ...response.userMessage, timestamp: new Date(response.userMessage.timestamp || response.userMessage.createdAt) },
+            { ...response.aiMessage, timestamp: new Date(response.aiMessage.timestamp || response.aiMessage.createdAt) },
+          ];
+        });
+
+        setSessions(prev => prev.map(s =>
+          s.id === currentSession.id
+            ? { ...s, lastMessageAt: new Date(), title: userMessageText.substring(0, 50) + (userMessageText.length > 50 ? '...' : '') }
+            : s
+        ));
       } else {
         // Fallback for local mode
         setTimeout(() => {
