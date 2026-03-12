@@ -163,7 +163,8 @@ async function startServer() {
     await testConnection();
     await syncUserAuthColumns();
     await syncCourseColumns();
-    await syncAITutorColumns();
+    const aiTutorSchemaSummary = await syncAITutorColumns();
+    console.log('AI Tutor schema compatibility sync completed:', JSON.stringify(aiTutorSchemaSummary));
     await sequelize.sync();
 
     console.log('Database synced successfully');
