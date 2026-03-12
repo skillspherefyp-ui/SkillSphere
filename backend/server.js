@@ -1,5 +1,4 @@
 const express = require('express');
-const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
@@ -73,53 +72,81 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 function normalizeOrigin(origin) {
-  return `${origin || ''}`.trim().replace(/\/$/, '');
+  return `${origin || ''}`
+    .trim()
+    .replace(/^"|"$/g, '')
+    .replace(/\/$/, '');
 }
 
-function isAllowedVercelOrigin(origin) {
-  const normalizedOrigin = normalizeOrigin(origin);
-  return /^https:\/\/([a-z0-9-]+\.)?vercel\.app$/i.test(normalizedOrigin)
-    && (normalizedOrigin.includes('skill-sphere') || normalizedOrigin.includes('skillsphere'));
+function parseAllowedOrigins(value) {
+  return `${value || ''}`
+    .split(',')
+    .map(normalizeOrigin)
+    .filter(Boolean);
 }
+
+function buildAllowedOrigins() {
+  return Array.from(new Set([
+    'https://skill-sphere-app.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:19006',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+    'http://127.0.0.1:19006',
+    'http://10.0.2.2:3000',
+    'http://10.0.2.2:3001',
+    'http://10.0.2.2:19006',
+    normalizeOrigin(process.env.FRONTEND_URL),
+    ...parseAllowedOrigins(process.env.ALLOWED_ORIGINS),
+  ].filter(Boolean)));
+}
+
+const allowedOrigins = buildAllowedOrigins();
+
+console.log('CORS allowed origins:', JSON.stringify(allowedOrigins));
 
 const corsOptions = {
-  origin(origin, callback) {
-    const normalizedOrigin = normalizeOrigin(origin);
-
-    if (!normalizedOrigin) {
-      callback(null, true);
-      return;
-    }
-
-    const allowedOrigins = [
-      'http://localhost:3000',
-      'http://localhost:19006',
-      'http://10.0.2.2:3000',
-      'https://skill-sphere-app.vercel.app',
-      process.env.FRONTEND_URL,
-    ].map(normalizeOrigin).filter(Boolean);
-
-    if (allowedOrigins.includes(normalizedOrigin) || process.env.NODE_ENV === 'development') {
-      callback(null, true);
-      return;
-    }
-
-    if (isAllowedVercelOrigin(normalizedOrigin)) {
-      console.log('CORS allowing Vercel deployment:', normalizedOrigin);
-      callback(null, true);
-      return;
-    }
-
-    console.log('CORS blocked origin:', normalizedOrigin);
-    callback(new Error('Not allowed by CORS'));
-  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 204,
 };
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.use((req, res, next) => {
+  const requestOrigin = normalizeOrigin(req.headers.origin);
+
+  res.header('Vary', 'Origin');
+
+  if (!requestOrigin) {
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(corsOptions.optionsSuccessStatus);
+    }
+    return next();
+  }
+
+  if (!allowedOrigins.includes(requestOrigin)) {
+    console.log('CORS blocked origin:', requestOrigin);
+
+    if (req.method === 'OPTIONS') {
+      return res.status(403).json({ error: 'Not allowed by CORS' });
+    }
+
+    return res.status(403).json({ error: 'Not allowed by CORS' });
+  }
+
+  res.header('Access-Control-Allow-Origin', requestOrigin);
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', corsOptions.methods.join(','));
+  res.header('Access-Control-Allow-Headers', corsOptions.allowedHeaders.join(','));
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(corsOptions.optionsSuccessStatus);
+  }
+
+  return next();
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
