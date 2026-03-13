@@ -545,6 +545,16 @@ const LearningScreen = () => {
     }
   };
 
+  const sidebarItems = [
+    { label: 'Dashboard', icon: 'grid-outline', iconActive: 'grid', route: 'Dashboard' },
+    { label: 'Browse Courses', icon: 'library-outline', iconActive: 'library', route: 'Courses' },
+    { label: 'My Learning', icon: 'school-outline', iconActive: 'school', route: 'EnrolledCourses' },
+    { label: 'AI Assistant', icon: 'sparkles-outline', iconActive: 'sparkles', route: 'AITutor' },
+    { label: 'Certificates', icon: 'ribbon-outline', iconActive: 'ribbon', route: 'Certificates' },
+    { label: 'Reminders', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle', route: 'Todo' },
+  ];
+  const handleNavigate = (routeName) => navigation.navigate(routeName);
+
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <Text style={[styles.sidebarTitle, { color: theme.colors.textPrimary }]}>Course Progress</Text>
@@ -728,224 +738,246 @@ const LearningScreen = () => {
 
   return (
     <MainLayout
-      showSidebar={false}
+      showSidebar={true}
+      sidebarItems={sidebarItems}
+      activeRoute="EnrolledCourses"
+      onNavigate={handleNavigate}
       showHeader={true}
       customSidebar={renderSidebar()}
       customSidebarVisible={showTopicsSidebar}
       onCustomSidebarToggle={setShowTopicsSidebar}
       customMenuIcon="book-open-variant"
+      hideHeaderToggle={true}
     >
-      <View style={[styles.container, { backgroundColor: isDark ? '#0f0f1a' : theme.colors.background }]}>
-          <View style={styles.progressRow}>
-          <TouchableOpacity style={[styles.iconButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : theme.colors.surface }]} onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
-          </TouchableOpacity>
-          <View style={styles.progressBarWrap}>
-            <Text style={[styles.progressLabel, { color: theme.colors.textSecondary }]}>Chunk {Math.min(currentIndex + 1, totalChunks)} of {totalChunks}</Text>
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: theme.colors.primary }]} />
-            </View>
-          </View>
-          <Text style={[styles.progressValue, { color: theme.colors.primary }]}>{progress}%</Text>
-        </View>
+      <View style={[styles.mainContent, { backgroundColor: isDark ? '#0f0f1a' : theme.colors.background }]}>
+        <View style={styles.learningArea}>
 
-        {!!lectureDurationLabel && (
-          <View style={[styles.lectureTimeBanner, { backgroundColor: isDark ? '#111827' : '#eff6ff', borderColor: isDark ? '#1f2937' : '#bfdbfe' }]}>
-            <Icon name="time-outline" size={16} color={theme.colors.primary} />
-            <Text style={[styles.lectureTimeBannerText, { color: theme.colors.textPrimary }]}>{lectureDurationLabel}</Text>
-          </View>
-        )}
-
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={[styles.statusCard, { backgroundColor: isDark ? '#121a2b' : '#eef4ff', borderColor: `${tutorStatus.tone}33` }]}>
-            <View style={styles.statusHeader}>
-              <View style={styles.statusTitleWrap}>
-                <View style={[styles.statusDot, { backgroundColor: tutorStatus.tone }]} />
-                <Text style={[styles.statusTitle, { color: theme.colors.textPrimary }]}>{tutorStatus.label}</Text>
-              </View>
-              <Text style={[styles.statusMeta, { color: tutorStatus.tone }]}>{voiceMode ? 'Voice' : 'Text'}</Text>
+          {/* ── Progress bar row ── */}
+          <View style={styles.progressSection}>
+            <TouchableOpacity
+              style={[
+                styles.sidebarToggleBtn,
+                {
+                  backgroundColor: showTopicsSidebar
+                    ? 'rgba(255,140,66,0.25)'
+                    : (isDark ? 'rgba(255,255,255,0.1)' : theme.colors.surface),
+                  borderWidth: 1,
+                  borderColor: showTopicsSidebar ? 'rgba(255,140,66,0.5)' : 'transparent',
+                },
+              ]}
+              onPress={() => setShowTopicsSidebar(!showTopicsSidebar)}
+            >
+              <Icon
+                name={showTopicsSidebar ? 'close' : 'book-open-outline'}
+                size={20}
+                color={showTopicsSidebar ? '#FF8C42' : theme.colors.textPrimary}
+              />
+            </TouchableOpacity>
+            <View style={styles.progressLabel}>
+              <Icon name="trending-up" size={16} color={theme.colors.primary} />
+              <Text style={[styles.progressText, { color: theme.colors.textSecondary }]}>Progress</Text>
             </View>
-            <Text style={[styles.statusText, { color: theme.colors.textSecondary }]}>{tutorStatus.detail}</Text>
-            <View style={styles.metaPills}>
-              <View style={[styles.metaPill, { backgroundColor: isDark ? '#1f2937' : '#ede9fe' }]}>
-                <Text style={[styles.metaPillText, { color: theme.colors.textPrimary }]}>{classroomModeLabel}</Text>
-              </View>
-              <View style={[styles.metaPill, { backgroundColor: isDark ? '#1f2937' : '#dbeafe' }]}>
-                <Text style={[styles.metaPillText, { color: theme.colors.textPrimary }]}>{teachingStyleLabel}</Text>
-              </View>
-              <View style={[styles.metaPill, { backgroundColor: isDark ? '#1f2937' : '#dcfce7' }]}>
-                <Text style={[styles.metaPillText, { color: theme.colors.textPrimary }]}>{conceptTypeLabel}</Text>
+            <View style={styles.progressBarContainer}>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFillGreen, { width: `${progress * 0.7}%` }]} />
+                <View style={[styles.progressFillPurple, { width: `${progress * 0.3}%`, left: `${progress * 0.7}%` }]} />
               </View>
             </View>
+            <Text style={[styles.progressPercent, { color: theme.colors.primary }]}>{progress}%</Text>
           </View>
 
-          {!!transitionText && (
-            <View style={[styles.transitionCard, { backgroundColor: isDark ? '#14213d' : '#fff7ed', borderColor: isDark ? '#2b3f67' : '#fdba74' }]}>
-              <Text style={[styles.transitionLabel, { color: isDark ? '#93c5fd' : '#c2410c' }]}>Teacher transition</Text>
-              <Text style={[styles.transitionText, { color: theme.colors.textPrimary }]}>{transitionText}</Text>
-            </View>
-          )}
+          {/* ── Main card (mirrors manualFlexArea / manualContentArea) ── */}
+          <View style={styles.cardFlexArea}>
+            <View style={[styles.cardContentArea, { flex: 1, backgroundColor: isDark ? '#1a1a2e' : '#1e293b' }]}>
 
-          <View style={[styles.topRow, isMobile && styles.topRowStack]}>
-            <View style={[styles.whiteboard, styles.liveBoard, { backgroundColor: isDark ? '#1a1a2e' : '#1e293b' }]}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardHeaderText}>Live Classroom Board</Text>
-                <TouchableOpacity onPress={() => setShowNotesModal(true)}>
-                  <Icon name="document-text-outline" size={18} color="#9ca3af" />
+              {/* Header: presentation icon + title + Live/Paused badge + Pause/Resume */}
+              <View style={[styles.cardHeader, { backgroundColor: isDark ? '#12122a' : '#0f172a' }]}>
+                <MaterialIcon name="presentation" size={16} color="#fff" />
+                <Text style={styles.cardHeaderTitle} numberOfLines={1}>
+                  {lecture?.title || topic?.title || 'AI Lecture'}
+                </Text>
+                {isPlaying ? (
+                  <View style={styles.liveBadge}>
+                    <View style={styles.liveDot} />
+                    <Text style={styles.liveBadgeText}>Live</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.liveBadge, { backgroundColor: '#374151' }]}>
+                    <Icon name="pause" size={10} color="#9ca3af" />
+                    <Text style={[styles.liveBadgeText, { color: '#9ca3af' }]}>Paused</Text>
+                  </View>
+                )}
+                <TouchableOpacity style={[styles.headerBtn, { marginLeft: 4 }]} onPress={togglePause}>
+                  <Icon name={isPlaying ? 'pause' : 'play'} size={13} color="#fff" />
+                  <Text style={styles.headerBtnText}>{isPlaying ? 'Pause' : 'Resume'}</Text>
                 </TouchableOpacity>
               </View>
-              <View style={styles.boardHeaderRow}>
-                <View style={[styles.boardModeBadge, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
-                  <Text style={styles.boardModeText}>{classroomModeLabel}</Text>
-                </View>
-                <Text style={styles.boardObjective}>{panelContent.learningObjective || currentChunk.learningObjective || currentChunk.summary}</Text>
-              </View>
-              <Text style={styles.whiteboardTitle}>{boardContent?.title || currentChunk.title}</Text>
-              <View style={styles.boardSurface}>
-                {renderBoardSurface()}
-              </View>
-            </View>
 
-            {!isMobile && (
-              <View style={styles.sideStack}>
-                <View style={[styles.tutorPanel, { backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }]}>
-                  <Text style={[styles.tutorLabel, { color: theme.colors.textPrimary }]}>AI Tutor</Text>
-                  <RNAnimated.View style={[styles.avatarRing, { transform: [{ scale: pulseAnim }] }]}>
-                    <View style={styles.avatarInner}>
-                      <Text style={styles.avatarText}>AI</Text>
+              {/* Compact AI status bar */}
+              <View style={styles.aiStatusBar}>
+                <RNAnimated.View style={[styles.aiStatusAvatar, { transform: [{ scale: pulseAnim }], opacity: isPlaying ? 1 : 0.5 }]}>
+                  <MaterialIcon name="robot" size={20} color="#fff" />
+                </RNAnimated.View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.aiStatusName}>AI Tutor</Text>
+                  <Text style={styles.aiStatusSub} numberOfLines={1}>{tutorStatus.label}</Text>
+                </View>
+                {isPlaying ? (
+                  <View style={styles.soundWaveRow}>
+                    {[6, 12, 18, 24, 16, 20, 12, 7].map((h, i) => (
+                      <View key={i} style={[styles.soundBar, { height: h }]} />
+                    ))}
+                  </View>
+                ) : (
+                  <View style={[styles.liveBadge, { backgroundColor: '#374151' }]}>
+                    <Icon name="pause" size={10} color="#9ca3af" />
+                    <Text style={[styles.liveBadgeText, { color: '#9ca3af' }]}>Paused</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Scrollable lecture content */}
+              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
+
+                {/* Whiteboard / board surface */}
+                <View style={[styles.whiteboardBox, { backgroundColor: 'rgba(255,255,255,0.03)' }]}>
+                  <View style={styles.boardTopRow}>
+                    <View style={[styles.boardModeBadge, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
+                      <Text style={styles.boardModeText}>{classroomModeLabel}</Text>
                     </View>
-                  </RNAnimated.View>
-                  <Text style={[styles.tutorMeta, { color: theme.colors.textSecondary }]}>{lecture.title}</Text>
-                  <Text style={[styles.tutorMeta, { color: theme.colors.textSecondary }]}>Section {currentChunk.sectionIndex + 1} | Chunk {currentChunk.chunkIndex + 1}</Text>
-                  <Text style={[styles.tutorMeta, { color: theme.colors.primary }]}>{classroomModeLabel}</Text>
+                    <TouchableOpacity onPress={() => setShowNotesModal(true)} style={{ marginLeft: 'auto' }}>
+                      <Icon name="document-text-outline" size={18} color="#9ca3af" />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.boardObjective} numberOfLines={2}>
+                    {panelContent.learningObjective || currentChunk.learningObjective || currentChunk.summary}
+                  </Text>
+                  <Text style={styles.boardTitle}>{boardContent?.title || currentChunk.title}</Text>
+                  <View style={styles.boardSurface}>
+                    {renderBoardSurface()}
+                  </View>
+                  {renderSupportPanel()}
                 </View>
-                {renderSupportPanel()}
-              </View>
-            )}
-          </View>
 
-          {isMobile && renderSupportPanel()}
-
-          <View style={[styles.subtitlesCard, { backgroundColor: isDark ? '#1a1a2e' : '#f1f5f9' }]}>
-            <View style={styles.subtitlesHeader}>
-              <Text style={[styles.subtitlesTitle, { color: theme.colors.textPrimary }]}>Live Teaching Text</Text>
-              <Text style={styles.modeBadge}>{classroomModeLabel.toUpperCase()}</Text>
-            </View>
-            <Text style={[styles.subtitlesText, { color: theme.colors.textPrimary }]}>{liveNarration}</Text>
-            {!!narrationSegments.length && (
-              <View style={styles.segmentRow}>
-                {narrationSegments.slice(0, 4).map((segment, index) => (
-                  <View key={`${segment}-${index}`} style={[styles.segmentPill, { backgroundColor: index === 0 ? `${theme.colors.primary}22` : isDark ? '#111827' : '#e2e8f0' }]}>
-                    <Text style={[styles.segmentText, { color: theme.colors.textSecondary }]} numberOfLines={1}>{segment}</Text>
+                {/* Live narration / subtitles */}
+                <View style={[styles.narrationBox, { backgroundColor: 'rgba(0,0,0,0.25)' }]}>
+                  <View style={styles.narrationHeader}>
+                    <MaterialIcon name="subtitles" size={14} color="#9ca3af" />
+                    <Text style={styles.narrationTitle}>Live Teaching Text</Text>
+                    <View style={[styles.modeBadge, { marginLeft: 'auto' }]}>
+                      <Text style={styles.modeBadgeText}>{classroomModeLabel.toUpperCase()}</Text>
+                    </View>
                   </View>
-                ))}
-              </View>
-            )}
-          </View>
+                  <Text style={styles.narrationText}>{liveNarration}</Text>
+                  {!!narrationSegments.length && (
+                    <View style={styles.segmentRow}>
+                      {narrationSegments.slice(0, 4).map((segment, index) => (
+                        <View key={`${segment}-${index}`} style={[styles.segmentPill, { backgroundColor: index === 0 ? `${theme.colors.primary}22` : isDark ? '#111827' : '#e2e8f0' }]}>
+                          <Text style={[styles.segmentText, { color: theme.colors.textSecondary }]} numberOfLines={1}>{segment}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
 
-          {showQuestionPanel && (
-            <View style={[styles.qaCard, { backgroundColor: isDark ? '#1a1a2e' : '#fff' }]}>
-              <View style={styles.qaHeader}>
-                <Text style={[styles.qaTitle, { color: theme.colors.textPrimary }]}>Ask Your Question</Text>
-                <TouchableOpacity onPress={() => setShowQuestionPanel(false)}>
-                  <Icon name="close" size={20} color={theme.colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatScrollContent}>
-                {!chatMessages.length && !submittingQuestion && (
-                  <View style={[styles.chatEmptyState, { borderColor: theme.colors.border }]}>
-                    <MaterialIcon name="chat-processing-outline" size={20} color={theme.colors.primary} />
-                    <Text style={[styles.chatEmptyTitle, { color: theme.colors.textPrimary }]}>Ask about this lecture point</Text>
-                    <Text style={[styles.chatEmptyText, { color: theme.colors.textSecondary }]}>The AI Tutor will answer from the current lecture context and then you can resume from this chunk.</Text>
+                {/* Question / chat panel (when open) */}
+                {showQuestionPanel && (
+                  <View style={[styles.qaCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)' }]}>
+                    <View style={styles.qaHeader}>
+                      <Text style={[styles.qaTitle, { color: '#e2e8f0' }]}>Ask Your Question</Text>
+                      <TouchableOpacity onPress={() => setShowQuestionPanel(false)}>
+                        <Icon name="close" size={20} color="#9ca3af" />
+                      </TouchableOpacity>
+                    </View>
+                    <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatScrollContent}>
+                      {!chatMessages.length && !submittingQuestion && (
+                        <View style={[styles.chatEmptyState, { borderColor: 'rgba(255,255,255,0.1)' }]}>
+                          <MaterialIcon name="chat-processing-outline" size={20} color={theme.colors.primary} />
+                          <Text style={[styles.chatEmptyTitle, { color: '#e2e8f0' }]}>Ask about this lecture point</Text>
+                          <Text style={[styles.chatEmptyText, { color: '#9ca3af' }]}>The AI Tutor will answer from the current lecture context.</Text>
+                        </View>
+                      )}
+                      {chatMessages.map((message, index) => (
+                        <View key={`${message.type}-${index}`} style={[styles.chatBubble, message.type === 'user' ? styles.chatBubbleUser : styles.chatBubbleAi]}>
+                          <Text style={[styles.chatRole, { color: message.type === 'user' ? 'rgba(255,255,255,0.75)' : theme.colors.primary }]}>
+                            {message.type === 'user' ? 'You' : 'AI Tutor'}
+                          </Text>
+                          <Text style={{ color: message.type === 'user' ? '#fff' : '#e2e8f0', lineHeight: 21 }}>{message.text}</Text>
+                        </View>
+                      ))}
+                      {submittingQuestion && (
+                        <View style={[styles.chatBubble, styles.chatBubbleAi]}>
+                          <Text style={[styles.chatRole, { color: theme.colors.primary }]}>AI Tutor</Text>
+                          <Text style={{ color: '#9ca3af' }}>Preparing a contextual explanation...</Text>
+                        </View>
+                      )}
+                    </ScrollView>
+                    <View style={[styles.inputRow, { borderColor: 'rgba(255,255,255,0.1)', backgroundColor: isDark ? '#111827' : '#f8fafc' }]}>
+                      <TouchableOpacity style={[styles.inputIconBtn, { backgroundColor: isRecording ? theme.colors.error : theme.colors.primary }]} onPress={startVoiceInput}>
+                        <Icon name={isRecording ? 'stop' : 'mic'} size={18} color="#fff" />
+                      </TouchableOpacity>
+                      <TextInput
+                        style={[styles.input, {
+                          color: theme.colors.textPrimary,
+                          backgroundColor: isDark ? '#2d2d44' : '#f1f5f9',
+                          borderColor: isDark ? '#3d3d5c' : '#e2e8f0',
+                        }]}
+                        value={question}
+                        onChangeText={setQuestion}
+                        onSubmitEditing={askQuestion}
+                        placeholder={isRecording ? 'Listening...' : 'Type your question...'}
+                        placeholderTextColor={theme.colors.textTertiary}
+                        multiline
+                      />
+                      <TouchableOpacity style={[styles.inputIconBtn, { backgroundColor: theme.colors.primary }]} onPress={askQuestion} disabled={submittingQuestion}>
+                        {submittingQuestion ? <ActivityIndicator size="small" color="#fff" /> : <Icon name="send" size={18} color="#fff" />}
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 )}
-                {chatMessages.map((message, index) => (
-                  <View key={`${message.type}-${index}`} style={[styles.chatBubble, message.type === 'user' ? styles.chatBubbleUser : [styles.chatBubbleAi, { borderColor: theme.colors.border }]]}>
-                    <Text style={[styles.chatRole, { color: message.type === 'user' ? 'rgba(255,255,255,0.75)' : theme.colors.primary }]}>{message.type === 'user' ? 'You' : 'AI Tutor'}</Text>
-                    <Text style={{ color: message.type === 'user' ? '#fff' : theme.colors.textPrimary, lineHeight: 21 }}>{message.text}</Text>
-                  </View>
-                ))}
-                {submittingQuestion && (
-                  <View style={[styles.chatBubble, styles.chatBubbleAi, { borderColor: theme.colors.border }]}>
-                    <Text style={[styles.chatRole, { color: theme.colors.primary }]}>AI Tutor</Text>
-                    <Text style={{ color: theme.colors.textSecondary }}>Preparing a contextual explanation...</Text>
-                  </View>
-                )}
+
               </ScrollView>
-              <View style={[styles.inputRow, { borderColor: theme.colors.border, backgroundColor: isDark ? '#111827' : '#f8fafc' }]}>
-                <TouchableOpacity style={[styles.iconButton, { backgroundColor: isRecording ? theme.colors.error : theme.colors.primary }]} onPress={startVoiceInput}>
-                  <Icon name={isRecording ? 'stop' : 'mic'} size={18} color="#fff" />
-                </TouchableOpacity>
-                <TextInput
-                  style={[styles.input, {
-                    color: theme.colors.textPrimary,
-                    backgroundColor: isDark ? '#2d2d44' : '#f1f5f9',
-                    borderColor: isDark ? '#3d3d5c' : '#e2e8f0',
-                  }]}
-                  value={question}
-                  onChangeText={setQuestion}
-                  onSubmitEditing={askQuestion}
-                  placeholder={isRecording ? 'Listening...' : 'Type your question...'}
-                  placeholderTextColor={theme.colors.textTertiary}
-                  multiline
-                />
-                <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.primary }]} onPress={askQuestion} disabled={submittingQuestion}>
-                  {submittingQuestion ? <ActivityIndicator size="small" color="#fff" /> : <Icon name="send" size={18} color="#fff" />}
-                </TouchableOpacity>
-              </View>
             </View>
-          )}
+          </View>
 
-          {!showQuestionPanel && (
-            <View style={styles.actions}>
+          {/* ── Bottom control bar (mirrors LearningScreen bottomBar) ── */}
+          <View style={styles.bottomBar}>
+            {/* Quiz — full-width green pill */}
+            <TouchableOpacity
+              style={[styles.quizButton, { backgroundColor: lectureCompleted ? '#10b981' : '#374151' }]}
+              onPress={openQuiz}
+            >
+              <MaterialIcon name="help-circle" size={20} color={lectureCompleted ? '#fff' : '#9ca3af'} />
+              <Text style={[styles.quizButtonText, { color: lectureCompleted ? '#fff' : '#9ca3af' }]}>
+                {lectureCompleted ? 'Take Quiz' : 'Finish Lecture First'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Icon buttons */}
+            <View style={styles.bottomControls}>
               {lectureCompleted && (
-                <TouchableOpacity style={[styles.action, { backgroundColor: '#0f766e' }]} onPress={restartLecture}>
-                  <Icon name="refresh" size={20} color="#fff" />
-                  <Text style={styles.actionText}>Take Again</Text>
+                <TouchableOpacity style={[styles.bottomIconBtn, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]} onPress={restartLecture}>
+                  <Icon name="refresh" size={20} color={theme.colors.textSecondary} />
                 </TouchableOpacity>
               )}
-              <TouchableOpacity style={[styles.action, { backgroundColor: '#3b82f6' }]} onPress={() => setShowNotesModal(true)}>
-                <Icon name="document-text" size={20} color="#fff" />
-                <Text style={styles.actionText}>Notes</Text>
+              <TouchableOpacity style={[styles.bottomIconBtn, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]} onPress={() => setShowFlashcardsModal(true)}>
+                <MaterialIcon name="cards-outline" size={22} color={theme.colors.primary} />
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.action, { backgroundColor: '#a855f7' }]} onPress={() => setShowFlashcardsModal(true)}>
-                <MaterialIcon name="cards" size={20} color="#fff" />
-                <Text style={styles.actionText}>Flashcards</Text>
+              <TouchableOpacity style={[styles.bottomIconBtn, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]} onPress={() => setShowNotesModal(true)}>
+                <Icon name="document-text-outline" size={22} color={theme.colors.primary} />
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.action, { backgroundColor: '#10b981' }]} onPress={openQuiz}>
-                <MaterialIcon name="help-circle" size={20} color="#fff" />
-                <Text style={styles.actionText}>Quiz</Text>
+              <TouchableOpacity style={[styles.bottomIconBtn, { backgroundColor: showQuestionPanel ? theme.colors.primary : (isDark ? '#2d2d44' : '#e2e8f0') }]} onPress={openQuestionPanel}>
+                <Icon name="chatbubble-ellipses-outline" size={22} color={showQuestionPanel ? '#fff' : theme.colors.primary} />
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.action, { backgroundColor: '#f97316' }]} onPress={exportFlashcards}>
-                <Icon name="download" size={20} color="#fff" />
-                <Text style={styles.actionText}>Materials</Text>
+              <TouchableOpacity style={[styles.bottomIconBtn, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]} onPress={goToNextChunk} disabled={lectureCompleted}>
+                <Icon name="play-skip-forward" size={22} color={lectureCompleted ? theme.colors.textTertiary : theme.colors.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.bottomIconBtn, { backgroundColor: voiceMode ? theme.colors.primary : (isDark ? '#2d2d44' : '#e2e8f0') }]} onPress={() => setVoiceMode(prev => !prev)}>
+                <MaterialIcon name={voiceMode ? 'volume-high' : 'volume-off'} size={22} color={voiceMode ? '#fff' : theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
-          )}
-        </ScrollView>
-
-        <View style={styles.footer}>
-          <TouchableOpacity style={[styles.pauseButton, { backgroundColor: isPlaying ? '#10b981' : '#4f46e5' }]} onPress={togglePause}>
-            <Icon name={isPlaying ? 'pause' : 'play'} size={18} color="#fff" />
-            <Text style={styles.pauseText}>{isPlaying ? 'Pause' : 'Resume'}</Text>
-          </TouchableOpacity>
-          <View style={styles.footerControls}>
-            <TouchableOpacity style={[styles.iconButton, styles.footerIcon, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]} onPress={goToNextChunk} disabled={lectureCompleted}>
-              <Icon name="play-skip-forward" size={18} color={lectureCompleted ? theme.colors.textTertiary : theme.colors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.iconButton, styles.footerIcon, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]} onPress={() => setVoiceMode((prev) => !prev)}>
-              <MaterialIcon name={voiceMode ? 'volume-high' : 'volume-off'} size={18} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.iconButton, styles.footerIcon, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]}
-              onPress={openQuestionPanel}
-            >
-              <Icon name="chatbubble-outline" size={18} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.iconButton, styles.footerIcon, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]} onPress={startVoiceInput}>
-              <Icon name={isRecording ? 'stop' : 'mic'} size={18} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
           </View>
+
         </View>
       </View>
 
@@ -1023,149 +1055,140 @@ const LearningScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
+  // ── Outer wrappers (mirrors LearningScreen) ────────────────────────────────
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   loadingText: { marginTop: 16, fontSize: 16 },
-  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  progressBarWrap: { flex: 1 },
-  progressLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6 },
-  progressBar: { height: 8, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.12)', overflow: 'hidden' },
-  progressFill: { height: '100%' },
-  progressValue: { fontSize: 13, fontWeight: '700' },
-  lectureTimeBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16, alignSelf: 'flex-start' },
-  lectureTimeBannerText: { fontSize: 13, fontWeight: '700' },
-  statusCard: { borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1 },
-  statusHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 12 },
-  statusTitleWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  statusDot: { width: 10, height: 10, borderRadius: 5 },
-  statusTitle: { fontSize: 15, fontWeight: '700' },
-  statusMeta: { fontSize: 12, fontWeight: '700' },
-  statusText: { fontSize: 13, lineHeight: 20 },
-  metaPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  metaPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  metaPillText: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
-  transitionCard: { borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1 },
-  transitionLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
-  transitionText: { fontSize: 14, lineHeight: 21, fontWeight: '600' },
-  topRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
-  topRowStack: { flexDirection: 'column' },
-  whiteboard: { flex: 1, borderRadius: 16, padding: 18 },
-  liveBoard: { minHeight: 360 },
-  sideStack: { width: 220, gap: 12 },
-  tutorPanel: { width: 190, borderRadius: 16, padding: 16, alignItems: 'center' },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  cardHeaderText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  boardHeaderRow: { marginBottom: 14, gap: 10 },
-  boardModeBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  boardModeText: { color: '#fff', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
-  boardObjective: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },
-  whiteboardTitle: { color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: 8 },
-  whiteboardSummary: { color: '#cbd5e1', fontSize: 14, lineHeight: 22, marginBottom: 12 },
-  boardSurface: { flex: 1, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.04)', padding: 16, gap: 10, justifyContent: 'center' },
-  boardBodyText: { color: '#e2e8f0', fontSize: 15, lineHeight: 24 },
-  boardBullet: { color: '#e2e8f0', fontSize: 15, lineHeight: 24, marginBottom: 8 },
-  boardEmphasis: { color: '#93c5fd', fontSize: 14, lineHeight: 22, marginTop: 12, fontStyle: 'italic' },
-  boardQuestion: { color: '#fef3c7', fontSize: 22, lineHeight: 30, fontWeight: '700' },
-  sectionLabel: { color: '#fff', fontSize: 13, fontWeight: '700', marginTop: 10, marginBottom: 4 },
-  sectionText: { color: '#cbd5e1', fontSize: 13, lineHeight: 21 },
-  tutorLabel: { fontSize: 14, fontWeight: '700', marginBottom: 16 },
-  avatarRing: { width: 120, height: 120, borderRadius: 60, borderWidth: 3, borderColor: 'rgba(79,70,229,0.3)', justifyContent: 'center', alignItems: 'center' },
-  avatarInner: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#a855f7', justifyContent: 'center', alignItems: 'center' },
-  avatarText: { color: '#fff', fontSize: 32, fontWeight: '700' },
-  tutorMeta: { fontSize: 11, textAlign: 'center', marginTop: 8 },
-  visualRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
-  visualCard: { flex: 1, borderRadius: 16, padding: 16, borderWidth: 1 },
-  visualHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  visualEyebrow: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
-  visualTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
-  visualBody: { fontSize: 13, lineHeight: 21 },
-  visualHint: { borderRadius: 12, padding: 12, marginTop: 12 },
-  visualHintLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginBottom: 4 },
-  visualHintText: { fontSize: 13, lineHeight: 20 },
-  diagramRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1 },
-  diagramIndex: { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  diagramIndexText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  diagramText: { flex: 1, fontSize: 13, lineHeight: 20 },
-  flowStep: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
-  flowStepBadge: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  mainContent: { flex: 1 },
+  learningArea: { flex: 1, padding: 16 },
+
+  // ── Progress section (identical to LearningScreen) ─────────────────────────
+  progressSection: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
+  sidebarToggleBtn: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  progressLabel: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  progressText: { fontSize: 12, fontWeight: '500' },
+  progressBarContainer: { flex: 1 },
+  progressBar: { height: 6, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden', flexDirection: 'row' },
+  progressFillGreen: { height: '100%', backgroundColor: '#10b981' },
+  progressFillPurple: { height: '100%', backgroundColor: '#a855f7', position: 'absolute' },
+  progressPercent: { fontSize: 12, fontWeight: '600' },
+
+  // ── Main card (mirrors manualFlexArea / manualContentArea) ─────────────────
+  cardFlexArea: { flex: 1, flexDirection: 'column' },
+  cardContentArea: { borderRadius: 12, overflow: 'hidden' },
+
+  // ── Card header (mirrors manualHeader) ─────────────────────────────────────
+  cardHeader: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
+  cardHeaderTitle: { flex: 1, color: '#fff', fontSize: 14, fontWeight: '500' },
+  headerBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+  headerBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+
+  // ── Live / Paused badge ────────────────────────────────────────────────────
+  liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, backgroundColor: '#10b981' },
+  liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#d1fae5' },
+  liveBadgeText: { color: '#fff', fontSize: 9, fontWeight: '700' },
+
+  // ── AI status bar (mirrors LearningScreen aiStatusBar) ────────────────────
+  aiStatusBar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 12, marginTop: 12, marginBottom: 4, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, backgroundColor: 'rgba(139, 92, 246, 0.1)', borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.2)' },
+  aiStatusAvatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#7c3aed', justifyContent: 'center', alignItems: 'center' },
+  aiStatusName: { fontSize: 12, fontWeight: '700', color: '#e2e8f0' },
+  aiStatusSub: { fontSize: 11, color: '#9ca3af', marginTop: 1 },
+  soundWaveRow: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 28 },
+  soundBar: { width: 3, borderRadius: 2, backgroundColor: '#10b981' },
+
+  // ── Whiteboard box ────────────────────────────────────────────────────────
+  whiteboardBox: { margin: 12, marginTop: 10, borderRadius: 12, padding: 14, minHeight: 200 },
+  boardTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
+  boardModeBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  boardModeText: { color: '#fff', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
+  boardObjective: { color: '#cbd5e1', fontSize: 12, lineHeight: 18, marginBottom: 6 },
+  boardTitle: { color: '#fff', fontSize: 18, fontWeight: '700', marginBottom: 10 },
+  boardSurface: { borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.04)', padding: 14, gap: 8 },
+  boardBodyText: { color: '#e2e8f0', fontSize: 14, lineHeight: 22 },
+  boardBullet: { color: '#e2e8f0', fontSize: 14, lineHeight: 22, marginBottom: 6 },
+  boardEmphasis: { color: '#93c5fd', fontSize: 13, lineHeight: 20, marginTop: 10, fontStyle: 'italic' },
+  boardQuestion: { color: '#fef3c7', fontSize: 20, lineHeight: 28, fontWeight: '700' },
+
+  // ── Board content types ───────────────────────────────────────────────────
+  flowStep: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
+  flowStepBadge: { width: 26, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
   flowStepBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  flowStepText: { flex: 1, color: '#e2e8f0', fontSize: 14, lineHeight: 21 },
-  boardTable: { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
-  boardTableRow: { padding: 12, borderBottomWidth: 1 },
-  boardTableTitle: { color: '#fff', fontSize: 13, fontWeight: '700', marginBottom: 4 },
-  boardTableBody: { fontSize: 12, lineHeight: 18 },
-  comparisonTable: { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
-  comparisonRow: { padding: 12, borderBottomWidth: 1 },
-  comparisonCellTitle: { fontSize: 13, fontWeight: '700', marginBottom: 4 },
-  comparisonCellBody: { fontSize: 12, lineHeight: 18 },
-  nodeWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  nodeCard: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
-  nodeLabel: { fontSize: 12, fontWeight: '600' },
-  liveNodeCard: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.06)' },
-  liveNodeText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  codePanel: { borderWidth: 1, borderRadius: 14, padding: 14, backgroundColor: 'rgba(15,23,42,0.92)' },
-  codeLanguage: { color: '#93c5fd', fontSize: 11, fontWeight: '700', marginBottom: 10, letterSpacing: 1 },
-  codeText: { color: '#e5e7eb', fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier', fontSize: 13, lineHeight: 20 },
-  codeHint: { color: '#cbd5e1', fontSize: 12, lineHeight: 18, marginTop: 12 },
-  teacherCardsRow: { flexDirection: 'row', gap: 12, marginBottom: 16, flexWrap: 'wrap' },
-  teacherCard: { flex: 1, minWidth: 210, borderRadius: 16, padding: 14, borderWidth: 1 },
-  teacherCardLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
-  teacherCardText: { fontSize: 13, lineHeight: 20 },
-  supportCard: { borderWidth: 1, borderRadius: 16, padding: 14 },
-  supportLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
-  supportText: { fontSize: 13, lineHeight: 20 },
-  subtitlesCard: { borderRadius: 16, padding: 16, marginBottom: 16 },
-  subtitlesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  subtitlesTitle: { fontSize: 14, fontWeight: '700' },
-  modeBadge: { color: '#fff', backgroundColor: '#3b82f6', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, fontSize: 10, fontWeight: '700' },
-  subtitlesText: { fontSize: 15, lineHeight: 24 },
-  segmentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  segmentPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, maxWidth: '100%' },
-  segmentText: { fontSize: 11, fontWeight: '600' },
-  qaCard: { borderRadius: 16, padding: 16, marginBottom: 16, maxHeight: 340 },
-  qaHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  qaTitle: { fontSize: 15, fontWeight: '700' },
-  chatScroll: { maxHeight: 180, marginBottom: 12 },
+  flowStepText: { flex: 1, color: '#e2e8f0', fontSize: 13, lineHeight: 20 },
+  boardTable: { borderWidth: 1, borderRadius: 12, overflow: 'hidden' },
+  boardTableRow: { padding: 10, borderBottomWidth: 1 },
+  boardTableTitle: { color: '#fff', fontSize: 12, fontWeight: '700', marginBottom: 3 },
+  boardTableBody: { fontSize: 11, lineHeight: 17, color: '#cbd5e1' },
+  nodeWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  liveNodeCard: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.06)' },
+  liveNodeText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  codePanel: { borderWidth: 1, borderRadius: 12, padding: 12, backgroundColor: 'rgba(15,23,42,0.92)' },
+  codeLanguage: { color: '#93c5fd', fontSize: 10, fontWeight: '700', marginBottom: 8, letterSpacing: 1 },
+  codeText: { color: '#e5e7eb', fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier', fontSize: 12, lineHeight: 19 },
+  codeHint: { color: '#cbd5e1', fontSize: 11, lineHeight: 17, marginTop: 10 },
+
+  // ── Support card ──────────────────────────────────────────────────────────
+  supportCard: { borderWidth: 1, borderRadius: 12, padding: 12, marginTop: 10 },
+  supportLabel: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
+  supportText: { fontSize: 13, lineHeight: 19 },
+
+  // ── Narration / subtitles box ─────────────────────────────────────────────
+  narrationBox: { borderRadius: 10, padding: 14, margin: 12, marginTop: 0 },
+  narrationHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  narrationTitle: { fontSize: 12, fontWeight: '600', color: '#cbd5e1' },
+  modeBadge: { backgroundColor: '#3b82f6', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  modeBadgeText: { color: '#fff', fontSize: 9, fontWeight: '700' },
+  narrationText: { fontSize: 14, lineHeight: 22, color: '#e2e8f0' },
+  segmentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  segmentPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, maxWidth: '100%' },
+  segmentText: { fontSize: 10, fontWeight: '600' },
+
+  // ── Question / chat panel ─────────────────────────────────────────────────
+  qaCard: { borderRadius: 12, padding: 14, margin: 12, marginTop: 0, maxHeight: 340 },
+  qaHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  qaTitle: { fontSize: 14, fontWeight: '700' },
+  chatScroll: { maxHeight: 170, marginBottom: 10 },
   chatScrollContent: { paddingBottom: 4 },
-  chatEmptyState: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 14, padding: 14, alignItems: 'center', marginBottom: 10 },
-  chatEmptyTitle: { fontSize: 14, fontWeight: '700', marginTop: 8, marginBottom: 6 },
-  chatEmptyText: { fontSize: 12, lineHeight: 18, textAlign: 'center' },
-  chatBubble: { padding: 12, borderRadius: 14, marginBottom: 8, maxWidth: '92%', borderWidth: 1 },
-  chatBubbleUser: { backgroundColor: '#4F46E5', alignSelf: 'flex-end', borderColor: '#4F46E5' },
-  chatBubbleAi: { backgroundColor: 'rgba(79,70,229,0.1)', alignSelf: 'flex-start' },
-  chatRole: { fontSize: 11, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.6 },
-  inputRow: { flexDirection: 'row', gap: 8, borderWidth: 1, borderRadius: 18, padding: 10, alignItems: 'flex-end' },
-  input: { flex: 1, minHeight: 44, maxHeight: 92, borderWidth: 1, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 10 },
-  actions: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  action: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', gap: 6 },
-  actionText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' },
-  pauseButton: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingVertical: 14, borderRadius: 24 },
-  pauseText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  footerControls: { flexDirection: 'row', gap: 8 },
-  iconButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  footerIcon: { borderRadius: 12 },
+  chatEmptyState: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 12, padding: 12, alignItems: 'center', marginBottom: 8 },
+  chatEmptyTitle: { fontSize: 13, fontWeight: '700', marginTop: 6, marginBottom: 4 },
+  chatEmptyText: { fontSize: 11, lineHeight: 17, textAlign: 'center' },
+  chatBubble: { padding: 10, borderRadius: 12, marginBottom: 6, maxWidth: '92%' },
+  chatBubbleUser: { backgroundColor: '#4F46E5', alignSelf: 'flex-end' },
+  chatBubbleAi: { backgroundColor: 'rgba(79,70,229,0.12)', alignSelf: 'flex-start', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  chatRole: { fontSize: 10, fontWeight: '700', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.6 },
+  inputRow: { flexDirection: 'row', gap: 8, borderWidth: 1, borderRadius: 16, padding: 8, alignItems: 'flex-end' },
+  input: { flex: 1, minHeight: 40, maxHeight: 80, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 8, fontSize: 13 },
+  inputIconBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+
+  // ── Bottom bar (mirrors LearningScreen bottomBar) ─────────────────────────
+  bottomBar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' },
+  quizButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 25 },
+  quizButtonText: { fontSize: 14, fontWeight: '600' },
+  bottomControls: { flexDirection: 'row', gap: 8 },
+  bottomIconBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 13, borderRadius: 8 },
+
+  // ── Topics sidebar ────────────────────────────────────────────────────────
   sidebar: { flex: 1, paddingTop: 8, paddingHorizontal: 8 },
   sidebarTitle: { fontSize: 14, fontWeight: '700', padding: 16 },
   sidebarItem: { borderLeftWidth: 3, borderLeftColor: 'transparent', padding: 12, marginHorizontal: 8, marginBottom: 4, borderRadius: 10 },
   sidebarItemText: { fontSize: 13, fontWeight: '600', marginBottom: 4 },
   sidebarItemDuration: { fontSize: 11, marginBottom: 4 },
   sidebarItemStatus: { fontSize: 11 },
+
+  // ── Modals ────────────────────────────────────────────────────────────────
   modalOverlay: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(15,23,42,0.72)', padding: 20 },
   modalCard: { borderRadius: 16, padding: 20, maxHeight: '85%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   modalTitle: { fontSize: 18, fontWeight: '700' },
-  flashcard: { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 12 },
-  flashcardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12 },
+  flashcard: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 10 },
+  flashcardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 12 },
   flashcardLabel: { fontSize: 12, fontWeight: '700' },
   flashcardHint: { fontSize: 11, fontWeight: '600' },
-  flashcardFront: { fontSize: 16, lineHeight: 24, marginBottom: 12, fontWeight: '600' },
-  flashcardDivider: { height: 1, marginBottom: 12 },
-  flashcardMeta: { fontSize: 12, lineHeight: 18 },
-  notesTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
-  notesBody: { fontSize: 14, lineHeight: 22, marginBottom: 6 },
-  noteSection: { marginBottom: 14 },
-  noteSectionTitle: { fontSize: 14, fontWeight: '700', marginBottom: 6 },
+  flashcardFront: { fontSize: 15, lineHeight: 22, marginBottom: 10, fontWeight: '600' },
+  flashcardDivider: { height: 1, marginBottom: 10 },
+  flashcardMeta: { fontSize: 12, lineHeight: 17 },
+  notesTitle: { fontSize: 17, fontWeight: '700', marginBottom: 8 },
+  notesBody: { fontSize: 13, lineHeight: 21, marginBottom: 6 },
+  noteSection: { marginBottom: 12 },
+  noteSectionTitle: { fontSize: 13, fontWeight: '700', marginBottom: 5 },
 });
 
 export default LearningScreen;
