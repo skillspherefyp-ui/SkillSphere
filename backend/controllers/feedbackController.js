@@ -2,6 +2,10 @@ const { Feedback, Course } = require('../models');
 
 exports.createFeedback = async (req, res) => {
   try {
+    if (req.user.role !== 'expert') {
+      return res.status(403).json({ error: 'Only experts can submit feedback' });
+    }
+
     const { courseName, expertName, feedback, rating, courseId } = req.body;
 
     if (!courseName || !expertName || !feedback || !rating) {
@@ -37,6 +41,10 @@ exports.createFeedback = async (req, res) => {
 
 exports.getAllFeedback = async (req, res) => {
   try {
+    if (!['admin', 'superadmin'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only admins can view feedback' });
+    }
+
     const feedbacks = await Feedback.findAll({
       include: [{ model: Course, as: 'course', attributes: ['id', 'name'] }],
       order: [['createdAt', 'DESC']]
@@ -51,6 +59,10 @@ exports.getAllFeedback = async (req, res) => {
 
 exports.getFeedbackById = async (req, res) => {
   try {
+    if (!['admin', 'superadmin'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only admins can view feedback' });
+    }
+
     const { id } = req.params;
 
     const feedback = await Feedback.findByPk(id, {
@@ -70,6 +82,10 @@ exports.getFeedbackById = async (req, res) => {
 
 exports.updateFeedback = async (req, res) => {
   try {
+    if (!['admin', 'superadmin'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only admins can update feedback' });
+    }
+
     const { id } = req.params;
     const { courseName, expertName, feedback, rating } = req.body;
 
@@ -95,6 +111,10 @@ exports.updateFeedback = async (req, res) => {
 
 exports.deleteFeedback = async (req, res) => {
   try {
+    if (!['admin', 'superadmin'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only admins can delete feedback' });
+    }
+
     const { id } = req.params;
 
     const feedback = await Feedback.findByPk(id);
@@ -111,6 +131,5 @@ exports.deleteFeedback = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-
 
 

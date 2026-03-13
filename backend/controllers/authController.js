@@ -151,7 +151,7 @@ exports.register = async (req, res) => {
 exports.getProfile = async (req, res) => {
   try {
     const user = await User.findByPk(req.user.id, {
-      attributes: { exclude: ['password'] }
+      attributes: { exclude: ['password', 'otpCode', 'otpExpiry'] }
     });
 
     res.json({ success: true, user });
