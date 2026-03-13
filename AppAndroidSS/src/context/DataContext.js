@@ -38,6 +38,25 @@ export const DataProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const toLocalDateISOString = (value) => {
+    if (!value || typeof value !== 'string') return value;
+    const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+    if (!match) return value;
+
+    const [, year, month, day, hour, minute] = match;
+    const localDate = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      0,
+      0
+    );
+
+    return Number.isNaN(localDate.getTime()) ? value : localDate.toISOString();
+  };
+
   // Categories
   const fetchCategories = useCallback(async () => {
     try {
@@ -454,7 +473,11 @@ export const DataProvider = ({ children }) => {
 
   const addTodo = async ({ text, type, scheduledAt }) => {
     try {
-      const response = await todoAPI.create({ text, type: type || 'reminder', scheduledAt: scheduledAt || null });
+      const response = await todoAPI.create({
+        text,
+        type: type || 'reminder',
+        scheduledAt: scheduledAt ? toLocalDateISOString(scheduledAt) : null
+      });
       if (response.success) setTodos((prev) => [response.todo, ...prev]);
       return response;
     } catch (err) {

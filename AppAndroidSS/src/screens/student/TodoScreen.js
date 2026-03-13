@@ -81,7 +81,20 @@ const TodoScreen = () => {
 
   const formatScheduledAt = (val) => {
     if (!val) return null;
-    const d = new Date(val);
+    const localInputMatch = typeof val === 'string'
+      ? val.trim().match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/)
+      : null;
+    const d = localInputMatch
+      ? new Date(
+          Number(localInputMatch[1]),
+          Number(localInputMatch[2]) - 1,
+          Number(localInputMatch[3]),
+          Number(localInputMatch[4]),
+          Number(localInputMatch[5]),
+          0,
+          0
+        )
+      : new Date(val);
     if (isNaN(d.getTime())) return null;
     return d.toLocaleString('en-US', {
       month: 'short', day: 'numeric', year: 'numeric',
