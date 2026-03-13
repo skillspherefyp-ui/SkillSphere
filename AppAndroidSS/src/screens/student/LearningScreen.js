@@ -29,7 +29,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { lectureChatAPI } from '../../services/apiClient';
 import { resolveFileUrl } from '../../utils/urlHelpers';
-import AILearningScreen from './AILearningScreen';
 
 const LearningScreen = () => {
   const navigation = useNavigation();
@@ -591,10 +590,6 @@ const LearningScreen = () => {
     'Connection weights',
     'Activation functions'
   ];
-
-  if (!isManualMode) {
-    return <AILearningScreen />;
-  }
 
   return (
     <MainLayout
