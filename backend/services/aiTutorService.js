@@ -1145,7 +1145,7 @@ async function getCourseGenerationStatus(courseId) {
   }, { total: topicStatuses.length, ready: 0, failed: 0, processing: 0, pending: 0 });
 
   const job = generationJobs.get(String(courseId));
-  const isRunning = job?.status === 'running';
+  const isRunning = job?.status === 'running' || summary.processing > 0;
   const isCompleted = !isRunning && summary.total > 0 && summary.ready + summary.failed === summary.total;
 
   return {
