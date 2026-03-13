@@ -711,59 +711,54 @@ const LearningScreen = () => {
 
             </View>
           ) : (
-            /* ── AI Mode — same card structure as Manual Mode ─────── */
-            <View style={styles.manualFlexArea}>
-              <View style={[styles.manualContentArea, { flex: 1 }]}>
+            /* ── AI Mode ─────── */
+            <View style={styles.aiFlexArea}>
+              <View style={[styles.manualContentArea, { flex: 1, backgroundColor: isDark ? '#1a1a2e' : '#1e293b' }]}>
 
-                {/* Header — mirrors manual mode: icon + topic title + right-side badge */}
-                <View style={[styles.manualHeader, { backgroundColor: isDark ? '#1a1a2e' : '#1e293b' }]}>
-                  <MaterialIcon name="robot" size={16} color={theme.colors.primary} />
-                  <Text style={styles.manualHeaderTitle} numberOfLines={1}>
-                    {topic?.title || 'AI Lecture'}
-                  </Text>
-                  {aiSpeaking ? (
+                {/* Header — presentation icon + title + Live badge + Pause/Resume button */}
+                <View style={[styles.manualHeader, { backgroundColor: isDark ? '#12122a' : '#0f172a' }]}>
+                  <MaterialIcon name="presentation" size={16} color="#fff" />
+                  <Text style={styles.manualHeaderTitle} numberOfLines={1}>Virtual Whiteboard</Text>
+                  {aiSpeaking && (
                     <View style={styles.liveBadge}>
                       <View style={styles.liveDot} />
                       <Text style={styles.liveBadgeText}>Live</Text>
                     </View>
-                  ) : (
-                    <View style={[styles.liveBadge, { backgroundColor: '#374151' }]}>
-                      <Icon name="pause" size={10} color="#9ca3af" />
-                      <Text style={[styles.liveBadgeText, { color: '#9ca3af' }]}>Paused</Text>
-                    </View>
                   )}
+                  <TouchableOpacity
+                    style={[styles.manualOpenBtn, { marginLeft: 4 }]}
+                    onPress={() => { setIsPlaying(p => !p); setAiSpeaking(s => !s); }}
+                  >
+                    <Icon name={isPlaying ? 'pause' : 'play'} size={13} color="#fff" />
+                    <Text style={styles.manualOpenBtnText}>{isPlaying ? 'Pause' : 'Resume'}</Text>
+                  </TouchableOpacity>
                 </View>
 
-                {/* Viewer — flex:1 so it fills all remaining height, mirrors materialViewerBox */}
-                <View style={[styles.materialViewerBox, { backgroundColor: isDark ? '#1a1a2e' : '#1e293b', flex: 1 }]}>
-                  <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+                {/* Scrollable whiteboard + subtitles content inside card */}
+                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
 
-                    {/* Pulsing AI avatar — centered, with pause/resume directly below */}
-                    <View style={styles.aiAvatarSection}>
-                      <RNAnimated.View style={[styles.aiAvatarCircle, { transform: [{ scale: pulseAnim }], opacity: aiSpeaking ? 1 : 0.5 }]}>
-                        <MaterialIcon name="robot" size={32} color="#fff" />
-                      </RNAnimated.View>
+                  {/* Compact AI Tutor status bar — horizontal, above diagram */}
+                  <View style={styles.aiStatusBar}>
+                    <RNAnimated.View style={[styles.aiStatusAvatar, { transform: [{ scale: pulseAnim }], opacity: aiSpeaking ? 1 : 0.5 }]}>
+                      <MaterialIcon name="robot" size={20} color="#fff" />
+                    </RNAnimated.View>
+                    <View style={{ flex: 1 }}>
                       <Text style={styles.aiStatusName}>AI Tutor</Text>
-                      <TouchableOpacity
-                        style={[styles.manualOpenBtn, { marginTop: 10 }]}
-                        onPress={() => { setIsPlaying(p => !p); setAiSpeaking(s => !s); }}
-                      >
-                        <Icon name={isPlaying ? 'pause' : 'play'} size={13} color="#fff" />
-                        <Text style={styles.manualOpenBtnText}>{isPlaying ? 'Pause' : 'Resume'}</Text>
-                      </TouchableOpacity>
-                      {aiSpeaking ? (
-                        <View style={[styles.soundWaveRow, { marginTop: 10 }]}>
-                          {[6, 12, 18, 24, 16, 20, 12, 7].map((h, i) => (
-                            <View key={i} style={[styles.soundBar, { height: h }]} />
-                          ))}
-                        </View>
-                      ) : (
-                        <View style={[styles.liveBadge, { backgroundColor: '#374151', marginTop: 10 }]}>
-                          <Icon name="pause" size={10} color="#9ca3af" />
-                          <Text style={[styles.liveBadgeText, { color: '#9ca3af' }]}>Paused</Text>
-                        </View>
-                      )}
+                      <Text style={styles.aiStatusSub} numberOfLines={1}>{currentSubtitle}</Text>
                     </View>
+                    {aiSpeaking ? (
+                      <View style={styles.soundWaveRow}>
+                        {[6, 12, 18, 24, 16, 20, 12, 7].map((h, i) => (
+                          <View key={i} style={[styles.soundBar, { height: h }]} />
+                        ))}
+                      </View>
+                    ) : (
+                      <View style={[styles.liveBadge, { backgroundColor: '#374151' }]}>
+                        <Icon name="pause" size={10} color="#9ca3af" />
+                        <Text style={[styles.liveBadgeText, { color: '#9ca3af' }]}>Paused</Text>
+                      </View>
+                    )}
+                  </View>
 
                     {/* Whiteboard diagram */}
                     <View style={styles.whiteboardContent}>
@@ -821,8 +816,7 @@ const LearningScreen = () => {
                       </Text>
                     </View>
 
-                  </ScrollView>
-                </View>
+                </ScrollView>
               </View>
             </View>
           )}
@@ -1572,19 +1566,9 @@ const styles = StyleSheet.create({
   },
 
   // ── AI Mode ────────────────────────────────────────────────────────────────
-  aiAvatarSection: {
-    alignItems: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-  },
-  aiAvatarCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#7c3aed',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
+  aiFlexArea: {
+    flex: 1,
+    flexDirection: 'column',
   },
 
   // ── Manual Mode ────────────────────────────────────────────────────────────
