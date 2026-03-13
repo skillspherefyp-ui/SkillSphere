@@ -143,6 +143,13 @@ const LearningScreen = () => {
     }
   }, [course?.topics]);
 
+  // Redirect AI courses to the real AI lecture screen once enrollment is confirmed
+  useEffect(() => {
+    if (!enrollmentLoading && isEnrolled && course && !isManualMode) {
+      navigation.replace('AILearning', { courseId, topicId });
+    }
+  }, [enrollmentLoading, isEnrolled, isManualMode, course]);
+
   useEffect(() => {
     if (isManualMode && topicMaterials.length > 0) {
       setSelectedMaterial(topicMaterials[0]);
