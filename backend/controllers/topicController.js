@@ -1,6 +1,28 @@
-const { Topic, Course, Material, Quiz } = require('../models');
+const { sequelize, Topic, Course, Material, Quiz } = require('../models');
+
+function sanitizeQuizQuestions(questions = []) {
+  if (!Array.isArray(questions)) {
+    return [];
+  }
+
+  return questions
+    .map((question, index) => ({
+      id: question.id || `${index + 1}`,
+      question: `${question.question || question.prompt || ''}`.trim(),
+      prompt: `${question.prompt || question.question || ''}`.trim(),
+      options: Array.isArray(question.options)
+        ? question.options.map((option) => `${option || ''}`.trim())
+        : [],
+      correctAnswer: Number.isInteger(question.correctAnswer)
+        ? question.correctAnswer
+        : Number(question.correctAnswer || 0),
+    }))
+    .filter((question) => question.question && question.options.length > 0);
+}
 
 exports.createTopic = async (req, res) => {
+  const transaction = await sequelize.transaction();
+
   try {
     const { courseId, title, materials, questions } = req.body;
 
@@ -40,7 +62,7 @@ exports.createTopic = async (req, res) => {
       status: status,
       completed: false,
       order
-    });
+    }, { transaction });
 
     // Add materials if provided
     if (materials && Array.isArray(materials) && materials.length > 0) {
@@ -49,27 +71,34 @@ exports.createTopic = async (req, res) => {
         topicId: topic.id,
         courseId: courseId
       }));
-      await Material.bulkCreate(topicMaterials);
+      await Material.bulkCreate(topicMaterials, { transaction });
     }
 
     // Create quiz if questions provided (manual mode courses)
-    if (questions && Array.isArray(questions) && questions.length > 0) {
+    const normalizedQuestions = sanitizeQuizQuestions(questions);
+    if (normalizedQuestions.length > 0) {
       await Quiz.create({
         courseId,
         topicId: topic.id,
         title: `${title} Quiz`,
-        questions,
+        questions: JSON.stringify(normalizedQuestions),
         passingScore: 70,
         isActive: true,
-      });
+      }, { transaction });
     }
 
+    await transaction.commit();
+
     const createdTopic = await Topic.findByPk(topic.id, {
-      include: [{ model: Material, as: 'materials' }]
+      include: [
+        { model: Material, as: 'materials' },
+        { model: Quiz, as: 'quizzes' }
+      ]
     });
 
     res.status(201).json({ success: true, topic: createdTopic });
   } catch (error) {
+    await transaction.rollback();
     console.error('Create topic error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -93,13 +122,15 @@ exports.getTopicsByCourse = async (req, res) => {
 };
 
 exports.updateTopic = async (req, res) => {
+  const transaction = await sequelize.transaction();
+
   try {
     const { id } = req.params;
     const { title, status, completed, order, materials, questions } = req.body;
 
     const topic = await Topic.findByPk(id, {
       include: [{ model: Course, as: 'course' }]
-    });
+    }, { transaction });
 
     if (!topic) {
       return res.status(404).json({ error: 'Topic not found' });
@@ -120,10 +151,10 @@ exports.updateTopic = async (req, res) => {
     if (typeof completed === 'boolean') topic.completed = completed;
     if (typeof order === 'number') topic.order = order;
 
-    await topic.save();
+    await topic.save({ transaction });
 
     if (Array.isArray(materials)) {
-      await Material.destroy({ where: { topicId: topic.id } });
+      await Material.destroy({ where: { topicId: topic.id }, transaction });
 
       if (materials.length > 0) {
         await Material.bulkCreate(
@@ -131,28 +162,34 @@ exports.updateTopic = async (req, res) => {
             ...material,
             topicId: topic.id,
             courseId: topic.courseId
-          }))
+          })),
+          { transaction }
         );
       }
     }
 
     if (Array.isArray(questions)) {
-      const existingQuiz = await Quiz.findOne({ where: { topicId: topic.id } });
+      const normalizedQuestions = sanitizeQuizQuestions(questions);
+      const existingQuiz = await Quiz.findOne({ where: { topicId: topic.id }, transaction });
       const quizPayload = {
         courseId: topic.courseId,
         topicId: topic.id,
         title: `${topic.title} Quiz`,
-        questions,
+        questions: JSON.stringify(normalizedQuestions),
         passingScore: 70,
         isActive: true,
       };
 
-      if (existingQuiz) {
-        await existingQuiz.update(quizPayload);
-      } else if (questions.length > 0) {
-        await Quiz.create(quizPayload);
+      if (existingQuiz && normalizedQuestions.length === 0) {
+        await existingQuiz.destroy({ transaction });
+      } else if (existingQuiz) {
+        await existingQuiz.update(quizPayload, { transaction });
+      } else if (normalizedQuestions.length > 0) {
+        await Quiz.create(quizPayload, { transaction });
       }
     }
+
+    await transaction.commit();
 
     const updatedTopic = await Topic.findByPk(id, {
       include: [
@@ -163,6 +200,7 @@ exports.updateTopic = async (req, res) => {
 
     res.json({ success: true, topic: updatedTopic });
   } catch (error) {
+    await transaction.rollback();
     console.error('Update topic error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -198,5 +236,4 @@ exports.deleteTopic = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-
 
