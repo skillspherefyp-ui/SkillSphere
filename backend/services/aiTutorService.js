@@ -1036,20 +1036,49 @@ async function generateCoursePackage(courseId, adminUser) {
 
           modelName = compactGeneration.model;
         } catch (compactGenerationError) {
-          console.error(`Compact AI generation failed for topic ${topic.id}, falling back to template package:`, compactGenerationError);
-          normalized = normalizeLecturePackage(
-            buildFallbackLecturePackage({
+          console.error(`Compact AI generation failed for topic ${topic.id}, attempting minimal retry:`, compactGenerationError);
+
+          try {
+            const minimalGeneration = await openaiService.generateLecturePackage({
               course,
               topic,
               materials: sourceMaterials,
               priorTopics,
               nextTopicTitle,
               outlineText,
-              failureReason: `${generationError.message}; compact retry failed: ${compactGenerationError.message}`
-            }),
-            topic.title
-          );
-          modelName = 'fallback-template';
+              compactMode: true,
+              minimalMode: true
+            });
+
+            let minimalRawPackage = minimalGeneration.package;
+            const minimalValidationErrors = validateLecturePackage(minimalRawPackage);
+            if (minimalValidationErrors.length > 0) {
+              minimalRawPackage = await openaiService.repairLecturePackage(JSON.stringify(minimalRawPackage), minimalValidationErrors);
+            }
+
+            normalized = normalizeLecturePackage(minimalRawPackage, topic.title);
+            const minimalFinalValidationErrors = validateLecturePackage(normalized);
+            if (minimalFinalValidationErrors.length > 0) {
+              throw new Error(`Minimal lecture package is invalid: ${minimalFinalValidationErrors.join(', ')}`);
+            }
+
+            modelName = minimalGeneration.model;
+          } catch (minimalGenerationError) {
+            console.error(`Minimal AI generation failed for topic ${topic.id}, falling back to template package:`, minimalGenerationError);
+            normalized = normalizeLecturePackage(
+              buildFallbackLecturePackage({
+                course,
+                topic,
+                materials: sourceMaterials,
+                priorTopics,
+                nextTopicTitle,
+                outlineText,
+                failureReason: `${generationError.message}; compact retry failed: ${compactGenerationError.message}; minimal retry failed: ${minimalGenerationError.message}`
+              }),
+              topic.title
+            );
+            modelName = 'fallback-template';
+          }
         }
       }
 
@@ -1122,9 +1151,15 @@ async function getCourseGenerationStatus(courseId) {
     const startedAtMs = job?.startedAt ? new Date(job.startedAt).getTime() : 0;
     const outlineUpdatedAtMs = outline?.updatedAt ? new Date(outline.updatedAt).getTime() : 0;
     const lectureUpdatedAtMs = lecture?.updatedAt ? new Date(lecture.updatedAt).getTime() : 0;
-    const status = outline?.status === 'processing' && outlineUpdatedAtMs >= startedAtMs
+    const lectureStatus = lecture?.status || null;
+    const hasFinalLectureState = lectureStatus === 'ready' || lectureStatus === 'failed';
+    const outlineIsNewerThanLecture = outlineUpdatedAtMs > lectureUpdatedAtMs;
+    const outlineRepresentsActiveGeneration = outline?.status === 'processing'
+      && outlineUpdatedAtMs >= startedAtMs
+      && (!hasFinalLectureState || outlineIsNewerThanLecture);
+    const status = outlineRepresentsActiveGeneration
       ? 'processing'
-      : lecture?.status || outline?.status || 'pending';
+      : lectureStatus || outline?.status || 'pending';
 
     return {
       topicId: topic.id,

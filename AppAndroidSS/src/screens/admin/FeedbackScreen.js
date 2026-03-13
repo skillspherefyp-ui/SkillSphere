@@ -168,15 +168,13 @@ const FeedbackScreen = () => {
           {/* Star Rating */}
           <View style={styles.starRow}>
             {[1, 2, 3, 4, 5].map((star) => (
-              <Text
+              <Icon
                 key={star}
-                style={[
-                  styles.starChar,
-                  { color: star <= feedback.rating ? ORANGE : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(26,26,46,0.18)') },
-                ]}
-              >
-                ★
-              </Text>
+                name={star <= feedback.rating ? 'star' : 'star-outline'}
+                size={16}
+                style={styles.starIcon}
+                color={star <= feedback.rating ? ORANGE : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(26,26,46,0.18)')}
+              />
             ))}
           </View>
         </View>
@@ -578,9 +576,8 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       flexDirection: 'row',
       gap: 2,
     },
-    starChar: {
-      fontSize: 18,
-      lineHeight: 22,
+    starIcon: {
+      marginTop: 1,
     },
     feedbackComment: {
       fontSize: 14,

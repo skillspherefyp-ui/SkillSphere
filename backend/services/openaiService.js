@@ -56,7 +56,8 @@ async function generateLecturePackage({
   priorTopics,
   nextTopicTitle,
   outlineText,
-  compactMode = false
+  compactMode = false,
+  minimalMode = false
 }) {
   const client = getClient();
   const model = process.env.OPENAI_MODEL_LECTURE;
@@ -128,6 +129,55 @@ async function generateLecturePackage({
     }
   };
 
+  const generationProfile = minimalMode
+    ? {
+        sectionRange: '2',
+        chunkRange: '1',
+        chunkDetail: 'compact, teacher-like, and immediately usable in the UI',
+        flashcardRange: '3 to 4',
+        quizRange: '3 to 4',
+        modelSuffix: '-minimal'
+      }
+    : compactMode
+      ? {
+          sectionRange: '2 to 3',
+          chunkRange: '1 to 2',
+          chunkDetail: 'concise but still teacher-like and useful',
+          flashcardRange: '4 to 5',
+          quizRange: '4',
+          modelSuffix: '-compact'
+        }
+      : {
+          sectionRange: '3 to 6',
+          chunkRange: '2 to 4',
+          chunkDetail: 'rich enough for a tutor to explain conceptually, not just read headings',
+          flashcardRange: '4 to 8',
+          quizRange: '4 to 6',
+          modelSuffix: ''
+        };
+
+  const trimmedOutlineText = `${outlineText || ''}`.trim().slice(0, minimalMode ? 1400 : compactMode ? 2200 : 3200);
+  const summarizedMaterials = (materials || []).slice(0, minimalMode ? 4 : 6).map((material) => ({
+    title: `${material?.title || ''}`.trim().slice(0, 120),
+    type: material?.type || null,
+    description: `${material?.description || ''}`.trim().slice(0, minimalMode ? 140 : 240)
+  }));
+  const summarizedPriorTopics = (priorTopics || []).slice(minimalMode ? -3 : -5);
+  const compactCourseContext = {
+    name: course.name,
+    description: `${course.description || ''}`.trim().slice(0, minimalMode ? 220 : 420),
+    level: course.level,
+    language: course.language,
+    duration: course.duration
+  };
+  const compactTopicContext = {
+    title: topic.title,
+    outlineText: trimmedOutlineText,
+    priorTopics: summarizedPriorTopics,
+    nextTopicTitle,
+    materials: summarizedMaterials
+  };
+
   const prompt = `
 You are preparing a production-ready stored lecture package for a tutoring system.
 Return valid JSON only. Do not wrap in markdown. Follow this schema exactly:
@@ -136,37 +186,26 @@ ${JSON.stringify(schemaDescription, null, 2)}
 Constraints:
 - Produce a complete lecture package for one topic.
 - Make explanations clear, accurate, teacher-like, and directly tied to the topic.
-- Generate ${compactMode ? '2 to 3' : '3 to 6'} sections.
-- Generate ${compactMode ? '1 to 2' : '2 to 4'} chunks per section for incremental delivery.
-- Each chunk should be ${compactMode ? 'concise but still teacher-like and useful' : 'rich enough for a tutor to explain conceptually, not just read headings'}.
+- Generate ${generationProfile.sectionRange} sections.
+- Generate ${generationProfile.chunkRange} chunks per section for incremental delivery.
+- Each chunk should be ${generationProfile.chunkDetail}.
 - Every chunk must contain a real spoken explanation in full sentences.
 - Use visual_mode deliberately. Choose whiteboard, slide, diagram, flowchart, comparison_table, mixed, or none based on the concept.
 - Use teaching_sequence to decide the order of teaching actions for that chunk.
 - Include examples, key terms, and analogy_if_helpful when they make the explanation stronger.
 - Include checkpoint_question_if_any whenever the learner should pause and self-check.
-- Generate ${compactMode ? '4 to 5' : '4 to 8'} flashcards.
-- Generate ${compactMode ? '4' : '4 to 6'} multiple choice questions with exactly 4 options each.
+- Generate ${generationProfile.flashcardRange} flashcards.
+- Generate ${generationProfile.quizRange} multiple choice questions with exactly 4 options each.
 - Ensure correctAnswer is a zero-based option index.
 - Use the next topic only as unlock context, not as lecture content.
 - Keep the JSON compact and efficient. Avoid unnecessary verbosity in long string fields.
+- Prefer practical, screen-friendly content over very long paragraphs.
 
 Course:
-${JSON.stringify({
-    name: course.name,
-    description: course.description,
-    level: course.level,
-    language: course.language,
-    duration: course.duration
-  }, null, 2)}
+${JSON.stringify(compactCourseContext, null, 2)}
 
 Topic:
-${JSON.stringify({
-    title: topic.title,
-    outlineText,
-    priorTopics,
-    nextTopicTitle,
-    materials
-  }, null, 2)}
+${JSON.stringify(compactTopicContext, null, 2)}
 `;
 
   const completion = await withOpenAITimeout(
@@ -191,7 +230,7 @@ ${JSON.stringify({
   );
 
   return {
-    model: compactMode ? `${model}-compact` : model,
+    model: `${model}${generationProfile.modelSuffix}`,
     package: getJsonFromCompletion(completion)
   };
 }
