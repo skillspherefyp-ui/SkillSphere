@@ -59,7 +59,7 @@ exports.getAllAdmins = async (req, res) => {
   try {
     const users = await User.findAll({
       where: {
-        role: ['admin', 'expert', 'superadmin']
+        role: ['admin', 'expert']
       },
       attributes: { exclude: SAFE_USER_EXCLUDE_FIELDS },
       order: [['createdAt', 'DESC']]

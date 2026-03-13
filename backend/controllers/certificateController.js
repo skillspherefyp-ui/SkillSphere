@@ -21,6 +21,23 @@ exports.getMyCertificates = async (req, res) => {
   }
 };
 
+exports.getAllCertificates = async (req, res) => {
+  try {
+    const certificates = await Certificate.findAll({
+      include: [
+        { model: Course, as: 'course' },
+        { model: User, as: 'user', attributes: ['id', 'name', 'email'] }
+      ],
+      order: [['issuedDate', 'DESC']]
+    });
+
+    res.json({ success: true, certificates });
+  } catch (error) {
+    console.error('Get all certificates error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Generate certificate for completed course
 exports.generateCertificate = async (req, res) => {
   try {
@@ -152,6 +169,42 @@ exports.verifyCertificate = async (req, res) => {
     });
   } catch (error) {
     console.error('Verify certificate error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getCertificateById = async (req, res) => {
+  try {
+    const certificate = await Certificate.findByPk(req.params.id, {
+      include: [
+        { model: Course, as: 'course' },
+        { model: User, as: 'user', attributes: ['id', 'name', 'email'] }
+      ]
+    });
+
+    if (!certificate) {
+      return res.status(404).json({ error: 'Certificate not found' });
+    }
+
+    res.json({ success: true, certificate });
+  } catch (error) {
+    console.error('Get certificate by id error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.deleteCertificate = async (req, res) => {
+  try {
+    const certificate = await Certificate.findByPk(req.params.id);
+
+    if (!certificate) {
+      return res.status(404).json({ error: 'Certificate not found' });
+    }
+
+    await certificate.destroy();
+    res.json({ success: true, message: 'Certificate deleted successfully' });
+  } catch (error) {
+    console.error('Delete certificate error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
