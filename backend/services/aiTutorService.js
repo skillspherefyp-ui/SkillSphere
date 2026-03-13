@@ -967,6 +967,14 @@ async function generateCoursePackage(courseId, adminUser) {
       errorMessage: null
     });
 
+    const existingLecture = await AILecture.findOne({ where: { topicId: topic.id } });
+    if (existingLecture) {
+      await existingLecture.update({
+        status: 'processing',
+        errorMessage: null
+      });
+    }
+
     try {
       const sourceMaterials = (topic.materials || []).map((material) => ({
         title: material.title,
@@ -1110,7 +1118,13 @@ async function getCourseGenerationStatus(courseId) {
   const topicStatuses = topics.map((topic) => {
     const outline = outlineByTopicId.get(topic.id);
     const lecture = lectureByTopicId.get(topic.id);
-    const status = lecture?.status || outline?.status || 'pending';
+    const job = generationJobs.get(String(courseId));
+    const startedAtMs = job?.startedAt ? new Date(job.startedAt).getTime() : 0;
+    const outlineUpdatedAtMs = outline?.updatedAt ? new Date(outline.updatedAt).getTime() : 0;
+    const lectureUpdatedAtMs = lecture?.updatedAt ? new Date(lecture.updatedAt).getTime() : 0;
+    const status = outline?.status === 'processing' && outlineUpdatedAtMs >= startedAtMs
+      ? 'processing'
+      : lecture?.status || outline?.status || 'pending';
 
     return {
       topicId: topic.id,
