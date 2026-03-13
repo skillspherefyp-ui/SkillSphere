@@ -29,6 +29,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { lectureChatAPI } from '../../services/apiClient';
 import { resolveFileUrl } from '../../utils/urlHelpers';
+import AILearningScreen from './AILearningScreen';
 
 const LearningScreen = () => {
   const navigation = useNavigation();
@@ -591,6 +592,10 @@ const LearningScreen = () => {
     'Activation functions'
   ];
 
+  if (!isManualMode) {
+    return <AILearningScreen />;
+  }
+
   return (
     <MainLayout
       showSidebar={true}
@@ -711,111 +716,117 @@ const LearningScreen = () => {
 
             </View>
           ) : (
-            /* ── AI Mode ─────── */
+            /* ── AI Mode: whiteboard fills area like manual mode ─────── */
             <View style={styles.aiFlexArea}>
-              <View style={[styles.manualContentArea, { flex: 1 }]}>
+              <View style={[styles.manualContentArea, { flex: 1, backgroundColor: isDark ? '#1a1a2e' : '#1e293b' }]}>
 
-                {/* Header — identical structure to manual mode header */}
-                <View style={[styles.manualHeader, { backgroundColor: isDark ? '#1a1a2e' : '#1e293b' }]}>
+                {/* Whiteboard header — mirrors manualHeader style */}
+                <View style={[styles.manualHeader, { backgroundColor: isDark ? '#12122a' : '#0f172a' }]}>
                   <MaterialIcon name="presentation" size={16} color="#fff" />
-                  <Text style={styles.manualHeaderTitle} numberOfLines={1}>Virtual Whiteboard</Text>
+                  <Text style={[styles.manualHeaderTitle, { flex: 1 }]}>Virtual Whiteboard</Text>
                   {aiSpeaking && (
                     <View style={styles.liveBadge}>
-                      <View style={styles.liveDot} />
                       <Text style={styles.liveBadgeText}>Live</Text>
                     </View>
                   )}
+                  <TouchableOpacity
+                    style={[styles.manualOpenBtn, { marginLeft: 8 }]}
+                    onPress={() => { setIsPlaying(p => !p); setAiSpeaking(s => !s); }}
+                  >
+                    <Icon name={isPlaying ? 'pause' : 'play'} size={13} color="#fff" />
+                    <Text style={styles.manualOpenBtnText}>{isPlaying ? 'Pause' : 'Resume'}</Text>
+                  </TouchableOpacity>
                 </View>
 
-                {/* Content area — mirrors materialViewerBox from manual mode */}
-                <View style={[styles.materialViewerBox, { backgroundColor: isDark ? '#1a1a2e' : '#1e293b', flex: 1 }]}>
-                  <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+                {/* Scrollable whiteboard + subtitles content inside card */}
+                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
 
-                    {/* Pulsing AI avatar — centered, with pause/resume directly below */}
-                    <View style={styles.aiAvatarSection}>
-                      <RNAnimated.View style={[styles.aiAvatarCircle, { transform: [{ scale: pulseAnim }], opacity: aiSpeaking ? 1 : 0.5 }]}>
-                        <MaterialIcon name="robot" size={32} color="#fff" />
-                      </RNAnimated.View>
+                  {/* AI Tutor status bar — full width, above diagram */}
+                  <View style={styles.aiStatusBar}>
+                    <RNAnimated.View style={[styles.aiStatusAvatar, { transform: [{ scale: pulseAnim }], opacity: aiSpeaking ? 1 : 0.5 }]}>
+                      <MaterialIcon name="robot" size={20} color="#fff" />
+                    </RNAnimated.View>
+                    <View style={{ flex: 1 }}>
                       <Text style={styles.aiStatusName}>AI Tutor</Text>
-                      <TouchableOpacity
-                        style={[styles.manualOpenBtn, { marginTop: 10 }]}
-                        onPress={() => { setIsPlaying(p => !p); setAiSpeaking(s => !s); }}
-                      >
-                        <Icon name={isPlaying ? 'pause' : 'play'} size={13} color="#fff" />
-                        <Text style={styles.manualOpenBtnText}>{isPlaying ? 'Pause' : 'Resume'}</Text>
-                      </TouchableOpacity>
-                      {aiSpeaking ? (
-                        <View style={[styles.soundWaveRow, { marginTop: 10 }]}>
-                          {[6, 12, 18, 24, 16, 20, 12, 7].map((h, i) => (
-                            <View key={i} style={[styles.soundBar, { height: h }]} />
-                          ))}
-                        </View>
-                      ) : (
-                        <View style={[styles.liveBadge, { backgroundColor: '#374151', marginTop: 10 }]}>
-                          <Icon name="pause" size={10} color="#9ca3af" />
-                          <Text style={[styles.liveBadgeText, { color: '#9ca3af' }]}>Paused</Text>
-                        </View>
-                      )}
+                      <Text style={styles.aiStatusSub} numberOfLines={1}>{currentSubtitle}</Text>
                     </View>
-
-                    {/* Whiteboard diagram */}
-                    <View style={styles.whiteboardContent}>
-                      <Text style={styles.diagramTitle}>Neural Network Architecture</Text>
-                      <View style={styles.neuralNetwork}>
-                        <View style={styles.nnLayer}>
-                          {['I1', 'I2', 'I3', 'I4'].map((node) => (
-                            <View key={node} style={[styles.nnNode, styles.nnNodeInput]}>
-                              <Text style={styles.nnNodeText}>{node}</Text>
-                            </View>
-                          ))}
-                          <Text style={styles.nnLayerLabel}>Input</Text>
-                        </View>
-                        <View style={styles.nnLayer}>
-                          {['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].map((node) => (
-                            <View key={node} style={[styles.nnNode, styles.nnNodeHidden]}>
-                              <Text style={styles.nnNodeText}>{node}</Text>
-                            </View>
-                          ))}
-                          <Text style={styles.nnLayerLabel}>Hidden</Text>
-                        </View>
-                        <View style={styles.nnLayer}>
-                          {['O1', 'O2', 'O3'].map((node) => (
-                            <View key={node} style={[styles.nnNode, styles.nnNodeOutput]}>
-                              <Text style={styles.nnNodeText}>{node}</Text>
-                            </View>
-                          ))}
-                          <Text style={styles.nnLayerLabel}>Output</Text>
-                        </View>
+                    {aiSpeaking ? (
+                      <View style={styles.soundWaveRow}>
+                        {[6, 12, 18, 24, 16, 20, 12, 7].map((h, i) => (
+                          <View key={i} style={[styles.soundBar, { height: h }]} />
+                        ))}
                       </View>
-                      <View style={styles.keyConcepts}>
-                        <Text style={styles.keyConceptsTitle}>Key Concepts:</Text>
-                        <View style={styles.keyConceptsList}>
-                          {keyConcepts.map((concept, i) => (
-                            <View key={i} style={styles.keyConceptItem}>
-                              <View style={[styles.keyConceptDot, { backgroundColor: i === 0 ? '#3b82f6' : i === 1 ? '#8b5cf6' : '#10b981' }]} />
-                              <Text style={styles.keyConceptText}>{concept}</Text>
-                            </View>
-                          ))}
-                        </View>
+                    ) : (
+                      <View style={[styles.liveBadge, { backgroundColor: '#374151' }]}>
+                        <Icon name="pause" size={10} color="#9ca3af" />
+                        <Text style={[styles.liveBadgeText, { color: '#9ca3af' }]}>Paused</Text>
+                      </View>
+                    )}
+                    {aiSpeaking && (
+                      <View style={styles.liveBadge}>
+                        <View style={styles.liveDot} />
+                        <Text style={styles.liveBadgeText}>Live</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Whiteboard diagram */}
+                  <View style={styles.whiteboardContent}>
+                    <Text style={styles.diagramTitle}>Neural Network Architecture</Text>
+                    <View style={styles.neuralNetwork}>
+                      <View style={styles.nnLayer}>
+                        {['I1', 'I2', 'I3', 'I4'].map((node) => (
+                          <View key={node} style={[styles.nnNode, styles.nnNodeInput]}>
+                            <Text style={styles.nnNodeText}>{node}</Text>
+                          </View>
+                        ))}
+                        <Text style={styles.nnLayerLabel}>Input</Text>
+                      </View>
+                      <View style={styles.nnLayer}>
+                        {['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].map((node) => (
+                          <View key={node} style={[styles.nnNode, styles.nnNodeHidden]}>
+                            <Text style={styles.nnNodeText}>{node}</Text>
+                          </View>
+                        ))}
+                        <Text style={styles.nnLayerLabel}>Hidden</Text>
+                      </View>
+                      <View style={styles.nnLayer}>
+                        {['O1', 'O2', 'O3'].map((node) => (
+                          <View key={node} style={[styles.nnNode, styles.nnNodeOutput]}>
+                            <Text style={styles.nnNodeText}>{node}</Text>
+                          </View>
+                        ))}
+                        <Text style={styles.nnLayerLabel}>Output</Text>
                       </View>
                     </View>
-
-                    {/* Live Subtitles */}
-                    <View style={[styles.subtitlesSection, { backgroundColor: 'rgba(0,0,0,0.25)', margin: 12, marginTop: 8 }]}>
-                      <View style={styles.subtitlesHeader}>
-                        <MaterialIcon name="subtitles" size={14} color="#9ca3af" />
-                        <Text style={[styles.subtitlesTitle, { color: '#cbd5e1', fontSize: 12 }]}>Subtitles</Text>
-                        <View style={[styles.languageBadge, { marginLeft: 'auto' }]}>
-                          <Text style={styles.languageBadgeText}>EN</Text>
-                        </View>
+                    <View style={styles.keyConcepts}>
+                      <Text style={styles.keyConceptsTitle}>Key Concepts:</Text>
+                      <View style={styles.keyConceptsList}>
+                        {keyConcepts.map((concept, i) => (
+                          <View key={i} style={styles.keyConceptItem}>
+                            <View style={[styles.keyConceptDot, { backgroundColor: i === 0 ? '#3b82f6' : i === 1 ? '#8b5cf6' : '#10b981' }]} />
+                            <Text style={styles.keyConceptText}>{concept}</Text>
+                          </View>
+                        ))}
                       </View>
-                      <Text style={[styles.subtitlesText, { color: '#e2e8f0', fontSize: 14 }]}>
-                        {currentSubtitle}
-                      </Text>
                     </View>
+                  </View>
 
-                  </ScrollView>
-                </View>
+                  {/* Live Subtitles */}
+                  <View style={[styles.subtitlesSection, { backgroundColor: 'rgba(0,0,0,0.25)', margin: 12, marginTop: 8 }]}>
+                    <View style={styles.subtitlesHeader}>
+                      <MaterialIcon name="subtitles" size={14} color="#9ca3af" />
+                      <Text style={[styles.subtitlesTitle, { color: '#cbd5e1', fontSize: 12 }]}>Subtitles</Text>
+                      <View style={[styles.languageBadge, { marginLeft: 'auto' }]}>
+                        <Text style={styles.languageBadgeText}>EN</Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.subtitlesText, { color: '#e2e8f0', fontSize: 14 }]}>
+                      {currentSubtitle}
+                    </Text>
+                  </View>
+
+                </ScrollView>
               </View>
             </View>
           )}
@@ -1568,20 +1579,6 @@ const styles = StyleSheet.create({
   aiFlexArea: {
     flex: 1,
     flexDirection: 'column',
-  },
-  aiAvatarSection: {
-    alignItems: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-  },
-  aiAvatarCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#7c3aed',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
   },
 
   // ── Manual Mode ────────────────────────────────────────────────────────────
