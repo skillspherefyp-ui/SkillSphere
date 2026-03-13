@@ -1,6 +1,8 @@
 const { User } = require('../models');
 const { sendAdminAccountCreatedEmail } = require('../services/emailService');
 
+const SAFE_USER_EXCLUDE_FIELDS = ['password', 'otpCode', 'otpExpiry'];
+
 exports.createAdmin = async (req, res) => {
   console.log('====== CREATE ADMIN CALLED ======');
   try {
@@ -59,7 +61,7 @@ exports.getAllAdmins = async (req, res) => {
       where: {
         role: ['admin', 'expert', 'superadmin']
       },
-      attributes: { exclude: ['password'] },
+      attributes: { exclude: SAFE_USER_EXCLUDE_FIELDS },
       order: [['createdAt', 'DESC']]
     });
 
@@ -88,7 +90,7 @@ exports.getAdminById = async (req, res) => {
   try {
     const { id } = req.params;
     const user = await User.findByPk(id, {
-      attributes: { exclude: ['password'] }
+      attributes: { exclude: SAFE_USER_EXCLUDE_FIELDS }
     });
 
     if (!user) {

@@ -1633,20 +1633,32 @@ async function submitQuestion(sessionId, userId, question) {
     question
   });
 
-  const aiMessage = await AITutorMessage.create({
-    sessionId: session.id,
-    sender: 'ai',
-    messageType: 'answer',
-    content: response.answer,
+    const aiMessage = await AITutorMessage.create({
+      sessionId: session.id,
+      sender: 'ai',
+      messageType: 'answer',
+      content: response.answer,
     contextSnapshot: {
       sectionIndex: session.currentSectionIndex,
       chunkIndex: session.currentChunkIndex,
-      model: response.model
-    }
-  });
+        model: response.model
+      }
+    });
 
-  return {
-    session,
+    // Reload the session after persisting the pause state so callers receive
+    // the latest chunk pointer and teaching state instead of the stale instance.
+    await session.reload({
+      include: [{
+        model: AITutorMessage,
+        as: 'messages',
+        separate: true,
+        limit: 20,
+        order: [['createdAt', 'ASC']]
+      }]
+    });
+
+    return {
+      session,
     lecture,
     userMessage,
     aiMessage
