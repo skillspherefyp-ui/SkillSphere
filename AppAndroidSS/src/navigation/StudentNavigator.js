@@ -4,6 +4,7 @@ import StudentDashboard from '../screens/student/StudentDashboard';
 import BrowseCoursesScreen from '../screens/student/BrowseCoursesScreen';
 import CourseDetailScreen from '../screens/student/CourseDetailScreen';
 import LearningScreen from '../screens/student/LearningScreen';
+import AILearningScreen from '../screens/student/AILearningScreen';
 import QuizScreen from '../screens/student/QuizScreen';
 import QuizResultScreen from '../screens/student/QuizResultScreen';
 import AIChatScreen from '../screens/student/AIChatScreen';
@@ -31,6 +32,7 @@ const StudentNavigator = () => {
       <Stack.Screen name="Courses" component={BrowseCoursesScreen} />
       <Stack.Screen name="CourseDetail" component={CourseDetailScreen} />
       <Stack.Screen name="Learning" component={LearningScreen} />
+      <Stack.Screen name="AILearning" component={AILearningScreen} />
       <Stack.Screen name="Quiz" component={QuizScreen} />
       <Stack.Screen name="QuizResult" component={QuizResultScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
