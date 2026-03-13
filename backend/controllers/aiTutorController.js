@@ -53,20 +53,31 @@ exports.upsertOutline = async (req, res) => {
 
 exports.generateCoursePackage = async (req, res) => {
   try {
-    const results = await aiTutorService.generateCoursePackage(req.params.courseId, req.user);
-    const readyCount = results.filter((item) => item.status === 'ready').length;
+    const generation = await aiTutorService.startCourseGeneration(req.params.courseId, req.user);
 
-    res.json({
+    res.status(202).json({
       success: true,
-      results,
-      summary: {
-        total: results.length,
-        ready: readyCount,
-        failed: results.length - readyCount
-      }
+      accepted: true,
+      alreadyRunning: generation.alreadyRunning,
+      courseId: generation.courseId,
+      startedAt: generation.startedAt,
+      message: generation.alreadyRunning
+        ? 'AI lecture generation is already in progress for this course.'
+        : 'AI lecture generation has started. You can track progress from the admin screen.'
     });
   } catch (error) {
     console.error('Generate AI course package error:', error);
+    res.status(error.message.includes('permission') ? 403 : 400).json({ error: error.message || 'Internal server error' });
+  }
+};
+
+exports.getGenerationStatus = async (req, res) => {
+  try {
+    await aiTutorService.canManageCourse(req.user, req.params.courseId);
+    const status = await aiTutorService.getCourseGenerationStatus(req.params.courseId);
+    res.json(status);
+  } catch (error) {
+    console.error('Get AI generation status error:', error);
     res.status(error.message.includes('permission') ? 403 : 400).json({ error: error.message || 'Internal server error' });
   }
 };

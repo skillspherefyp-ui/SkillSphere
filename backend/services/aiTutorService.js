@@ -24,6 +24,7 @@ const openaiService = require('./openaiService');
 const aiTeachingOrchestrator = require('./aiTeachingOrchestrator');
 
 const AUDIO_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'ai-audio');
+const generationJobs = new Map();
 
 function dedupeStrings(values) {
   return Array.from(
@@ -1060,6 +1061,115 @@ async function generateCoursePackage(courseId, adminUser) {
   return results;
 }
 
+async function getCourseGenerationStatus(courseId) {
+  const topics = await Topic.findAll({
+    where: { courseId },
+    attributes: ['id', 'title'],
+    order: [['order', 'ASC']]
+  });
+
+  const topicIds = topics.map((topic) => topic.id);
+  const outlines = topicIds.length > 0
+    ? await AIOutline.findAll({ where: { topicId: topicIds } })
+    : [];
+  const outlineByTopicId = new Map(outlines.map((outline) => [outline.topicId, outline]));
+
+  const lectures = topicIds.length > 0
+    ? await AILecture.findAll({ where: { topicId: topicIds } })
+    : [];
+  const lectureByTopicId = new Map(lectures.map((lecture) => [lecture.topicId, lecture]));
+
+  const topicStatuses = topics.map((topic) => {
+    const outline = outlineByTopicId.get(topic.id);
+    const lecture = lectureByTopicId.get(topic.id);
+    const status = lecture?.status || outline?.status || 'pending';
+
+    return {
+      topicId: topic.id,
+      topicTitle: topic.title,
+      status,
+      generationModel: lecture?.generationModel || null,
+      errorMessage: lecture?.errorMessage || outline?.errorMessage || null,
+      updatedAt: lecture?.updatedAt || outline?.updatedAt || null
+    };
+  });
+
+  const summary = topicStatuses.reduce((acc, item) => {
+    if (item.status === 'ready') acc.ready += 1;
+    else if (item.status === 'failed') acc.failed += 1;
+    else if (item.status === 'processing') acc.processing += 1;
+    else acc.pending += 1;
+    return acc;
+  }, { total: topicStatuses.length, ready: 0, failed: 0, processing: 0, pending: 0 });
+
+  const job = generationJobs.get(String(courseId));
+  const isRunning = job?.status === 'running';
+  const isCompleted = !isRunning && summary.total > 0 && summary.ready + summary.failed === summary.total;
+
+  return {
+    success: true,
+    courseId: Number(courseId),
+    isRunning,
+    isCompleted,
+    lastStartedAt: job?.startedAt || null,
+    lastFinishedAt: job?.finishedAt || null,
+    summary,
+    topics: topicStatuses
+  };
+}
+
+async function startCourseGeneration(courseId, adminUser) {
+  await canManageCourse(adminUser, courseId);
+
+  const topics = await Topic.findAll({
+    where: { courseId },
+    attributes: ['id']
+  });
+
+  if (topics.length === 0) {
+    throw new Error('Add at least one topic before generating AI lecture content');
+  }
+
+  const existingJob = generationJobs.get(String(courseId));
+  if (existingJob?.status === 'running') {
+    return {
+      accepted: true,
+      alreadyRunning: true,
+      courseId: Number(courseId),
+      startedAt: existingJob.startedAt
+    };
+  }
+
+  const jobState = {
+    status: 'running',
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    error: null
+  };
+
+  generationJobs.set(String(courseId), jobState);
+
+  setImmediate(async () => {
+    try {
+      await generateCoursePackage(courseId, adminUser);
+      jobState.status = 'completed';
+      jobState.finishedAt = new Date().toISOString();
+    } catch (error) {
+      jobState.status = 'failed';
+      jobState.error = error.message;
+      jobState.finishedAt = new Date().toISOString();
+      console.error(`Background AI course generation failed for course ${courseId}:`, error);
+    }
+  });
+
+  return {
+    accepted: true,
+    alreadyRunning: false,
+    courseId: Number(courseId),
+    startedAt: jobState.startedAt
+  };
+}
+
 async function getLectureByTopicId(topicId) {
   return AILecture.findOne({
     where: { topicId },
@@ -1852,6 +1962,8 @@ async function getOrCreateAudioAsset({ lectureId, sessionId, assetType, text }) 
 
 module.exports = {
   generateCoursePackage,
+  startCourseGeneration,
+  getCourseGenerationStatus,
   getLectureByTopicId,
   startTutorSession,
   getSessionState,

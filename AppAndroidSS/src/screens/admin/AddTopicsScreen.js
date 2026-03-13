@@ -391,6 +391,30 @@ const AddTopicsScreen = () => {
 
     try {
       const response = await aiTutorAPI.generateCoursePackage(courseId);
+      if (!response.success) {
+        throw new Error(response.error || 'AI generation failed');
+      }
+
+      const startedMessage = response.alreadyRunning
+        ? 'AI generation is already running for this course.'
+        : 'AI generation started. We will keep tracking progress for you.';
+
+      Toast.show({
+        type: 'info',
+        text1: 'Generation Started',
+        text2: startedMessage,
+      });
+
+      let statusResponse = null;
+      for (let attempt = 0; attempt < 48; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        statusResponse = await aiTutorAPI.getGenerationStatus(courseId);
+
+        if (statusResponse?.isCompleted && !statusResponse?.isRunning) {
+          break;
+        }
+      }
+
       await fetchCourses();
 
       const lectureResponse = await aiTutorAPI.listLectures(courseId);
@@ -403,34 +427,52 @@ const AddTopicsScreen = () => {
         );
       }
 
-      if (!response.success) {
-        throw new Error(response.error || 'AI generation failed');
+      if (!statusResponse) {
+        throw new Error('AI generation started, but progress could not be checked automatically. Please refresh in a moment.');
       }
 
-      const reportItems = (response.results || []).map((item) => ({
+      const reportItems = (statusResponse.topics || []).map((item) => ({
         ...item,
-        displayStatus: item.status !== 'ready'
-          ? 'failed'
-          : item.usedFallback
+        displayStatus: item.status === 'ready'
+          ? item.generationModel === 'fallback-template'
             ? 'fallback used'
-            : 'ready',
-        displayMessage: item.message || item.error || 'No additional details were provided.',
+            : 'ready'
+          : item.status,
+        displayMessage: item.errorMessage
+          || (item.status === 'ready'
+            ? item.generationModel === 'fallback-template'
+              ? 'Fallback lecture package stored successfully.'
+              : 'Lecture package generated successfully.'
+            : item.status === 'processing'
+              ? 'Generation is still running for this topic.'
+              : item.status === 'pending'
+                ? 'This topic has not started generation yet.'
+                : 'Generation failed for this topic.'),
       }));
 
       setGenerationReport(reportItems);
       setShowGenerationReportModal(true);
 
-      const failed = (response.results || []).filter((item) => item.status !== 'ready');
-      const fallbackCount = (response.results || []).filter((item) => item.usedFallback).length;
+      const failed = (statusResponse.topics || []).filter((item) => item.status === 'failed');
+      const processingCount = (statusResponse.topics || []).filter((item) => item.status === 'processing' || item.status === 'pending').length;
+      const fallbackCount = (statusResponse.topics || []).filter((item) => item.status === 'ready' && item.generationModel === 'fallback-template').length;
 
       Toast.show({
-        type: failed.length > 0 ? 'error' : fallbackCount > 0 ? 'info' : 'success',
-        text1: failed.length > 0 ? 'Generation Partial' : fallbackCount > 0 ? 'Fallback Generation Used' : 'AI Generation Complete',
+        type: failed.length > 0 ? 'error' : processingCount > 0 || fallbackCount > 0 ? 'info' : 'success',
+        text1: failed.length > 0
+          ? 'Generation Partial'
+          : processingCount > 0
+            ? 'Generation Still Running'
+            : fallbackCount > 0
+              ? 'Fallback Generation Used'
+              : 'AI Generation Complete',
         text2: failed.length > 0
-          ? `${response.summary?.ready || 0} ready, ${fallbackCount} fallback, ${failed.length} failed.`
+          ? `${statusResponse.summary?.ready || 0} ready, ${fallbackCount} fallback, ${failed.length} failed.`
+          : processingCount > 0
+            ? `${statusResponse.summary?.ready || 0} ready, ${processingCount} still processing. You can reopen this report anytime.`
           : fallbackCount > 0
             ? `${fallbackCount} topics used fallback packages. Open the report for exact details.`
-            : `${response.summary?.ready || 0} topic packages stored successfully.`,
+            : `${statusResponse.summary?.ready || 0} topic packages stored successfully.`,
       });
     } catch (error) {
       setGenerationReport([{

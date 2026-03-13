@@ -376,6 +376,7 @@ export const aiChatAPI = {
 export const aiTutorAPI = {
   updateOutline: (topicId, outlineText) => put(`/ai-tutor/topics/${topicId}/outline`, { outlineText }),
   generateCoursePackage: (courseId) => post(`/ai-tutor/courses/${courseId}/generate`, {}),
+  getGenerationStatus: (courseId) => get(`/ai-tutor/courses/${courseId}/generate-status`),
   listLectures: (courseId, params) => get(`/ai-tutor/courses/${courseId}/lectures${params ? `?${new URLSearchParams(params)}` : ''}`),
   getLecturePackage: (topicId) => get(`/ai-tutor/topics/${topicId}/package`),
   startSession: (topicId, data) => post(`/ai-tutor/topics/${topicId}/start`, data || {}),

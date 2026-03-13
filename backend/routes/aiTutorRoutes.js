@@ -7,6 +7,7 @@ router.use(authenticateToken);
 
 router.put('/topics/:topicId/outline', aiTutorController.upsertOutline);
 router.post('/courses/:courseId/generate', aiTutorController.generateCoursePackage);
+router.get('/courses/:courseId/generate-status', aiTutorController.getGenerationStatus);
 router.get('/courses/:courseId/lectures', aiTutorController.listLectures);
 router.get('/topics/:topicId/package', aiTutorController.getLecturePackage);
 
