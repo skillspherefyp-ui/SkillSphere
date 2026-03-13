@@ -4,6 +4,24 @@ const OpenAI = require('openai');
 
 let openaiClient = null;
 
+function getRequestTimeoutMs() {
+  const timeout = Number(process.env.OPENAI_REQUEST_TIMEOUT_MS || 45000);
+  return Number.isFinite(timeout) && timeout > 0 ? timeout : 45000;
+}
+
+async function withOpenAITimeout(task, label) {
+  const timeoutMs = getRequestTimeoutMs();
+
+  return Promise.race([
+    task(),
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`OpenAI ${label} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    })
+  ]);
+}
+
 function getClient() {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not configured');
@@ -149,21 +167,24 @@ ${JSON.stringify({
   }, null, 2)}
 `;
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.3,
-    response_format: { type: 'json_object' },
-    messages: [
-      {
-        role: 'system',
-        content: 'You generate strict JSON lecture packages for an educational tutoring platform.'
-      },
-      {
-        role: 'user',
-        content: prompt
-      }
-    ]
-  });
+  const completion = await withOpenAITimeout(
+    () => client.chat.completions.create({
+      model,
+      temperature: 0.3,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: 'You generate strict JSON lecture packages for an educational tutoring platform.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    }),
+    'lecture package generation'
+  );
 
   return {
     model,
@@ -175,21 +196,24 @@ async function repairLecturePackage(rawJsonText, validationErrors) {
   const client = getClient();
   const model = process.env.OPENAI_MODEL_LECTURE;
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0,
-    response_format: { type: 'json_object' },
-    messages: [
-      {
-        role: 'system',
-        content: 'Repair invalid JSON lecture packages. Return JSON only.'
-      },
-      {
-        role: 'user',
-        content: `Fix this lecture package so it matches the required shape. Validation errors: ${validationErrors.join('; ')}. Raw JSON: ${rawJsonText}`
-      }
-    ]
-  });
+  const completion = await withOpenAITimeout(
+    () => client.chat.completions.create({
+      model,
+      temperature: 0,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: 'Repair invalid JSON lecture packages. Return JSON only.'
+        },
+        {
+          role: 'user',
+          content: `Fix this lecture package so it matches the required shape. Validation errors: ${validationErrors.join('; ')}. Raw JSON: ${rawJsonText}`
+        }
+      ]
+    }),
+    'lecture package repair'
+  );
 
   return getJsonFromCompletion(completion);
 }
@@ -209,33 +233,36 @@ async function answerLectureQuestion({
     throw new Error('OPENAI_MODEL_QA is not configured');
   }
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.2,
-    messages: [
-      {
-        role: 'system',
-        content: [
-          'You are an AI tutor answering in-context lecture questions.',
-          'Stay focused on the active lecture and explain clearly.',
-          'Use clean GitHub-flavored markdown when it helps.',
-          'When comparing concepts, settings, steps, or options, prefer a markdown table.',
-          'Use bullet points for lists and fenced code blocks for code.'
-        ].join(' ')
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          lectureTitle,
-          lectureSummary,
-          currentSection,
-          currentChunk,
-          recentMessages,
-          question
-        })
-      }
-    ]
-  });
+  const completion = await withOpenAITimeout(
+    () => client.chat.completions.create({
+      model,
+      temperature: 0.2,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You are an AI tutor answering in-context lecture questions.',
+            'Stay focused on the active lecture and explain clearly.',
+            'Use clean GitHub-flavored markdown when it helps.',
+            'When comparing concepts, settings, steps, or options, prefer a markdown table.',
+            'Use bullet points for lists and fenced code blocks for code.'
+          ].join(' ')
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            lectureTitle,
+            lectureSummary,
+            currentSection,
+            currentChunk,
+            recentMessages,
+            question
+          })
+        }
+      ]
+    }),
+    'lecture question answering'
+  );
 
   const answer = completion?.choices?.[0]?.message?.content?.trim();
   if (!answer) {
@@ -264,49 +291,52 @@ async function planChunkTeaching({
     throw new Error('OPENAI_MODEL_TUTOR_PLANNER or OPENAI_MODEL_QA is not configured');
   }
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.2,
-    response_format: { type: 'json_object' },
-    messages: [
-      {
-        role: 'system',
-        content: [
-          'You are a lightweight micro-teaching planner for a stored lecture system.',
-          'Return valid JSON only.',
-          'Do not regenerate the lesson.',
-          'Only decide how the current chunk should be taught like a real teacher.'
-        ].join(' ')
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          lectureTitle,
-          lectureSummary,
-          previousChunk,
-          currentChunk,
-          nextChunk,
-          teachingPlanSeed,
-          resumeContext,
-          requiredShape: {
-            teaching_mode: 'brief_explanation | deep_explanation | analogy_driven | example_first | process_flow | compare_contrast',
-            transition_text: 'string',
-            use_visual: 'boolean',
-            visual_type: 'none | slide | whiteboard | diagram | flowchart | comparison_table | mixed',
-            use_slide: 'boolean',
-            use_whiteboard: 'boolean',
-            use_example: 'boolean',
-            use_checkpoint: 'boolean',
-            checkpoint_text: 'string',
-            likely_confusion_points: ['string'],
-            reinforcement_points: ['string'],
-            teacher_tone: ['string'],
-            recommended_duration_seconds: 'integer'
-          }
-        })
-      }
-    ]
-  });
+  const completion = await withOpenAITimeout(
+    () => client.chat.completions.create({
+      model,
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You are a lightweight micro-teaching planner for a stored lecture system.',
+            'Return valid JSON only.',
+            'Do not regenerate the lesson.',
+            'Only decide how the current chunk should be taught like a real teacher.'
+          ].join(' ')
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            lectureTitle,
+            lectureSummary,
+            previousChunk,
+            currentChunk,
+            nextChunk,
+            teachingPlanSeed,
+            resumeContext,
+            requiredShape: {
+              teaching_mode: 'brief_explanation | deep_explanation | analogy_driven | example_first | process_flow | compare_contrast',
+              transition_text: 'string',
+              use_visual: 'boolean',
+              visual_type: 'none | slide | whiteboard | diagram | flowchart | comparison_table | mixed',
+              use_slide: 'boolean',
+              use_whiteboard: 'boolean',
+              use_example: 'boolean',
+              use_checkpoint: 'boolean',
+              checkpoint_text: 'string',
+              likely_confusion_points: ['string'],
+              reinforcement_points: ['string'],
+              teacher_tone: ['string'],
+              recommended_duration_seconds: 'integer'
+            }
+          })
+        }
+      ]
+    }),
+    'teaching plan generation'
+  );
 
   return {
     model,
@@ -331,37 +361,40 @@ async function answerGeneralChat({
     content: entry.content
   }));
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.4,
-    messages: [
-      {
-        role: 'system',
-        content: [
-          'You are SkillSphere AI, a calm, professional, general academic assistant for students.',
-          'Answer clearly, be practical, and admit uncertainty when needed.',
-          'Format responses in clean GitHub-flavored markdown.',
-          'Use headings sparingly, bullets for steps, and fenced code blocks for code.',
-          'When comparing tools, settings, plans, or options, use a markdown table so the UI can display it cleanly.'
-        ].join(' ')
-      },
-      {
-        role: 'system',
-        content: JSON.stringify({
-          userContext: {
-            id: userContext.id,
-            name: userContext.name,
-            role: userContext.role
-          }
-        })
-      },
-      ...recentHistory,
-      {
-        role: 'user',
-        content: message
-      }
-    ]
-  });
+  const completion = await withOpenAITimeout(
+    () => client.chat.completions.create({
+      model,
+      temperature: 0.4,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You are SkillSphere AI, a calm, professional, general academic assistant for students.',
+            'Answer clearly, be practical, and admit uncertainty when needed.',
+            'Format responses in clean GitHub-flavored markdown.',
+            'Use headings sparingly, bullets for steps, and fenced code blocks for code.',
+            'When comparing tools, settings, plans, or options, use a markdown table so the UI can display it cleanly.'
+          ].join(' ')
+        },
+        {
+          role: 'system',
+          content: JSON.stringify({
+            userContext: {
+              id: userContext.id,
+              name: userContext.name,
+              role: userContext.role
+            }
+          })
+        },
+        ...recentHistory,
+        {
+          role: 'user',
+          content: message
+        }
+      ]
+    }),
+    'general chat response'
+  );
 
   const answer = completion?.choices?.[0]?.message?.content?.trim();
   if (!answer) {
@@ -382,12 +415,15 @@ async function synthesizeSpeech(text, outputPath) {
     throw new Error('OPENAI_TTS_MODEL is not configured');
   }
 
-  const response = await client.audio.speech.create({
-    model,
-    voice: 'alloy',
-    format: 'mp3',
-    input: text
-  });
+  const response = await withOpenAITimeout(
+    () => client.audio.speech.create({
+      model,
+      voice: 'alloy',
+      format: 'mp3',
+      input: text
+    }),
+    'speech synthesis'
+  );
 
   const buffer = Buffer.from(await response.arrayBuffer());
   fs.mkdirSync(require('path').dirname(outputPath), { recursive: true });
@@ -407,10 +443,13 @@ async function transcribeAudio(tempFilePath) {
     throw new Error('OPENAI_STT_MODEL is not configured');
   }
 
-  const response = await client.audio.transcriptions.create({
-    model,
-    file: fs.createReadStream(tempFilePath)
-  });
+  const response = await withOpenAITimeout(
+    () => client.audio.transcriptions.create({
+      model,
+      file: fs.createReadStream(tempFilePath)
+    }),
+    'audio transcription'
+  );
 
   return {
     model,
@@ -426,15 +465,18 @@ async function smokeTest() {
     throw new Error('OPENAI_MODEL_QA or OPENAI_MODEL_LECTURE must be configured');
   }
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0,
-    max_tokens: 16,
-    messages: [
-      { role: 'system', content: 'Reply with exactly: OK' },
-      { role: 'user', content: 'Ping' }
-    ]
-  });
+  const completion = await withOpenAITimeout(
+    () => client.chat.completions.create({
+      model,
+      temperature: 0,
+      max_tokens: 16,
+      messages: [
+        { role: 'system', content: 'Reply with exactly: OK' },
+        { role: 'user', content: 'Ping' }
+      ]
+    }),
+    'smoke test'
+  );
 
   return completion?.choices?.[0]?.message?.content?.trim();
 }
