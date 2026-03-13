@@ -1001,20 +1001,48 @@ async function generateCoursePackage(courseId, adminUser) {
 
         modelName = generation.model;
       } catch (generationError) {
-        console.error(`Primary AI generation failed for topic ${topic.id}, falling back to template package:`, generationError);
-        normalized = normalizeLecturePackage(
-          buildFallbackLecturePackage({
+        console.error(`Primary AI generation failed for topic ${topic.id}, attempting compact retry:`, generationError);
+
+        try {
+          const compactGeneration = await openaiService.generateLecturePackage({
             course,
             topic,
             materials: sourceMaterials,
             priorTopics,
             nextTopicTitle,
             outlineText,
-            failureReason: generationError.message
-          }),
-          topic.title
-        );
-        modelName = 'fallback-template';
+            compactMode: true
+          });
+
+          let compactRawPackage = compactGeneration.package;
+          const compactValidationErrors = validateLecturePackage(compactRawPackage);
+          if (compactValidationErrors.length > 0) {
+            compactRawPackage = await openaiService.repairLecturePackage(JSON.stringify(compactRawPackage), compactValidationErrors);
+          }
+
+          normalized = normalizeLecturePackage(compactRawPackage, topic.title);
+          const compactFinalValidationErrors = validateLecturePackage(normalized);
+          if (compactFinalValidationErrors.length > 0) {
+            throw new Error(`Compact lecture package is invalid: ${compactFinalValidationErrors.join(', ')}`);
+          }
+
+          modelName = compactGeneration.model;
+        } catch (compactGenerationError) {
+          console.error(`Compact AI generation failed for topic ${topic.id}, falling back to template package:`, compactGenerationError);
+          normalized = normalizeLecturePackage(
+            buildFallbackLecturePackage({
+              course,
+              topic,
+              materials: sourceMaterials,
+              priorTopics,
+              nextTopicTitle,
+              outlineText,
+              failureReason: `${generationError.message}; compact retry failed: ${compactGenerationError.message}`
+            }),
+            topic.title
+          );
+          modelName = 'fallback-template';
+        }
       }
 
       await persistLecturePackage({

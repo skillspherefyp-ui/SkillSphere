@@ -55,7 +55,8 @@ async function generateLecturePackage({
   materials,
   priorTopics,
   nextTopicTitle,
-  outlineText
+  outlineText,
+  compactMode = false
 }) {
   const client = getClient();
   const model = process.env.OPENAI_MODEL_LECTURE;
@@ -135,18 +136,19 @@ ${JSON.stringify(schemaDescription, null, 2)}
 Constraints:
 - Produce a complete lecture package for one topic.
 - Make explanations clear, accurate, teacher-like, and directly tied to the topic.
-- Generate 3 to 6 sections.
-- Generate 2 to 4 chunks per section for incremental delivery.
-- Each chunk should be rich enough for a tutor to explain conceptually, not just read headings.
+- Generate ${compactMode ? '2 to 3' : '3 to 6'} sections.
+- Generate ${compactMode ? '1 to 2' : '2 to 4'} chunks per section for incremental delivery.
+- Each chunk should be ${compactMode ? 'concise but still teacher-like and useful' : 'rich enough for a tutor to explain conceptually, not just read headings'}.
 - Every chunk must contain a real spoken explanation in full sentences.
 - Use visual_mode deliberately. Choose whiteboard, slide, diagram, flowchart, comparison_table, mixed, or none based on the concept.
 - Use teaching_sequence to decide the order of teaching actions for that chunk.
 - Include examples, key terms, and analogy_if_helpful when they make the explanation stronger.
 - Include checkpoint_question_if_any whenever the learner should pause and self-check.
-- Generate 4 to 8 flashcards.
-- Generate 4 to 6 multiple choice questions with exactly 4 options each.
+- Generate ${compactMode ? '4 to 5' : '4 to 8'} flashcards.
+- Generate ${compactMode ? '4' : '4 to 6'} multiple choice questions with exactly 4 options each.
 - Ensure correctAnswer is a zero-based option index.
 - Use the next topic only as unlock context, not as lecture content.
+- Keep the JSON compact and efficient. Avoid unnecessary verbosity in long string fields.
 
 Course:
 ${JSON.stringify({
@@ -189,7 +191,7 @@ ${JSON.stringify({
   );
 
   return {
-    model,
+    model: compactMode ? `${model}-compact` : model,
     package: getJsonFromCompletion(completion)
   };
 }
