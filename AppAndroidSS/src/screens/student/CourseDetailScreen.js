@@ -12,6 +12,8 @@ import {
   Image,
   Linking,
 } from 'react-native';
+
+const ORANGE = '#FF8C42';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
@@ -55,6 +57,7 @@ const CourseDetailScreen = () => {
     { label: 'My Learning', icon: 'school-outline', iconActive: 'school', route: 'EnrolledCourses' },
     { label: 'AI Assistant', icon: 'sparkles-outline', iconActive: 'sparkles', route: 'AITutor' },
     { label: 'Certificates', icon: 'ribbon-outline', iconActive: 'ribbon', route: 'Certificates' },
+    { label: 'Reminders', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle', route: 'Todo' },
   ];
 
   const handleNavigate = (routeName) => {
@@ -294,23 +297,25 @@ const CourseDetailScreen = () => {
           />
         }
       >
-        {/* Header Section */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerTextContainer}>
-            <View style={styles.titleRow}>
-              <TouchableOpacity
-                style={[styles.backButton, { backgroundColor: theme.colors.surface }]}
-                onPress={() => navigation.goBack()}
-              >
-                <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-              <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>
-                Course Details
-              </Text>
+        {/* Page Header Banner */}
+        <View style={[styles.pageHeaderBanner, {
+          backgroundColor: isDark ? 'rgba(255,140,66,0.06)' : 'rgba(255,140,66,0.05)',
+          borderColor: 'rgba(255,140,66,0.15)',
+        }]}>
+          <View style={styles.bannerLeft}>
+            <TouchableOpacity
+              style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)' }]}
+              onPress={() => navigation.goBack()}
+            >
+              <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={styles.bannerIconCircle}>
+              <Icon name="book" size={22} color={ORANGE} />
             </View>
-            <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
-              View course information and content
-            </Text>
+            <View style={styles.bannerTextGroup}>
+              <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>Course Details</Text>
+              <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>View course information and content</Text>
+            </View>
           </View>
           {isEnrolled && (
             <AppButton
@@ -416,11 +421,14 @@ const CourseDetailScreen = () => {
                 {progress >= 100 && (
                   <TouchableOpacity
                     style={[styles.certificateLink, { backgroundColor: '#10B98115' }]}
-                    onPress={() => navigation.navigate('Certificates')}
+                    onPress={() => navigation.navigate('CertificatePreview', {
+                      courseId: course.id,
+                      courseName: course.name,
+                    })}
                   >
                     <Icon name="ribbon" size={20} color="#10B981" />
                     <Text style={[styles.certificateLinkText, { color: '#10B981' }]}>
-                      View your certificate
+                      Get my certificate
                     </Text>
                     <Icon name="chevron-forward" size={18} color="#10B981" />
                   </TouchableOpacity>
@@ -772,41 +780,49 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       padding: 40,
     },
 
-    // Header Section
-    headerSection: {
+    // Page Header Banner
+    pageHeaderBanner: {
       flexDirection: isTablet ? 'row' : 'column',
       justifyContent: 'space-between',
       alignItems: isTablet ? 'center' : 'flex-start',
+      padding: isMobile ? 14 : 18,
       marginBottom: 24,
-      gap: 16,
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 12,
     },
-    headerTextContainer: {
-      flex: isTablet ? 1 : undefined,
-      width: isTablet ? undefined : '100%',
-    },
-    titleRow: {
+    bannerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      marginBottom: 4,
-      flexWrap: 'wrap',
+      flex: isTablet ? 1 : undefined,
     },
     backButton: {
       width: 40,
       height: 40,
-      borderRadius: 12,
+      borderRadius: 20,
       justifyContent: 'center',
       alignItems: 'center',
-      ...theme.shadows.sm,
+    },
+    bannerIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(255,140,66,0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerTextGroup: {
+      flex: 1,
     },
     pageTitle: {
-      fontSize: isMobile ? 20 : 28,
+      fontSize: isMobile ? 18 : 22,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
-      flex: isMobile ? 1 : undefined,
+      marginBottom: 2,
     },
     pageSubtitle: {
-      fontSize: 14,
+      fontSize: 13,
       fontFamily: theme.typography.fontFamily.regular,
     },
     headerButton: {
@@ -832,6 +848,9 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     // Hero Card
     heroCard: {
       padding: isMobile ? 16 : 20,
+      borderTopWidth: 3,
+      borderTopColor: theme.colors.primary,
+      overflow: 'hidden',
     },
     heroHeader: {
       flexDirection: isMobile ? 'column' : 'row',
@@ -896,6 +915,9 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     // Cards
     card: {
       padding: isMobile ? 16 : 20,
+      borderTopWidth: 3,
+      borderTopColor: theme.colors.primary,
+      overflow: 'hidden',
     },
     cardHeader: {
       flexDirection: 'row',
@@ -905,9 +927,12 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     },
     cardTitle: {
       fontSize: 16,
-      fontWeight: '600',
+      fontWeight: '700',
       marginBottom: 16,
       fontFamily: theme.typography.fontFamily.semiBold,
+      borderLeftWidth: 3,
+      borderLeftColor: theme.colors.primary,
+      paddingLeft: 10,
     },
 
     // Progress
@@ -937,6 +962,7 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     progressBarFill: {
       height: '100%',
       borderRadius: 5,
+      backgroundColor: theme.colors.primary,
     },
     progressStats: {
       fontSize: 13,

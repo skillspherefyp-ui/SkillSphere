@@ -24,6 +24,9 @@ import { useTheme } from '../../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import { certificateTemplateAPI, courseAPI, API_BASE } from '../../services/apiClient';
 
+const ORANGE = '#FF8C42';
+const GREEN = '#10B981';
+
 const CertificateManagementScreen = () => {
   const { user, logout } = useAuth();
   const { theme, isDark } = useTheme();
@@ -477,7 +480,7 @@ const CertificateManagementScreen = () => {
         onSettings={() => navigation.navigate('Settings')}
       >
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <ActivityIndicator size="large" color={GREEN} />
           <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
             Loading certificate data...
           </Text>
@@ -501,48 +504,66 @@ const CertificateManagementScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Section */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerTextContainer}>
-            <View style={styles.titleRow}>
-              <TouchableOpacity
-                style={[styles.backButton, { backgroundColor: theme.colors.surface }]}
-                onPress={() => navigation.goBack()}
-              >
-                <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-              <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>
+        {/* Page Banner */}
+        <View style={[styles.pageBanner, { backgroundColor: isDark ? 'rgba(16,185,129,0.10)' : 'rgba(16,185,129,0.07)', borderColor: isDark ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.13)' }]}>
+          <View style={styles.bannerLeft}>
+            <View style={[styles.bannerIconCircle, { backgroundColor: isDark ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.13)' }]}>
+              <Icon name="ribbon" size={28} color={GREEN} />
+            </View>
+            <View style={styles.bannerTextBlock}>
+              <Text style={[styles.bannerTitle, { color: theme.colors.textPrimary }]}>
                 Certificate Management
               </Text>
+              <Text style={[styles.bannerSubtitle, { color: theme.colors.textSecondary }]}>
+                Manage templates and issued certificates
+              </Text>
             </View>
-            <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
-              Manage certificate templates and track issued certificates
-            </Text>
           </View>
+          <TouchableOpacity
+            style={[styles.bannerActionBtn, { backgroundColor: GREEN }]}
+            onPress={() => {
+              resetForm();
+              setShowTemplateModal(true);
+            }}
+            activeOpacity={0.85}
+          >
+            <Icon name="add" size={16} color="#fff" />
+            <Text style={styles.bannerActionBtnText}>Create Template</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Stats Section */}
         <View style={styles.statsSection}>
-          <AppCard style={styles.statCard}>
-            <View style={[styles.statIconContainer, { backgroundColor: theme.colors.primary + '15' }]}>
-              <Icon name="ribbon" size={24} color={theme.colors.primary} />
+          <AppCard style={[styles.statCard, { borderColor: isDark ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.15)', borderWidth: 1 }]}>
+            <View style={[styles.statIconCircle, { backgroundColor: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.10)' }]}>
+              <Icon name="ribbon" size={26} color={GREEN} />
             </View>
-            <Text style={[styles.statValue, { color: theme.colors.primary }]}>
+            <Text style={[styles.statValue, { color: GREEN }]}>
               {stats.totalCertificates}
             </Text>
             <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
               Total Certificates Issued
             </Text>
           </AppCard>
-          <AppCard style={styles.statCard}>
-            <View style={[styles.statIconContainer, { backgroundColor: stats.hasActiveTemplate ? '#10B98115' : '#F59E0B15' }]}>
+
+          <AppCard style={[styles.statCard, {
+            borderColor: stats.hasActiveTemplate
+              ? (isDark ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.15)')
+              : (isDark ? 'rgba(245,158,11,0.18)' : 'rgba(245,158,11,0.15)'),
+            borderWidth: 1,
+          }]}>
+            <View style={[styles.statIconCircle, {
+              backgroundColor: stats.hasActiveTemplate
+                ? (isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.10)')
+                : (isDark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.10)'),
+            }]}>
               <Icon
                 name={stats.hasActiveTemplate ? 'checkmark-circle' : 'warning'}
-                size={24}
-                color={stats.hasActiveTemplate ? '#10B981' : '#F59E0B'}
+                size={26}
+                color={stats.hasActiveTemplate ? GREEN : '#F59E0B'}
               />
             </View>
-            <Text style={[styles.statValue, { color: stats.hasActiveTemplate ? '#10B981' : '#F59E0B' }]}>
+            <Text style={[styles.statValue, { color: stats.hasActiveTemplate ? GREEN : '#F59E0B' }]}>
               {stats.hasActiveTemplate ? 'Active' : 'None'}
             </Text>
             <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
@@ -556,11 +577,16 @@ const CertificateManagementScreen = () => {
           {/* Main Column */}
           <Animated.View entering={FadeInDown.duration(400).delay(100)} style={styles.mainColumn}>
             {/* Active Template Card */}
-            <AppCard style={styles.card}>
+            <AppCard style={[styles.card, { borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
               <View style={styles.cardHeader}>
-                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                  Active Certificate Template
-                </Text>
+                <View style={styles.cardTitleRow}>
+                  <View style={[styles.cardTitleIcon, { backgroundColor: isDark ? 'rgba(16,185,129,0.13)' : 'rgba(16,185,129,0.09)' }]}>
+                    <Icon name="ribbon-outline" size={16} color={GREEN} />
+                  </View>
+                  <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
+                    Active Certificate Template
+                  </Text>
+                </View>
                 <AppButton
                   title={activeTemplate ? 'Edit' : 'Create'}
                   onPress={() => {
@@ -578,119 +604,127 @@ const CertificateManagementScreen = () => {
               </View>
 
               {activeTemplate ? (
-                <View style={styles.templateDetails}>
-                  {/* Logo Preview (Read-only) */}
-                  <View style={styles.templateField}>
-                    <Text style={[styles.fieldLabel, { color: theme.colors.textTertiary }]}>
-                      Logo (Automatic)
-                    </Text>
-                    <View style={[styles.logoPreviewContainer, { backgroundColor: theme.colors.surface }]}>
-                      <View style={[styles.logoPlaceholder, { backgroundColor: theme.colors.primary + '20' }]}>
-                        <Icon name="school" size={24} color={theme.colors.primary} />
-                      </View>
-                      <Text style={[styles.autoText, { color: theme.colors.textTertiary }]}>
-                        SkillSphere logo is automatically applied
+                <View style={[styles.activeTemplateBanner, { backgroundColor: isDark ? 'rgba(16,185,129,0.07)' : 'rgba(16,185,129,0.05)', borderColor: isDark ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.12)' }]}>
+                  <View style={styles.activeTemplateBadge}>
+                    <Icon name="checkmark-circle" size={14} color={GREEN} />
+                    <Text style={[styles.activeTemplateBadgeText, { color: GREEN }]}>Active</Text>
+                  </View>
+                  <View style={styles.templateDetails}>
+                    {/* Logo Preview (Read-only) */}
+                    <View style={styles.templateField}>
+                      <Text style={[styles.fieldLabel, { color: theme.colors.textTertiary }]}>
+                        Logo (Automatic)
                       </Text>
-                    </View>
-                  </View>
-
-                  {/* Background Image */}
-                  <View style={styles.templateField}>
-                    <Text style={[styles.fieldLabel, { color: theme.colors.textTertiary }]}>
-                      Background Image (Optional)
-                    </Text>
-                    <View style={styles.uploadRow}>
-                      {activeTemplate.backgroundImage ? (
-                        <Image
-                          source={{ uri: getImageUrl(activeTemplate.backgroundImage) }}
-                          style={styles.thumbnailImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={[styles.placeholderImage, { backgroundColor: theme.colors.surface }]}>
-                          <Icon name="image-outline" size={24} color={theme.colors.textTertiary} />
+                      <View style={[styles.logoPreviewContainer, { backgroundColor: theme.colors.surface }]}>
+                        <View style={[styles.logoPlaceholder, { backgroundColor: theme.colors.primary + '20' }]}>
+                          <Icon name="school" size={24} color={theme.colors.primary} />
                         </View>
-                      )}
-                      <AppButton
-                        title={uploadingImage ? 'Uploading...' : 'Upload'}
-                        onPress={() => handleUploadImage(activeTemplate.id, 'background')}
-                        variant="outline"
-                        size="sm"
-                        leftIcon="cloud-upload-outline"
-                        disabled={uploadingImage}
-                      />
+                        <Text style={[styles.autoText, { color: theme.colors.textTertiary }]}>
+                          SkillSphere logo is automatically applied
+                        </Text>
+                      </View>
                     </View>
-                  </View>
 
-                  {/* Admin Signature */}
-                  <View style={styles.templateField}>
-                    <Text style={[styles.fieldLabel, { color: theme.colors.textTertiary }]}>
-                      Admin Signature
-                    </Text>
-                    <View style={styles.uploadRow}>
-                      {activeTemplate.adminSignature ? (
-                        <Image
-                          source={{ uri: getImageUrl(activeTemplate.adminSignature) }}
-                          style={styles.signatureImage}
-                          resizeMode="contain"
+                    {/* Background Image */}
+                    <View style={styles.templateField}>
+                      <Text style={[styles.fieldLabel, { color: theme.colors.textTertiary }]}>
+                        Background Image (Optional)
+                      </Text>
+                      <View style={styles.uploadRow}>
+                        {activeTemplate.backgroundImage ? (
+                          <Image
+                            source={{ uri: getImageUrl(activeTemplate.backgroundImage) }}
+                            style={styles.thumbnailImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View style={[styles.placeholderImage, { backgroundColor: theme.colors.surface }]}>
+                            <Icon name="image-outline" size={24} color={theme.colors.textTertiary} />
+                          </View>
+                        )}
+                        <AppButton
+                          title={uploadingImage ? 'Uploading...' : 'Upload'}
+                          onPress={() => handleUploadImage(activeTemplate.id, 'background')}
+                          variant="outline"
+                          size="sm"
+                          leftIcon="cloud-upload-outline"
+                          disabled={uploadingImage}
                         />
-                      ) : (
-                        <View style={[styles.placeholderSignature, { backgroundColor: theme.colors.surface }]}>
-                          <Icon name="pencil-outline" size={20} color={theme.colors.textTertiary} />
-                          <Text style={[styles.placeholderText, { color: theme.colors.textTertiary }]}>
-                            No signature
+                      </View>
+                    </View>
+
+                    {/* Admin Signature */}
+                    <View style={styles.templateField}>
+                      <Text style={[styles.fieldLabel, { color: theme.colors.textTertiary }]}>
+                        Admin Signature
+                      </Text>
+                      <View style={styles.uploadRow}>
+                        {activeTemplate.adminSignature ? (
+                          <Image
+                            source={{ uri: getImageUrl(activeTemplate.adminSignature) }}
+                            style={styles.signatureImage}
+                            resizeMode="contain"
+                          />
+                        ) : (
+                          <View style={[styles.placeholderSignature, { backgroundColor: theme.colors.surface }]}>
+                            <Icon name="pencil-outline" size={20} color={theme.colors.textTertiary} />
+                            <Text style={[styles.placeholderText, { color: theme.colors.textTertiary }]}>
+                              No signature
+                            </Text>
+                          </View>
+                        )}
+                        <AppButton
+                          title={uploadingImage ? 'Uploading...' : 'Upload'}
+                          onPress={() => handleUploadImage(activeTemplate.id, 'signature')}
+                          variant="outline"
+                          size="sm"
+                          leftIcon="cloud-upload-outline"
+                          disabled={uploadingImage}
+                        />
+                      </View>
+                    </View>
+
+                    {/* Colors */}
+                    <View style={styles.colorsRow}>
+                      <View style={styles.colorField}>
+                        <Text style={[styles.fieldLabel, { color: theme.colors.textTertiary }]}>
+                          Primary Color
+                        </Text>
+                        <View style={styles.colorPreview}>
+                          <View style={[styles.colorSwatch, { backgroundColor: activeTemplate.primaryColor }]} />
+                          <Text style={[styles.colorValue, { color: theme.colors.textPrimary }]}>
+                            {activeTemplate.primaryColor}
                           </Text>
                         </View>
-                      )}
-                      <AppButton
-                        title={uploadingImage ? 'Uploading...' : 'Upload'}
-                        onPress={() => handleUploadImage(activeTemplate.id, 'signature')}
-                        variant="outline"
-                        size="sm"
-                        leftIcon="cloud-upload-outline"
-                        disabled={uploadingImage}
-                      />
-                    </View>
-                  </View>
-
-                  {/* Colors */}
-                  <View style={styles.colorsRow}>
-                    <View style={styles.colorField}>
-                      <Text style={[styles.fieldLabel, { color: theme.colors.textTertiary }]}>
-                        Primary Color
-                      </Text>
-                      <View style={styles.colorPreview}>
-                        <View style={[styles.colorSwatch, { backgroundColor: activeTemplate.primaryColor }]} />
-                        <Text style={[styles.colorValue, { color: theme.colors.textPrimary }]}>
-                          {activeTemplate.primaryColor}
+                      </View>
+                      <View style={styles.colorField}>
+                        <Text style={[styles.fieldLabel, { color: theme.colors.textTertiary }]}>
+                          Secondary Color
                         </Text>
+                        <View style={styles.colorPreview}>
+                          <View style={[styles.colorSwatch, { backgroundColor: activeTemplate.secondaryColor }]} />
+                          <Text style={[styles.colorValue, { color: theme.colors.textPrimary }]}>
+                            {activeTemplate.secondaryColor}
+                          </Text>
+                        </View>
                       </View>
                     </View>
-                    <View style={styles.colorField}>
-                      <Text style={[styles.fieldLabel, { color: theme.colors.textTertiary }]}>
-                        Secondary Color
-                      </Text>
-                      <View style={styles.colorPreview}>
-                        <View style={[styles.colorSwatch, { backgroundColor: activeTemplate.secondaryColor }]} />
-                        <Text style={[styles.colorValue, { color: theme.colors.textPrimary }]}>
-                          {activeTemplate.secondaryColor}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
 
-                  {/* Preview Button */}
-                  <AppButton
-                    title="Preview Certificate"
-                    onPress={() => handlePreviewCertificate(activeTemplate.id)}
-                    variant="primary"
-                    leftIcon="eye-outline"
-                    style={styles.previewButton}
-                  />
+                    {/* Preview Button */}
+                    <AppButton
+                      title="Preview Certificate"
+                      onPress={() => handlePreviewCertificate(activeTemplate.id)}
+                      variant="primary"
+                      leftIcon="eye-outline"
+                      style={styles.previewButton}
+                    />
+                  </View>
                 </View>
               ) : (
-                <View style={[styles.emptyTemplate, { borderColor: theme.colors.border }]}>
-                  <Icon name="document-text-outline" size={40} color={theme.colors.textTertiary} />
+                <View style={[styles.emptyTemplate, { borderColor: isDark ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.18)' }]}>
+                  <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? 'rgba(16,185,129,0.12)' : 'rgba(16,185,129,0.08)' }]}>
+                    <Icon name="ribbon-outline" size={32} color={GREEN} />
+                  </View>
                   <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>
                     No Active Template
                   </Text>
@@ -712,29 +746,42 @@ const CertificateManagementScreen = () => {
             </AppCard>
 
             {/* Recent Certificates Card */}
-            <AppCard style={styles.card}>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                Recent Certificates
-              </Text>
+            <AppCard style={[styles.card, { borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
+              <View style={styles.cardTitleRow}>
+                <View style={[styles.cardTitleIcon, { backgroundColor: isDark ? 'rgba(16,185,129,0.13)' : 'rgba(16,185,129,0.09)' }]}>
+                  <Icon name="list-outline" size={16} color={GREEN} />
+                </View>
+                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
+                  Recent Certificates
+                </Text>
+              </View>
 
               {recentCertificates.length > 0 ? (
                 <View style={styles.certificateList}>
-                  {recentCertificates.map((cert) => (
-                    <View key={cert.id} style={[styles.certificateItem, { borderColor: theme.colors.border }]}>
-                      <View style={[styles.certificateIcon, { backgroundColor: '#F59E0B15' }]}>
-                        <Icon name="ribbon" size={20} color="#F59E0B" />
+                  {recentCertificates.map((cert, index) => (
+                    <View key={cert.id} style={[styles.certificateItem, { borderColor: isDark ? 'rgba(16,185,129,0.12)' : 'rgba(16,185,129,0.10)', backgroundColor: isDark ? 'rgba(16,185,129,0.04)' : 'rgba(16,185,129,0.03)' }]}>
+                      <View style={[styles.certificateIndexCircle, { backgroundColor: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.10)' }]}>
+                        <Icon name="ribbon" size={18} color={GREEN} />
                       </View>
                       <View style={styles.certificateInfo}>
                         <Text style={[styles.certificateName, { color: theme.colors.textPrimary }]}>
                           {cert.course?.name || 'Unknown Course'}
                         </Text>
-                        <Text style={[styles.certificateStudent, { color: theme.colors.textSecondary }]}>
-                          {cert.user?.name || 'Unknown Student'} - {formatDate(cert.issuedDate)}
-                        </Text>
+                        <View style={styles.certMeta}>
+                          <Icon name="person-outline" size={11} color={theme.colors.textSecondary} />
+                          <Text style={[styles.certificateStudent, { color: theme.colors.textSecondary }]}>
+                            {cert.user?.name || 'Unknown Student'}
+                          </Text>
+                          <Text style={[styles.certDot, { color: theme.colors.textTertiary }]}>·</Text>
+                          <Icon name="calendar-outline" size={11} color={theme.colors.textSecondary} />
+                          <Text style={[styles.certificateStudent, { color: theme.colors.textSecondary }]}>
+                            {formatDate(cert.issuedDate)}
+                          </Text>
+                        </View>
                       </View>
                       {cert.certificateUrl && (
                         <TouchableOpacity
-                          style={[styles.certificateAction, { backgroundColor: theme.colors.primary + '10' }]}
+                          style={[styles.certificateAction, { backgroundColor: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.10)' }]}
                           onPress={() => {
                             const url = getImageUrl(cert.certificateUrl);
                             if (Platform.OS === 'web') {
@@ -744,15 +791,17 @@ const CertificateManagementScreen = () => {
                             }
                           }}
                         >
-                          <Icon name="download-outline" size={18} color={theme.colors.primary} />
+                          <Icon name="download-outline" size={18} color={GREEN} />
                         </TouchableOpacity>
                       )}
                     </View>
                   ))}
                 </View>
               ) : (
-                <View style={[styles.emptySection, { borderColor: theme.colors.border }]}>
-                  <Icon name="ribbon-outline" size={32} color={theme.colors.textTertiary} />
+                <View style={[styles.emptySection, { borderColor: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.12)' }]}>
+                  <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? 'rgba(16,185,129,0.10)' : 'rgba(16,185,129,0.07)' }]}>
+                    <Icon name="ribbon-outline" size={26} color={GREEN} />
+                  </View>
                   <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
                     No certificates issued yet
                   </Text>
@@ -764,11 +813,16 @@ const CertificateManagementScreen = () => {
           {/* Side Column */}
           <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.sideColumn}>
             {/* All Templates Card */}
-            <AppCard style={styles.card}>
+            <AppCard style={[styles.card, { borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
               <View style={styles.cardHeader}>
-                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                  All Templates
-                </Text>
+                <View style={styles.cardTitleRow}>
+                  <View style={[styles.cardTitleIcon, { backgroundColor: isDark ? 'rgba(16,185,129,0.13)' : 'rgba(16,185,129,0.09)' }]}>
+                    <Icon name="layers-outline" size={16} color={GREEN} />
+                  </View>
+                  <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
+                    All Templates
+                  </Text>
+                </View>
                 <AppButton
                   title="New"
                   onPress={() => {
@@ -786,12 +840,19 @@ const CertificateManagementScreen = () => {
                   {templates.map((template) => {
                     // Get courses where this template is active
                     const activeCourses = (template.courses || []).filter(c => c.TemplateCourse?.isActive);
+                    const isActiveTemplate = template.isActive || activeCourses.length > 0;
                     return (
                       <View
                         key={template.id}
                         style={[
                           styles.templateItem,
-                          { borderColor: template.isActive || activeCourses.length > 0 ? theme.colors.primary : theme.colors.border }
+                          {
+                            borderColor: isActiveTemplate ? GREEN : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'),
+                            borderLeftWidth: isActiveTemplate ? 3 : 1,
+                            backgroundColor: isActiveTemplate
+                              ? (isDark ? 'rgba(16,185,129,0.05)' : 'rgba(16,185,129,0.03)')
+                              : (isDark ? theme.colors.surface : theme.colors.surface),
+                          }
                         ]}
                       >
                         <View style={styles.templateItemHeader}>
@@ -801,15 +862,16 @@ const CertificateManagementScreen = () => {
                             </Text>
                             <View style={styles.badgeRow}>
                               {template.isActive && (
-                                <View style={[styles.activeBadge, { backgroundColor: theme.colors.primary + '15' }]}>
-                                  <Text style={[styles.activeBadgeText, { color: theme.colors.primary }]}>
+                                <View style={[styles.activeBadge, { backgroundColor: isDark ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.12)' }]}>
+                                  <Icon name="checkmark-circle" size={10} color={GREEN} />
+                                  <Text style={[styles.activeBadgeText, { color: GREEN }]}>
                                     Default
                                   </Text>
                                 </View>
                               )}
                               {activeCourses.length > 0 && (
-                                <View style={[styles.activeBadge, { backgroundColor: '#10B98115' }]}>
-                                  <Text style={[styles.activeBadgeText, { color: '#10B981' }]}>
+                                <View style={[styles.activeBadge, { backgroundColor: isDark ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.12)' }]}>
+                                  <Text style={[styles.activeBadgeText, { color: GREEN }]}>
                                     {activeCourses.length} Course{activeCourses.length > 1 ? 's' : ''}
                                   </Text>
                                 </View>
@@ -826,8 +888,8 @@ const CertificateManagementScreen = () => {
                         {activeCourses.length > 0 && (
                           <View style={styles.activeCoursesList}>
                             {activeCourses.slice(0, 3).map(course => (
-                              <View key={course.id} style={[styles.courseTag, { backgroundColor: '#10B98110' }]}>
-                                <Text style={[styles.courseTagText, { color: '#10B981' }]} numberOfLines={1}>
+                              <View key={course.id} style={[styles.courseTag, { backgroundColor: isDark ? 'rgba(16,185,129,0.12)' : 'rgba(16,185,129,0.08)' }]}>
+                                <Text style={[styles.courseTagText, { color: GREEN }]} numberOfLines={1}>
                                   {course.name}
                                 </Text>
                               </View>
@@ -842,34 +904,34 @@ const CertificateManagementScreen = () => {
 
                         <View style={styles.templateItemActions}>
                           <TouchableOpacity
-                            style={[styles.actionBtn, styles.actionBtnWide, { backgroundColor: '#10B98115' }]}
+                            style={[styles.actionBtn, styles.actionBtnWide, { backgroundColor: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.10)' }]}
                             onPress={() => openActivateForCoursesModal(template)}
                           >
-                            <Icon name="school-outline" size={14} color="#10B981" />
-                            <Text style={[styles.actionBtnText, { color: '#10B981' }]}>Courses</Text>
+                            <Icon name="school-outline" size={14} color={GREEN} />
+                            <Text style={[styles.actionBtnText, { color: GREEN }]}>Courses</Text>
                           </TouchableOpacity>
                           {!template.isActive && (
                             <TouchableOpacity
-                              style={[styles.actionBtn, { backgroundColor: '#6366F115' }]}
+                              style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.10)' }]}
                               onPress={() => handleActivateTemplate(template.id)}
                             >
                               <Icon name="star-outline" size={16} color="#6366F1" />
                             </TouchableOpacity>
                           )}
                           <TouchableOpacity
-                            style={[styles.actionBtn, { backgroundColor: theme.colors.primary + '15' }]}
+                            style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,140,66,0.15)' : 'rgba(255,140,66,0.10)' }]}
                             onPress={() => openEditModal(template)}
                           >
-                            <Icon name="create-outline" size={16} color={theme.colors.primary} />
+                            <Icon name="create-outline" size={16} color={ORANGE} />
                           </TouchableOpacity>
                           <TouchableOpacity
-                            style={[styles.actionBtn, { backgroundColor: theme.colors.primary + '15' }]}
+                            style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,140,66,0.15)' : 'rgba(255,140,66,0.10)' }]}
                             onPress={() => handlePreviewCertificate(template.id)}
                           >
-                            <Icon name="eye-outline" size={16} color={theme.colors.primary} />
+                            <Icon name="eye-outline" size={16} color={ORANGE} />
                           </TouchableOpacity>
                           <TouchableOpacity
-                            style={[styles.actionBtn, { backgroundColor: '#EF444415' }]}
+                            style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.10)' }]}
                             onPress={() => confirmDeleteTemplate(template)}
                           >
                             <Icon name="trash-outline" size={16} color="#EF4444" />
@@ -880,8 +942,10 @@ const CertificateManagementScreen = () => {
                   })}
                 </View>
               ) : (
-                <View style={[styles.emptySection, { borderColor: theme.colors.border }]}>
-                  <Icon name="document-outline" size={32} color={theme.colors.textTertiary} />
+                <View style={[styles.emptySection, { borderColor: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.12)' }]}>
+                  <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? 'rgba(16,185,129,0.10)' : 'rgba(16,185,129,0.07)' }]}>
+                    <Icon name="document-outline" size={26} color={GREEN} />
+                  </View>
                   <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
                     No templates created
                   </Text>
@@ -890,22 +954,29 @@ const CertificateManagementScreen = () => {
             </AppCard>
 
             {/* Info Card */}
-            <AppCard style={[styles.infoCard, { backgroundColor: theme.colors.primary + '10' }]}>
-              <Icon name="information-circle" size={20} color={theme.colors.primary} />
-              <Text style={[styles.infoCardText, { color: theme.colors.primary }]}>
+            <View style={[styles.infoCard, { backgroundColor: isDark ? 'rgba(16,185,129,0.10)' : 'rgba(16,185,129,0.07)', borderColor: isDark ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.13)', borderWidth: 1 }]}>
+              <View style={[styles.infoIconCircle, { backgroundColor: isDark ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.13)' }]}>
+                <Icon name="information-circle" size={18} color={GREEN} />
+              </View>
+              <Text style={[styles.infoCardText, { color: isDark ? '#6EE7B7' : '#065F46' }]}>
                 Certificates are automatically generated and emailed when students complete 100% of a course.
               </Text>
-            </AppCard>
+            </View>
 
             {/* Settings Info Card */}
-            <AppCard style={styles.card}>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                Auto-Generation Settings
-              </Text>
+            <AppCard style={[styles.card, { borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
+              <View style={styles.cardTitleRow}>
+                <View style={[styles.cardTitleIcon, { backgroundColor: isDark ? 'rgba(16,185,129,0.13)' : 'rgba(16,185,129,0.09)' }]}>
+                  <Icon name="settings-outline" size={16} color={GREEN} />
+                </View>
+                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
+                  Auto-Generation Settings
+                </Text>
+              </View>
               <View style={styles.settingsList}>
-                <View style={styles.settingItem}>
-                  <View style={[styles.settingIcon, { backgroundColor: theme.colors.primary + '15' }]}>
-                    <Icon name="checkmark-done-outline" size={20} color={theme.colors.primary} />
+                <View style={[styles.settingItem, { borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', borderBottomWidth: 1, paddingBottom: 10 }]}>
+                  <View style={[styles.settingIcon, { backgroundColor: isDark ? 'rgba(16,185,129,0.13)' : 'rgba(16,185,129,0.09)' }]}>
+                    <Icon name="checkmark-done-outline" size={18} color={GREEN} />
                   </View>
                   <View style={styles.settingContent}>
                     <Text style={[styles.settingLabel, { color: theme.colors.textTertiary }]}>
@@ -916,9 +987,9 @@ const CertificateManagementScreen = () => {
                     </Text>
                   </View>
                 </View>
-                <View style={styles.settingItem}>
-                  <View style={[styles.settingIcon, { backgroundColor: theme.colors.primary + '15' }]}>
-                    <Icon name="mail-outline" size={20} color={theme.colors.primary} />
+                <View style={[styles.settingItem, { borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', borderBottomWidth: 1, paddingBottom: 10 }]}>
+                  <View style={[styles.settingIcon, { backgroundColor: isDark ? 'rgba(16,185,129,0.13)' : 'rgba(16,185,129,0.09)' }]}>
+                    <Icon name="mail-outline" size={18} color={GREEN} />
                   </View>
                   <View style={styles.settingContent}>
                     <Text style={[styles.settingLabel, { color: theme.colors.textTertiary }]}>
@@ -930,8 +1001,8 @@ const CertificateManagementScreen = () => {
                   </View>
                 </View>
                 <View style={styles.settingItem}>
-                  <View style={[styles.settingIcon, { backgroundColor: theme.colors.primary + '15' }]}>
-                    <Icon name="document-text-outline" size={20} color={theme.colors.primary} />
+                  <View style={[styles.settingIcon, { backgroundColor: isDark ? 'rgba(16,185,129,0.13)' : 'rgba(16,185,129,0.09)' }]}>
+                    <Icon name="document-text-outline" size={18} color={GREEN} />
                   </View>
                   <View style={styles.settingContent}>
                     <Text style={[styles.settingLabel, { color: theme.colors.textTertiary }]}>
@@ -959,28 +1030,87 @@ const CertificateManagementScreen = () => {
           resetForm();
         }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContainer, { backgroundColor: theme.colors.background }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
-                {editingTemplate ? 'Edit Template' : 'Create Template'}
-              </Text>
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20,
+          ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' } : {}),
+        }}>
+          <View style={{
+            width: '100%',
+            maxWidth: 560,
+            backgroundColor: isDark ? 'rgba(15,15,30,0.92)' : 'rgba(255,255,255,0.95)',
+            borderRadius: 24,
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+            overflow: 'hidden',
+            ...(Platform.OS === 'web' ? { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' } : {}),
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 20 },
+            shadowOpacity: isDark ? 0.5 : 0.15,
+            shadowRadius: 40,
+            elevation: 20,
+            maxHeight: '90%',
+          }}>
+            {/* Modal Header */}
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: 20,
+              borderBottomWidth: 1,
+              borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)',
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 12,
+                  backgroundColor: isDark ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.12)',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}>
+                  <Icon name="ribbon" size={18} color={GREEN} />
+                </View>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: isDark ? '#FFFFFF' : '#1A1A2E' }}>
+                  {editingTemplate ? 'Edit Template' : 'Create Template'}
+                </Text>
+              </View>
               <TouchableOpacity
                 onPress={() => {
                   setShowTemplateModal(false);
                   setEditingTemplate(null);
                   resetForm();
                 }}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
               >
-                <Icon name="close" size={24} color={theme.colors.textPrimary} />
+                <Icon name="close" size={20} color={isDark ? '#FFFFFF' : '#1A1A2E'} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalContent}>
+            <ScrollView style={{ padding: 20, maxHeight: 400 }}>
               <View style={styles.formField}>
-                <Text style={[styles.formLabel, { color: theme.colors.textPrimary }]}>Template Name</Text>
+                <Text style={[styles.formLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>Template Name</Text>
                 <TextInput
-                  style={[styles.textInput, { color: theme.colors.textPrimary, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+                  style={{
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.04)',
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    color: isDark ? '#FFFFFF' : '#1A1A2E',
+                    fontSize: 14,
+                  }}
                   value={templateForm.name}
                   onChangeText={(text) => setTemplateForm({ ...templateForm, name: text })}
                   placeholder="Template Name"
@@ -989,9 +1119,18 @@ const CertificateManagementScreen = () => {
               </View>
 
               <View style={styles.formField}>
-                <Text style={[styles.formLabel, { color: theme.colors.textPrimary }]}>Title Text</Text>
+                <Text style={[styles.formLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>Title Text</Text>
                 <TextInput
-                  style={[styles.textInput, { color: theme.colors.textPrimary, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+                  style={{
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.04)',
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    color: isDark ? '#FFFFFF' : '#1A1A2E',
+                    fontSize: 14,
+                  }}
                   value={templateForm.titleText}
                   onChangeText={(text) => setTemplateForm({ ...templateForm, titleText: text })}
                   placeholder="Certificate of Completion"
@@ -1000,9 +1139,18 @@ const CertificateManagementScreen = () => {
               </View>
 
               <View style={styles.formField}>
-                <Text style={[styles.formLabel, { color: theme.colors.textPrimary }]}>Subtitle Text</Text>
+                <Text style={[styles.formLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>Subtitle Text</Text>
                 <TextInput
-                  style={[styles.textInput, { color: theme.colors.textPrimary, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+                  style={{
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.04)',
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    color: isDark ? '#FFFFFF' : '#1A1A2E',
+                    fontSize: 14,
+                  }}
                   value={templateForm.subtitleText}
                   onChangeText={(text) => setTemplateForm({ ...templateForm, subtitleText: text })}
                   placeholder="This is to certify that"
@@ -1012,7 +1160,7 @@ const CertificateManagementScreen = () => {
 
               <View style={styles.formRow}>
                 <View style={[styles.formField, { flex: 1, marginRight: 8 }]}>
-                  <Text style={[styles.formLabel, { color: theme.colors.textPrimary }]}>Primary Color</Text>
+                  <Text style={[styles.formLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>Primary Color</Text>
                   <View style={styles.colorPickerContainer}>
                     {Platform.OS === 'web' ? (
                       <input
@@ -1032,7 +1180,17 @@ const CertificateManagementScreen = () => {
                       <View style={[styles.colorSwatchLarge, { backgroundColor: templateForm.primaryColor }]} />
                     )}
                     <TextInput
-                      style={[styles.colorTextInput, { color: theme.colors.textPrimary, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+                      style={{
+                        flex: 1,
+                        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.04)',
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        color: isDark ? '#FFFFFF' : '#1A1A2E',
+                        fontSize: 14,
+                      }}
                       value={templateForm.primaryColor}
                       onChangeText={(text) => handleColorChange('primaryColor', text)}
                       placeholder="#4F46E5"
@@ -1041,7 +1199,7 @@ const CertificateManagementScreen = () => {
                   </View>
                 </View>
                 <View style={[styles.formField, { flex: 1, marginLeft: 8 }]}>
-                  <Text style={[styles.formLabel, { color: theme.colors.textPrimary }]}>Secondary Color</Text>
+                  <Text style={[styles.formLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>Secondary Color</Text>
                   <View style={styles.colorPickerContainer}>
                     {Platform.OS === 'web' ? (
                       <input
@@ -1061,7 +1219,17 @@ const CertificateManagementScreen = () => {
                       <View style={[styles.colorSwatchLarge, { backgroundColor: templateForm.secondaryColor }]} />
                     )}
                     <TextInput
-                      style={[styles.colorTextInput, { color: theme.colors.textPrimary, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+                      style={{
+                        flex: 1,
+                        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.04)',
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        color: isDark ? '#FFFFFF' : '#1A1A2E',
+                        fontSize: 14,
+                      }}
                       value={templateForm.secondaryColor}
                       onChangeText={(text) => handleColorChange('secondaryColor', text)}
                       placeholder="#22D3EE"
@@ -1072,9 +1240,18 @@ const CertificateManagementScreen = () => {
               </View>
 
               <View style={styles.formField}>
-                <Text style={[styles.formLabel, { color: theme.colors.textPrimary }]}>Font Family</Text>
+                <Text style={[styles.formLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>Font Family</Text>
                 <TextInput
-                  style={[styles.textInput, { color: theme.colors.textPrimary, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+                  style={{
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.04)',
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    color: isDark ? '#FFFFFF' : '#1A1A2E',
+                    fontSize: 14,
+                  }}
                   value={templateForm.fontFamily}
                   onChangeText={(text) => setTemplateForm({ ...templateForm, fontFamily: text })}
                   placeholder="Arial, sans-serif"
@@ -1083,9 +1260,20 @@ const CertificateManagementScreen = () => {
               </View>
 
               <View style={styles.formField}>
-                <Text style={[styles.formLabel, { color: theme.colors.textPrimary }]}>Footer Text (Optional)</Text>
+                <Text style={[styles.formLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>Footer Text (Optional)</Text>
                 <TextInput
-                  style={[styles.textInput, styles.textArea, { color: theme.colors.textPrimary, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+                  style={{
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.04)',
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    color: isDark ? '#FFFFFF' : '#1A1A2E',
+                    fontSize: 14,
+                    minHeight: 80,
+                    textAlignVertical: 'top',
+                  }}
                   value={templateForm.footerText}
                   onChangeText={(text) => setTemplateForm({ ...templateForm, footerText: text })}
                   placeholder="Additional footer text..."
@@ -1097,7 +1285,7 @@ const CertificateManagementScreen = () => {
 
               {/* Course Selection */}
               <View style={styles.formField}>
-                <Text style={[styles.formLabel, { color: theme.colors.textPrimary }]}>Apply to Courses</Text>
+                <Text style={[styles.formLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>Apply to Courses</Text>
                 <Text style={[styles.formHint, { color: theme.colors.textTertiary }]}>
                   Select courses this template applies to. Courses already assigned to other templates are not shown.
                 </Text>
@@ -1121,10 +1309,10 @@ const CertificateManagementScreen = () => {
                             styles.courseChip,
                             {
                               backgroundColor: selectedCourseIds.includes(course.id)
-                                ? theme.colors.primary
+                                ? GREEN
                                 : theme.colors.surface,
                               borderColor: selectedCourseIds.includes(course.id)
-                                ? theme.colors.primary
+                                ? GREEN
                                 : theme.colors.border
                             }
                           ]}
@@ -1160,31 +1348,53 @@ const CertificateManagementScreen = () => {
                   )}
                 </View>
                 {selectedCourseIds.length > 0 && (
-                  <Text style={[styles.selectedCount, { color: theme.colors.primary }]}>
+                  <Text style={[styles.selectedCount, { color: GREEN }]}>
                     {selectedCourseIds.length} course{selectedCourseIds.length > 1 ? 's' : ''} selected
                   </Text>
                 )}
               </View>
             </ScrollView>
 
-            <View style={styles.modalActions}>
-              <AppButton
-                title="Cancel"
+            {/* Modal Actions */}
+            <View style={{
+              flexDirection: 'row',
+              padding: 20,
+              borderTopWidth: 1,
+              borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)',
+              gap: 12,
+            }}>
+              <TouchableOpacity
                 onPress={() => {
                   setShowTemplateModal(false);
                   setEditingTemplate(null);
                   resetForm();
                 }}
-                variant="outline"
-                style={{ flex: 1, marginRight: 8 }}
-              />
-              <AppButton
-                title={saving ? 'Saving...' : (editingTemplate ? 'Update' : 'Create')}
+                style={{
+                  flex: 1,
+                  paddingVertical: 13,
+                  borderRadius: 12,
+                  borderWidth: 1.5,
+                  borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(26,26,46,0.18)',
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '600', color: isDark ? '#FFFFFF' : '#1A1A2E' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 onPress={editingTemplate ? handleUpdateTemplate : handleCreateTemplate}
-                variant="primary"
                 disabled={saving}
-                style={{ flex: 1, marginLeft: 8 }}
-              />
+                style={{
+                  flex: 1,
+                  paddingVertical: 13,
+                  borderRadius: 12,
+                  backgroundColor: saving ? 'rgba(255,140,66,0.5)' : ORANGE,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>
+                  {saving ? 'Saving...' : (editingTemplate ? 'Update' : 'Create')}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1197,30 +1407,108 @@ const CertificateManagementScreen = () => {
         animationType="fade"
         onRequestClose={cancelDeleteTemplate}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.deleteModalContainer, { backgroundColor: theme.colors.background }]}>
-            <View style={styles.deleteModalIcon}>
-              <Icon name="warning" size={48} color="#EF4444" />
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20,
+          ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' } : {}),
+        }}>
+          <View style={{
+            width: '100%',
+            maxWidth: 560,
+            backgroundColor: isDark ? 'rgba(15,15,30,0.92)' : 'rgba(255,255,255,0.95)',
+            borderRadius: 24,
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+            padding: 28,
+            alignItems: 'center',
+            ...(Platform.OS === 'web' ? { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' } : {}),
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 20 },
+            shadowOpacity: isDark ? 0.5 : 0.15,
+            shadowRadius: 40,
+            elevation: 20,
+          }}>
+            {/* Header row */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 20 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 12,
+                  backgroundColor: 'rgba(239,68,68,0.15)',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}>
+                  <Icon name="trash-outline" size={18} color="#EF4444" />
+                </View>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: isDark ? '#FFFFFF' : '#1A1A2E' }}>
+                  Delete Template
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={cancelDeleteTemplate}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
+                <Icon name="close" size={20} color={isDark ? '#FFFFFF' : '#1A1A2E'} />
+              </TouchableOpacity>
             </View>
-            <Text style={[styles.deleteModalTitle, { color: theme.colors.textPrimary }]}>
-              Delete Template
-            </Text>
-            <Text style={[styles.deleteModalMessage, { color: theme.colors.textSecondary }]}>
+
+            <View style={{
+              width: 80,
+              height: 80,
+              borderRadius: 40,
+              backgroundColor: 'rgba(239,68,68,0.12)',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: 16,
+            }}>
+              <Icon name="warning" size={40} color="#EF4444" />
+            </View>
+            <Text style={{
+              fontSize: 14,
+              textAlign: 'center',
+              color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(26,26,46,0.65)',
+              marginBottom: 24,
+              lineHeight: 20,
+            }}>
               Are you sure you want to delete "{templateToDelete?.name}"? This action cannot be undone.
             </Text>
-            <View style={styles.deleteModalActions}>
-              <AppButton
-                title="Cancel"
+            <View style={{ flexDirection: 'row', width: '100%', gap: 12 }}>
+              <TouchableOpacity
                 onPress={cancelDeleteTemplate}
-                variant="outline"
-                style={{ flex: 1, marginRight: 8 }}
-              />
-              <AppButton
-                title="Delete"
+                style={{
+                  flex: 1,
+                  paddingVertical: 13,
+                  borderRadius: 12,
+                  borderWidth: 1.5,
+                  borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(26,26,46,0.18)',
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '600', color: isDark ? '#FFFFFF' : '#1A1A2E' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 onPress={handleDeleteTemplate}
-                variant="danger"
-                style={{ flex: 1, marginLeft: 8 }}
-              />
+                style={{
+                  flex: 1,
+                  paddingVertical: 13,
+                  borderRadius: 12,
+                  backgroundColor: ORANGE,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>Delete</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1237,30 +1525,84 @@ const CertificateManagementScreen = () => {
           setActivateCourseIds([]);
         }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContainer, { backgroundColor: theme.colors.background }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
-                Activate for Courses
-              </Text>
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20,
+          ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' } : {}),
+        }}>
+          <View style={{
+            width: '100%',
+            maxWidth: 560,
+            backgroundColor: isDark ? 'rgba(15,15,30,0.92)' : 'rgba(255,255,255,0.95)',
+            borderRadius: 24,
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+            overflow: 'hidden',
+            ...(Platform.OS === 'web' ? { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' } : {}),
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 20 },
+            shadowOpacity: isDark ? 0.5 : 0.15,
+            shadowRadius: 40,
+            elevation: 20,
+            maxHeight: '90%',
+          }}>
+            {/* Modal Header */}
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: 20,
+              borderBottomWidth: 1,
+              borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)',
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 12,
+                  backgroundColor: isDark ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.12)',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}>
+                  <Icon name="ribbon" size={18} color={GREEN} />
+                </View>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: isDark ? '#FFFFFF' : '#1A1A2E' }}>
+                  Activate for Courses
+                </Text>
+              </View>
               <TouchableOpacity
                 onPress={() => {
                   setShowActivateModal(false);
                   setActivatingTemplate(null);
                   setActivateCourseIds([]);
                 }}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
               >
-                <Icon name="close" size={24} color={theme.colors.textPrimary} />
+                <Icon name="close" size={20} color={isDark ? '#FFFFFF' : '#1A1A2E'} />
               </TouchableOpacity>
             </View>
 
             <View style={styles.activateModalInfo}>
-              <View style={[styles.activateTemplatePreview, { backgroundColor: theme.colors.surface }]}>
+              <View style={[styles.activateTemplatePreview, {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(26,26,46,0.04)',
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)',
+              }]}>
                 <View style={styles.activateTemplateColors}>
                   <View style={[styles.colorDotLarge, { backgroundColor: activatingTemplate?.primaryColor || '#4F46E5' }]} />
                   <View style={[styles.colorDotLarge, { backgroundColor: activatingTemplate?.secondaryColor || '#22D3EE' }]} />
                 </View>
-                <Text style={[styles.activateTemplateName, { color: theme.colors.textPrimary }]}>
+                <Text style={[styles.activateTemplateName, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
                   {activatingTemplate?.name || 'Template'}
                 </Text>
               </View>
@@ -1284,8 +1626,8 @@ const CertificateManagementScreen = () => {
                         style={[
                           styles.activateCourseItem,
                           {
-                            backgroundColor: theme.colors.surface,
-                            borderColor: theme.colors.border,
+                            backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(26,26,46,0.03)',
+                            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)',
                             opacity: 0.6,
                           }
                         ]}
@@ -1313,8 +1655,8 @@ const CertificateManagementScreen = () => {
                       style={[
                         styles.activateCourseItem,
                         {
-                          backgroundColor: isSelected ? theme.colors.primary + '10' : theme.colors.surface,
-                          borderColor: isSelected ? theme.colors.primary : theme.colors.border
+                          backgroundColor: isSelected ? (isDark ? 'rgba(16,185,129,0.10)' : 'rgba(16,185,129,0.07)') : (isDark ? 'rgba(255,255,255,0.03)' : 'rgba(26,26,46,0.03)'),
+                          borderColor: isSelected ? GREEN : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)'),
                         }
                       ]}
                       onPress={() => toggleActivateCourse(course.id)}
@@ -1322,14 +1664,14 @@ const CertificateManagementScreen = () => {
                       <Icon
                         name={isSelected ? 'checkbox' : 'square-outline'}
                         size={22}
-                        color={isSelected ? theme.colors.primary : theme.colors.textTertiary}
+                        color={isSelected ? GREEN : theme.colors.textTertiary}
                       />
                       <View style={styles.activateCourseInfo}>
-                        <Text style={[styles.activateCourseName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                        <Text style={[styles.activateCourseName, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]} numberOfLines={1}>
                           {course.name}
                         </Text>
                         {currentActiveTemplate && currentActiveTemplate.id === activatingTemplate?.id && (
-                          <Text style={[styles.activateCourseStatus, { color: '#10B981' }]}>
+                          <Text style={[styles.activateCourseStatus, { color: GREEN }]}>
                             Currently using this template
                           </Text>
                         )}
@@ -1350,32 +1692,54 @@ const CertificateManagementScreen = () => {
             </ScrollView>
 
             {activateCourseIds.length > 0 && (
-              <View style={[styles.selectedSummary, { backgroundColor: theme.colors.primary + '10' }]}>
-                <Icon name="checkmark-circle" size={18} color={theme.colors.primary} />
-                <Text style={[styles.selectedSummaryText, { color: theme.colors.primary }]}>
+              <View style={[styles.selectedSummary, { backgroundColor: isDark ? 'rgba(16,185,129,0.12)' : 'rgba(16,185,129,0.08)' }]}>
+                <Icon name="checkmark-circle" size={18} color={GREEN} />
+                <Text style={[styles.selectedSummaryText, { color: GREEN }]}>
                   {activateCourseIds.length} course{activateCourseIds.length > 1 ? 's' : ''} selected
                 </Text>
               </View>
             )}
 
-            <View style={styles.modalActions}>
-              <AppButton
-                title="Cancel"
+            {/* Modal Actions */}
+            <View style={{
+              flexDirection: 'row',
+              padding: 20,
+              borderTopWidth: 1,
+              borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)',
+              gap: 12,
+            }}>
+              <TouchableOpacity
                 onPress={() => {
                   setShowActivateModal(false);
                   setActivatingTemplate(null);
                   setActivateCourseIds([]);
                 }}
-                variant="outline"
-                style={{ flex: 1, marginRight: 8 }}
-              />
-              <AppButton
-                title={saving ? 'Saving...' : 'Activate'}
+                style={{
+                  flex: 1,
+                  paddingVertical: 13,
+                  borderRadius: 12,
+                  borderWidth: 1.5,
+                  borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(26,26,46,0.18)',
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '600', color: isDark ? '#FFFFFF' : '#1A1A2E' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 onPress={handleActivateForCourses}
-                variant="primary"
                 disabled={saving || activateCourseIds.length === 0}
-                style={{ flex: 1, marginLeft: 8 }}
-              />
+                style={{
+                  flex: 1,
+                  paddingVertical: 13,
+                  borderRadius: 12,
+                  backgroundColor: (saving || activateCourseIds.length === 0) ? 'rgba(255,140,66,0.4)' : ORANGE,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>
+                  {saving ? 'Saving...' : 'Activate'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1403,38 +1767,55 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       fontSize: 14,
     },
 
-    // Header Section
-    headerSection: {
+    // Page Banner
+    pageBanner: {
+      flexDirection: isMobile ? 'column' : 'row',
+      alignItems: isMobile ? 'flex-start' : 'center',
+      justifyContent: 'space-between',
+      borderRadius: 16,
+      borderWidth: 1,
+      padding: isMobile ? 16 : 20,
       marginBottom: 24,
-      width: '100%',
+      gap: isMobile ? 14 : 0,
     },
-    headerTextContainer: {
-      width: '100%',
-    },
-    titleRow: {
+    bannerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
-      marginBottom: 4,
-      flexWrap: 'wrap',
+      gap: 14,
+      flex: 1,
     },
-    backButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
+    bannerIconCircle: {
+      width: 52,
+      height: 52,
+      borderRadius: 14,
       justifyContent: 'center',
       alignItems: 'center',
-      ...theme.shadows.sm,
     },
-    pageTitle: {
-      fontSize: isMobile ? 20 : 28,
+    bannerTextBlock: {
+      flex: 1,
+    },
+    bannerTitle: {
+      fontSize: isMobile ? 18 : 22,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
-      flex: isMobile ? 1 : undefined,
+      marginBottom: 2,
     },
-    pageSubtitle: {
-      fontSize: 14,
+    bannerSubtitle: {
+      fontSize: 13,
       fontFamily: theme.typography.fontFamily.regular,
+    },
+    bannerActionBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 10,
+    },
+    bannerActionBtnText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '600',
     },
 
     // Stats Section
@@ -1452,16 +1833,16 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       padding: isMobile ? 16 : 20,
       alignItems: 'center',
     },
-    statIconContainer: {
-      width: 48,
-      height: 48,
-      borderRadius: 12,
+    statIconCircle: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
       justifyContent: 'center',
       alignItems: 'center',
       marginBottom: 12,
     },
     statValue: {
-      fontSize: isMobile ? 28 : 36,
+      fontSize: isMobile ? 30 : 38,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
       marginBottom: 4,
@@ -1498,11 +1879,41 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       alignItems: 'center',
       marginBottom: 16,
     },
+    cardTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 16,
+    },
+    cardTitleIcon: {
+      width: 30,
+      height: 30,
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
     cardTitle: {
       fontSize: 16,
       fontWeight: '600',
-      marginBottom: 16,
       fontFamily: theme.typography.fontFamily.semiBold,
+    },
+
+    // Active Template Banner
+    activeTemplateBanner: {
+      borderRadius: 12,
+      borderWidth: 1,
+      padding: 14,
+    },
+    activeTemplateBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      marginBottom: 12,
+    },
+    activeTemplateBadgeText: {
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 0.3,
     },
 
     // Template Details
@@ -1606,6 +2017,14 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       alignItems: 'center',
       gap: 12,
     },
+    emptyIconCircle: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
     emptyTitle: {
       fontSize: 16,
       fontWeight: '600',
@@ -1620,7 +2039,7 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
 
     // Certificate List
     certificateList: {
-      gap: 12,
+      gap: 10,
     },
     certificateItem: {
       flexDirection: 'row',
@@ -1630,10 +2049,10 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       borderWidth: 1,
       gap: 12,
     },
-    certificateIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 10,
+    certificateIndexCircle: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -1643,8 +2062,17 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     certificateName: {
       fontSize: 14,
       fontWeight: '600',
-      marginBottom: 2,
+      marginBottom: 3,
       fontFamily: theme.typography.fontFamily.semiBold,
+    },
+    certMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      flexWrap: 'wrap',
+    },
+    certDot: {
+      fontSize: 12,
     },
     certificateStudent: {
       fontSize: 12,
@@ -1660,12 +2088,12 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
 
     // Empty Section
     emptySection: {
-      padding: 32,
+      padding: 28,
       borderRadius: 12,
       borderWidth: 1,
       borderStyle: 'dashed',
       alignItems: 'center',
-      gap: 8,
+      gap: 10,
     },
 
     // Template List
@@ -1684,22 +2112,26 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       alignItems: 'center',
     },
     templateItemInfo: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
+      flex: 1,
     },
     templateItemName: {
       fontSize: 14,
       fontWeight: '600',
+      marginBottom: 4,
     },
     activeBadge: {
-      paddingHorizontal: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      paddingHorizontal: 7,
       paddingVertical: 2,
       borderRadius: 4,
+      alignSelf: 'flex-start',
+      marginTop: 2,
     },
     activeBadgeText: {
       fontSize: 10,
-      fontWeight: '600',
+      fontWeight: '700',
     },
     templateItemColors: {
       flexDirection: 'row',
@@ -1713,6 +2145,7 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     templateItemActions: {
       flexDirection: 'row',
       gap: 8,
+      flexWrap: 'wrap',
     },
     actionBtn: {
       width: 32,
@@ -1724,12 +2157,13 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
 
     // Settings
     settingsList: {
-      gap: 12,
+      gap: 0,
     },
     settingItem: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
+      paddingVertical: 10,
     },
     settingIcon: {
       width: 36,
@@ -1753,10 +2187,17 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     // Info Card
     infoCard: {
       flexDirection: 'row',
-      padding: 16,
+      padding: 14,
       borderRadius: 12,
       alignItems: 'flex-start',
-      gap: 12,
+      gap: 10,
+    },
+    infoIconCircle: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     infoCardText: {
       flex: 1,
@@ -1768,17 +2209,24 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     // Modal
     modalOverlay: {
       flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      backgroundColor: 'rgba(0, 0, 0, 0.6)',
       justifyContent: 'center',
       alignItems: 'center',
       padding: 20,
     },
     modalContainer: {
       width: '100%',
-      maxWidth: 500,
+      maxWidth: 560,
       maxHeight: '90%',
-      borderRadius: 16,
-      ...theme.shadows.lg,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 20 },
+      shadowOpacity: isDark ? 0.5 : 0.15,
+      shadowRadius: 40,
+      elevation: 20,
     },
     modalHeader: {
       flexDirection: 'row',
@@ -1786,11 +2234,22 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       alignItems: 'center',
       padding: 20,
       borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
+    },
+    modalHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    modalHeaderIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     modalTitle: {
       fontSize: 18,
-      fontWeight: '600',
+      fontWeight: '700',
     },
     modalContent: {
       padding: 20,
@@ -1841,30 +2300,35 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       flexDirection: 'row',
       padding: 20,
       borderTopWidth: 1,
-      borderTopColor: theme.colors.border,
     },
 
     // Delete Modal
     deleteModalContainer: {
       width: '100%',
-      maxWidth: 400,
-      borderRadius: 16,
-      padding: 24,
+      maxWidth: 560,
+      borderRadius: 24,
+      padding: 28,
       alignItems: 'center',
-      ...theme.shadows.lg,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 20 },
+      shadowOpacity: isDark ? 0.5 : 0.15,
+      shadowRadius: 40,
+      elevation: 20,
     },
     deleteModalIcon: {
       width: 80,
       height: 80,
       borderRadius: 40,
-      backgroundColor: '#EF444415',
+      backgroundColor: 'rgba(239,68,68,0.12)',
       justifyContent: 'center',
       alignItems: 'center',
       marginBottom: 16,
     },
     deleteModalTitle: {
       fontSize: 20,
-      fontWeight: '600',
+      fontWeight: '700',
       marginBottom: 8,
       textAlign: 'center',
     },
@@ -1877,6 +2341,7 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     deleteModalActions: {
       flexDirection: 'row',
       width: '100%',
+      gap: 12,
     },
 
     // Course Selection styles

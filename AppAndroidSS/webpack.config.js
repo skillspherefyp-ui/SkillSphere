@@ -1,73 +1,191 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const webpack = require('webpack');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
-const appDir = __dirname;
-const transpileModules = [
-  path.resolve(appDir, 'src'),
-  path.resolve(appDir, 'App.js'),
-  path.resolve(appDir, 'index.web.js'),
-  path.resolve(appDir, '../node_modules/react-native-toast-message'),
-  path.resolve(appDir, '../node_modules/react-native-svg'),
-  path.resolve(appDir, '../node_modules/@react-native/assets-registry'),
-];
+// Helper function to check if a file path contains any of the specified packages
+const shouldTranspileModule = (filepath) => {
+  const packagesToTranspile = [
+    'react-native-toast-message',
+    'react-native-linear-gradient',
+    'react-native-vector-icons',
+    'react-native-paper',
+    'react-native-reanimated',
+    'react-native-gesture-handler',
+    'react-native-screens',
+    'react-native-safe-area-context',
+    'react-native-svg',
+  ];
+
+  // Normalize path separators for cross-platform compatibility
+  const normalizedPath = filepath.replace(/\\/g, '/');
+  return packagesToTranspile.some(pkg => {
+    const normalizedPkg = pkg.replace(/\\/g, '/');
+    return normalizedPath.includes(normalizedPkg);
+  });
+};
 
 module.exports = {
-  entry: path.resolve(appDir, 'index.web.js'),
+  mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+  entry: './index.web.js',
   output: {
-    path: path.resolve(appDir, 'web-build'),
-    filename: 'static/js/[name].[contenthash:8].js',
-    clean: true,
+    path: path.resolve(__dirname, 'web-build'),
+    filename: 'bundle.js',
     publicPath: '/',
   },
   resolve: {
-    extensions: ['.web.js', '.js', '.json'],
+    extensions: ['.web.js', '.js', '.jsx', '.json'],
+    modules: [
+      path.resolve(__dirname, 'node_modules'),
+      path.resolve(__dirname, '../node_modules'),
+      'node_modules'
+    ],
     alias: {
-      'react-native$': 'react-native-web',
-      'react-native-linear-gradient$': path.resolve(appDir, 'src/shims/LinearGradient.web.js'),
-      'react-native-reanimated$': path.resolve(appDir, 'src/shims/Reanimated.web.js'),
-      '@react-native-masked-view/masked-view$': path.resolve(appDir, 'src/shims/MaskedView.web.js'),
-      'react-native-vector-icons/Ionicons$': path.resolve(appDir, 'src/shims/Ionicons.web.js'),
-      'react-native-vector-icons/MaterialCommunityIcons$': path.resolve(appDir, 'src/shims/MaterialCommunityIcons.web.js'),
+      'react-native$': path.resolve(__dirname, 'react-native-web-compat.js'),
+      'react-native/package.json': path.resolve(__dirname, 'node_modules/react-native/package.json'),
+      '@react-native-async-storage/async-storage': '@react-native-async-storage/async-storage',
+      'react': path.resolve(__dirname, 'node_modules/react'),
+      'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
+    },
+    fallback: {
+      process: require.resolve('process/browser'),
     },
   },
   module: {
     rules: [
+      // Process app source files
       {
-        test: /\.[jt]sx?$/,
-        include: transpileModules,
+        test: /\.(js|jsx)$/,
+        include: [
+          path.resolve(__dirname, 'src'),
+          path.resolve(__dirname, 'App.js'),
+          path.resolve(__dirname, 'index.web.js'),
+          path.resolve(__dirname, 'react-native-web-compat.js'),
+        ],
         use: {
           loader: 'babel-loader',
           options: {
-            presets: ['@babel/preset-env', '@babel/preset-flow', '@babel/preset-react'],
+            configFile: path.resolve(__dirname, 'babel.config.js'),
+            envName: 'web',
+            cacheDirectory: false, // Disable cache for debugging
+            presets: [
+              '@babel/preset-env',
+              '@babel/preset-react',
+            ],
+            plugins: [
+              '@babel/plugin-transform-flow-strip-types',
+              'react-native-reanimated/plugin',
+            ],
+          },
+        },
+      },
+      // Process specific node_modules that need transpilation
+      {
+        test: /\.(js|jsx)$/,
+        include: (filepath) => {
+          // Normalize path for cross-platform compatibility
+          const normalizedPath = filepath.replace(/\\/g, '/');
+
+          // Only process files in node_modules (local or parent)
+          if (!normalizedPath.includes('node_modules')) return false;
+
+          // Check if this is one of our packages to transpile
+          return shouldTranspileModule(filepath);
+        },
+        use: {
+          loader: 'babel-loader',
+          options: {
+            cacheDirectory: false, // Disable cache for debugging
+            presets: [
+              '@babel/preset-env',
+              '@babel/preset-react',
+            ],
+            plugins: [
+              '@babel/plugin-transform-flow-strip-types',
+            ],
           },
         },
       },
       {
         test: /\.(png|jpe?g|gif|svg)$/i,
-        type: 'asset/resource',
-        generator: {
-          filename: 'static/media/[name].[hash][ext]',
-        },
+        use: [
+          {
+            loader: 'url-loader',
+            options: {
+              limit: 100000, // inline files smaller than 100kb as base64
+              name: '[name].[ext]',
+              outputPath: 'assets/images/',
+              publicPath: '/assets/images/',
+              esModule: false, // Required for React Native Web compatibility
+            },
+          },
+        ],
+      },
+      {
+        test: /\.(woff|woff2|eot|ttf|otf)$/i,
+        use: [
+          {
+            loader: 'file-loader',
+            options: {
+              name: '[name].[ext]',
+              outputPath: 'assets/fonts/',
+              esModule: false,
+            },
+          },
+        ],
       },
     ],
   },
   plugins: [
     new HtmlWebpackPlugin({
-      template: path.resolve(appDir, 'web/index.html'),
-      favicon: path.resolve(appDir, 'web/favicon.svg'),
+      template: './web/index.html',
+      filename: 'index.html',
+      inject: true,
     }),
+    // Copy vector icon fonts and assets to web build
+    new CopyWebpackPlugin({
+      patterns: [
+        {
+          from: path.resolve(__dirname, 'node_modules/react-native-vector-icons/Fonts'),
+          to: path.resolve(__dirname, 'web-build/assets/fonts'),
+          noErrorOnMissing: true,
+        },
+        {
+          from: path.resolve(__dirname, 'src/assets/images'),
+          to: path.resolve(__dirname, 'web-build/assets/images'),
+          noErrorOnMissing: true,
+        },
+        {
+          from: path.resolve(__dirname, 'web/favicon.png'),
+          to: path.resolve(__dirname, 'web-build/favicon.png'),
+          noErrorOnMissing: true,
+        },
+      ],
+    }),
+    // Provide React Native globals expected by some libraries
     new webpack.DefinePlugin({
       __DEV__: JSON.stringify(process.env.NODE_ENV !== 'production'),
-      'process.env.REACT_APP_API_URL': JSON.stringify(process.env.REACT_APP_API_URL || ''),
+      DEV: JSON.stringify(process.env.NODE_ENV !== 'production'),
+      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+      'process.env.REACT_APP_API_URL': JSON.stringify(process.env.REACT_APP_API_URL),
+    }),
+    new webpack.ProvidePlugin({
+      process: 'process/browser',
     }),
   ],
   devServer: {
     static: {
-      directory: path.resolve(appDir, 'web'),
+      directory: path.join(__dirname, 'web-build'),
     },
-    historyApiFallback: true,
+    compress: true,
     port: 3000,
     hot: true,
+    open: true,
+    historyApiFallback: true,
   },
+  devtool: 'source-map',
 };
+
+
+
+

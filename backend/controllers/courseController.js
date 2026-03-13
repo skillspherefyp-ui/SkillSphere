@@ -1,8 +1,43 @@
-const { Course, Category, Topic, Material, Enrollment } = require('../models');
+const { Course, Category, Topic, Material, Enrollment, Quiz } = require('../models');
+
+// Get top N published courses by enrollment count (public)
+exports.getTopCourses = async (req, res) => {
+  try {
+    const { User } = require('../models');
+    const limit = parseInt(req.query.limit) || 3;
+
+    const courses = await Course.findAll({
+      where: { status: 'published' },
+      include: [
+        { model: Category, as: 'category' },
+        { model: User, as: 'user', attributes: ['id', 'name'] }
+      ]
+    });
+
+    // Count enrollments per course, then sort and slice
+    const coursesWithCount = await Promise.all(
+      courses.map(async (course) => {
+        const enrollmentCount = await Enrollment.count({ where: { courseId: course.id } });
+        const data = course.toJSON();
+        data.enrollmentCount = enrollmentCount;
+        return data;
+      })
+    );
+
+    const top = coursesWithCount
+      .sort((a, b) => b.enrollmentCount - a.enrollmentCount)
+      .slice(0, limit);
+
+    res.json({ success: true, courses: top });
+  } catch (error) {
+    console.error('Get top courses error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 exports.createCourse = async (req, res) => {
   try {
-    const { name, description, level, language, categoryId, duration, materials, thumbnailImage } = req.body;
+    const { name, description, level, language, categoryId, duration, materials, thumbnailImage, creationMode } = req.body;
 
     console.log('📝 Creating course...');
     console.log('🖼️  Received thumbnailImage:', thumbnailImage);
@@ -26,7 +61,8 @@ exports.createCourse = async (req, res) => {
       duration,
       status: 'draft',
       userId: req.user.id,
-      thumbnailImage: thumbnailImage || null
+      thumbnailImage: thumbnailImage || null,
+      creationMode: creationMode || 'ai'
     };
 
     console.log('💾 Creating course in database with:', courseToCreate);
@@ -73,7 +109,10 @@ exports.getAllCourses = async (req, res) => {
         {
           model: Topic,
           as: 'topics',
-          include: [{ model: Material, as: 'materials' }],
+          include: [
+            { model: Material, as: 'materials' },
+            { model: Quiz, as: 'quizzes' }
+          ],
           separate: true,
           order: [['order', 'ASC']]
         },
@@ -114,7 +153,16 @@ exports.getCourseById = async (req, res) => {
           as: 'user',
           attributes: ['id', 'name', 'email', 'role']
         },
-        { model: Topic, as: 'topics', order: [['order', 'ASC']] },
+        {
+          model: Topic,
+          as: 'topics',
+          include: [
+            { model: Material, as: 'materials' },
+            { model: Quiz, as: 'quizzes' }
+          ],
+          separate: true,
+          order: [['order', 'ASC']]
+        },
         { model: Material, as: 'materials' }
       ]
     });
@@ -141,7 +189,7 @@ exports.getCourseById = async (req, res) => {
 exports.updateCourse = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, level, language, categoryId, duration, status, thumbnailImage } = req.body;
+    const { name, description, level, language, categoryId, duration, status, thumbnailImage, creationMode } = req.body;
 
     const course = await Course.findByPk(id);
 
@@ -173,6 +221,7 @@ exports.updateCourse = async (req, res) => {
     if (duration) course.duration = duration;
     if (status) course.status = status;
     if (thumbnailImage !== undefined) course.thumbnailImage = thumbnailImage;
+    if (creationMode) course.creationMode = creationMode;
 
     await course.save();
 
@@ -188,7 +237,10 @@ exports.updateCourse = async (req, res) => {
         {
           model: Topic,
           as: 'topics',
-          include: [{ model: Material, as: 'materials' }],
+          include: [
+            { model: Material, as: 'materials' },
+            { model: Quiz, as: 'quizzes' }
+          ],
           separate: true,
           order: [['order', 'ASC']]
         },
@@ -273,6 +325,5 @@ exports.publishCourse = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-
 
 

@@ -12,6 +12,8 @@ import {
   Linking,
   Image,
 } from 'react-native';
+
+const ORANGE = '#FF8C42';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
@@ -23,7 +25,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
-import { certificateAPI, API_BASE } from '../../services/apiClient';
+import { certificateAPI, enrollmentAPI, API_BASE } from '../../services/apiClient';
 
 const CertificatesScreen = () => {
   const { user, logout } = useAuth();
@@ -32,6 +34,7 @@ const CertificatesScreen = () => {
   const { width } = useWindowDimensions();
 
   const [certificates, setCertificates] = useState([]);
+  const [pendingCourses, setPendingCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,6 +53,7 @@ const CertificatesScreen = () => {
     { label: 'My Learning', icon: 'school-outline', iconActive: 'school', route: 'EnrolledCourses' },
     { label: 'AI Assistant', icon: 'sparkles-outline', iconActive: 'sparkles', route: 'AITutor' },
     { label: 'Certificates', icon: 'ribbon-outline', iconActive: 'ribbon', route: 'Certificates' },
+    { label: 'Reminders', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle', route: 'Todo' },
   ];
 
   const sortOptions = [
@@ -63,13 +67,27 @@ const CertificatesScreen = () => {
     navigation.navigate(route);
   };
 
-  // Fetch certificates
+  // Fetch certificates and completed-but-unpaid courses
   const fetchCertificates = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await certificateAPI.getMyCertificates();
-      if (response.success) {
-        setCertificates(response.certificates || []);
+      const [certRes, enrollRes] = await Promise.allSettled([
+        certificateAPI.getMyCertificates(),
+        enrollmentAPI.getMyEnrollments(),
+      ]);
+
+      let certs = [];
+      if (certRes.status === 'fulfilled' && certRes.value?.success) {
+        certs = certRes.value.certificates || [];
+        setCertificates(certs);
+      }
+
+      if (enrollRes.status === 'fulfilled' && enrollRes.value?.enrollments) {
+        const certCourseIds = new Set(certs.map(c => String(c.courseId)));
+        const completed = enrollRes.value.enrollments.filter(
+          e => e.status === 'completed' && !certCourseIds.has(String(e.courseId))
+        );
+        setPendingCourses(completed);
       }
     } catch (error) {
       console.error('Error fetching certificates:', error);
@@ -148,18 +166,12 @@ const CertificatesScreen = () => {
     return `${API_BASE.replace('/api', '')}${certificateUrl}`;
   };
 
-  // Handle download/view certificate
+  // Handle view certificate — navigate to preview screen
   const handleViewCertificate = (certificate) => {
-    const url = getCertificateUrl(certificate.certificateUrl);
-    if (url) {
-      if (Platform.OS === 'web') {
-        window.open(url, '_blank');
-      } else {
-        Linking.openURL(url);
-      }
-    } else {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Certificate file not available' });
-    }
+    navigation.navigate('CertificatePreview', {
+      courseId: certificate.courseId,
+      courseName: certificate.course?.name || 'Course',
+    });
   };
 
   // Handle download certificate
@@ -229,23 +241,25 @@ const CertificatesScreen = () => {
           />
         }
       >
-        {/* Header Section */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerTextContainer}>
-            <View style={styles.titleRow}>
-              <TouchableOpacity
-                style={[styles.backButton, { backgroundColor: theme.colors.surface }]}
-                onPress={() => navigation.goBack()}
-              >
-                <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-              <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>
-                My Certificates
-              </Text>
+        {/* Page Header Banner */}
+        <View style={[styles.pageHeaderBanner, {
+          backgroundColor: isDark ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.05)',
+          borderColor: 'rgba(16,185,129,0.15)',
+        }]}>
+          <View style={styles.bannerLeft}>
+            <TouchableOpacity
+              style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)' }]}
+              onPress={() => navigation.goBack()}
+            >
+              <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={[styles.bannerIconCircle, { backgroundColor: 'rgba(16,185,129,0.15)' }]}>
+              <Icon name="ribbon" size={22} color="#10B981" />
             </View>
-            <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
-              View and download your earned certificates
-            </Text>
+            <View style={styles.bannerTextGroup}>
+              <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>My Certificates</Text>
+              <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>View and download your earned certificates</Text>
+            </View>
           </View>
         </View>
 
@@ -337,6 +351,77 @@ const CertificatesScreen = () => {
             </Text>
           </View>
         </AppCard>
+
+        {/* Certificates to Get */}
+        {pendingCourses.length > 0 && (
+          <View style={styles.pendingSection}>
+            <View style={styles.sectionHeader}>
+              <View style={[styles.sectionIconWrap, { backgroundColor: '#F59E0B20' }]}>
+                <Icon name="ribbon-outline" size={18} color="#F59E0B" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                  Certificates to Get
+                </Text>
+                <Text style={[styles.sectionSub, { color: theme.colors.textSecondary }]}>
+                  You've completed these courses — get your official certificate
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.certificatesGrid}>
+              {pendingCourses.map((enrollment, index) => (
+                <Animated.View
+                  key={enrollment.id}
+                  entering={FadeInDown.duration(400).delay(index * 80)}
+                  style={styles.certificateCardWrapper}
+                >
+                  <View style={[styles.certificateCard, styles.pendingCard,
+                    { backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
+                      borderColor: '#F59E0B40' }]}>
+                    <View style={styles.certificateHeader}>
+                      <View style={[styles.certificateIconContainer, { backgroundColor: '#F59E0B15' }]}>
+                        <Icon name="ribbon-outline" size={32} color="#F59E0B" />
+                      </View>
+                      <View style={[styles.verifiedBadge, { backgroundColor: '#F59E0B15' }]}>
+                        <Icon name="time-outline" size={14} color="#F59E0B" />
+                        <Text style={[styles.verifiedText, { color: '#F59E0B' }]}>Pending</Text>
+                      </View>
+                    </View>
+
+                    <Text style={[styles.courseName, { color: theme.colors.textPrimary }]} numberOfLines={2}>
+                      {enrollment.course?.name || 'Course'}
+                    </Text>
+
+                    <View style={styles.certificateDetails}>
+                      <View style={styles.detailItem}>
+                        <Icon name="checkmark-circle-outline" size={14} color="#10B981" />
+                        <Text style={[styles.detailText, { color: '#10B981' }]}>Course Completed</Text>
+                      </View>
+                      <View style={styles.detailItem}>
+                        <Icon name="cash-outline" size={14} color={theme.colors.textTertiary} />
+                        <Text style={[styles.detailText, { color: theme.colors.textSecondary }]}>Certificate Fee: PKR 500</Text>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.downloadBtn,
+                        { backgroundColor: '#F59E0B', borderWidth: 0, flex: undefined, paddingHorizontal: 16 }]}
+                      onPress={() => navigation.navigate('CertificatePreview', {
+                        courseId: enrollment.courseId,
+                        courseName: enrollment.course?.name || 'Course',
+                      })}
+                      activeOpacity={0.85}
+                    >
+                      <Icon name="ribbon-outline" size={16} color="#fff" />
+                      <Text style={[styles.actionBtnText, { color: '#fff' }]}>Get Certificate</Text>
+                    </TouchableOpacity>
+                  </View>
+                </Animated.View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Certificates Grid */}
         {filteredCertificates.length > 0 ? (
@@ -472,37 +557,47 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       fontSize: 14,
     },
 
-    // Header Section
-    headerSection: {
+    // Page Header Banner
+    pageHeaderBanner: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: isMobile ? 14 : 18,
       marginBottom: 24,
-      width: '100%',
+      borderRadius: 16,
+      borderWidth: 1,
     },
-    headerTextContainer: {
-      width: '100%',
-    },
-    titleRow: {
+    bannerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      marginBottom: 4,
-      flexWrap: 'wrap',
+      flex: 1,
     },
     backButton: {
       width: 40,
       height: 40,
-      borderRadius: 12,
+      borderRadius: 20,
       justifyContent: 'center',
       alignItems: 'center',
-      ...theme.shadows.sm,
+    },
+    bannerIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerTextGroup: {
+      flex: 1,
     },
     pageTitle: {
-      fontSize: isMobile ? 20 : 28,
+      fontSize: isMobile ? 18 : 22,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
-      flex: isMobile ? 1 : undefined,
+      marginBottom: 2,
     },
     pageSubtitle: {
-      fontSize: 14,
+      fontSize: 13,
       fontFamily: theme.typography.fontFamily.regular,
     },
 
@@ -609,6 +704,40 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       fontFamily: theme.typography.fontFamily.regular,
     },
 
+    // Pending / Certificates-to-Get section
+    pendingSection: {
+      marginBottom: 24,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      marginBottom: 16,
+    },
+    sectionIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    sectionTitle: {
+      fontSize: isMobile ? 16 : 18,
+      fontWeight: '700',
+      fontFamily: theme.typography.fontFamily.bold,
+      borderLeftWidth: 3,
+      borderLeftColor: '#F5C842',
+      paddingLeft: 10,
+    },
+    sectionSub: {
+      fontSize: 12,
+      marginTop: 2,
+      fontFamily: theme.typography.fontFamily.regular,
+    },
+    pendingCard: {
+      borderWidth: 1.5,
+    },
+
     // Certificates Grid
     certificatesGrid: {
       flexDirection: 'row',
@@ -631,6 +760,9 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       borderWidth: 1,
       borderColor: isDark ? 'rgba(255,255,255,0.1)' : theme.colors.border,
       padding: isMobile ? 16 : 20,
+      borderTopWidth: 3,
+      borderTopColor: '#F5C842',
+      overflow: 'hidden',
       ...theme.shadows.sm,
     },
     certificateHeader: {
@@ -645,6 +777,9 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       borderRadius: 16,
       justifyContent: 'center',
       alignItems: 'center',
+      backgroundColor: '#F5C84215',
+      borderWidth: 1.5,
+      borderColor: '#F5C84240',
     },
     verifiedBadge: {
       flexDirection: 'row',

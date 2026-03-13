@@ -22,6 +22,8 @@ import { useTheme } from '../../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import { feedbackAPI } from '../../services/apiClient';
 
+const ORANGE = '#FF8C42';
+
 const FeedbackScreen = () => {
   const { user, logout } = useAuth();
   const { theme, isDark } = useTheme();
@@ -132,48 +134,75 @@ const FeedbackScreen = () => {
       entering={FadeInDown.duration(400).delay(index * 80)}
       style={styles.feedbackCardWrapper}
     >
-      <AppCard style={styles.feedbackCard}>
-        {/* Header */}
+      <View
+        style={[
+          styles.feedbackCard,
+          {
+            backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
+            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+          },
+        ]}
+      >
+        {/* Header Row: reviewer info + rating */}
         <View style={styles.feedbackHeader}>
-          <View style={styles.feedbackTitleSection}>
-            <Text style={[styles.courseName, { color: theme.colors.textPrimary }]}>
-              {feedback.courseName}
-            </Text>
-            <View style={styles.expertRow}>
-              <Icon name="person-outline" size={14} color={theme.colors.textTertiary} />
-              <Text style={[styles.expertName, { color: theme.colors.textSecondary }]}>
-                {feedback.expertName}
+          {/* Reviewer Avatar + Name */}
+          <View style={styles.reviewerRow}>
+            <View style={[styles.reviewerAvatar, { backgroundColor: ORANGE + '20' }]}>
+              <Text style={[styles.reviewerInitial, { color: ORANGE }]}>
+                {feedback.expertName ? feedback.expertName.charAt(0).toUpperCase() : '?'}
               </Text>
             </View>
+            <View style={styles.reviewerInfo}>
+              <Text style={[styles.reviewerName, { color: theme.colors.textPrimary }]}>
+                {feedback.expertName}
+              </Text>
+              <View style={styles.courseRow}>
+                <Icon name="book-outline" size={12} color={theme.colors.textTertiary} />
+                <Text style={[styles.courseName, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                  {feedback.courseName}
+                </Text>
+              </View>
+            </View>
           </View>
-          {/* Rating */}
-          <View style={styles.ratingContainer}>
-            {[...Array(5)].map((_, i) => (
-              <Icon
-                key={i}
-                name={i < feedback.rating ? 'star' : 'star-outline'}
-                size={18}
-                color={i < feedback.rating ? '#F59E0B' : theme.colors.textTertiary}
-              />
+
+          {/* Star Rating */}
+          <View style={styles.starRow}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <Text
+                key={star}
+                style={[
+                  styles.starChar,
+                  { color: star <= feedback.rating ? ORANGE : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(26,26,46,0.18)') },
+                ]}
+              >
+                ★
+              </Text>
             ))}
           </View>
         </View>
 
-        {/* Feedback Text */}
-        <Text style={[styles.feedbackText, { color: theme.colors.textSecondary }]}>
-          {feedback.feedback}
-        </Text>
+        {/* Comment Text */}
+        {feedback.feedback ? (
+          <Text style={[styles.feedbackComment, { color: theme.colors.textSecondary }]}>
+            "{feedback.feedback}"
+          </Text>
+        ) : null}
 
-        {/* Footer */}
-        <View style={styles.feedbackFooter}>
+        {/* Footer: date */}
+        <View style={[styles.feedbackFooter, { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)' }]}>
           <View style={styles.dateRow}>
-            <Icon name="calendar-outline" size={14} color={theme.colors.textTertiary} />
+            <Icon name="calendar-outline" size={13} color={theme.colors.textTertiary} />
             <Text style={[styles.feedbackDate, { color: theme.colors.textTertiary }]}>
               {formatDate(feedback.createdAt)}
             </Text>
           </View>
+          {/* Rating badge */}
+          <View style={[styles.ratingBadge, { backgroundColor: ORANGE + '15', borderColor: ORANGE + '30' }]}>
+            <Icon name="star" size={11} color={ORANGE} />
+            <Text style={[styles.ratingBadgeText, { color: ORANGE }]}>{feedback.rating}/5</Text>
+          </View>
         </View>
-      </AppCard>
+      </View>
     </Animated.View>
   );
 
@@ -221,66 +250,121 @@ const FeedbackScreen = () => {
           />
         }
       >
-        {/* Header Section */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerTextContainer}>
-            <View style={styles.titleRow}>
-              <TouchableOpacity
-                style={[styles.backButton, { backgroundColor: theme.colors.surface }]}
-                onPress={() => navigation.goBack()}
-              >
-                <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
+        {/* Page Header Banner */}
+        <View
+          style={[
+            styles.pageHeaderBanner,
+            {
+              backgroundColor: isDark ? 'rgba(255,140,66,0.06)' : 'rgba(255,140,66,0.05)',
+              borderColor: 'rgba(255,140,66,0.15)',
+            },
+          ]}
+        >
+          <View style={styles.bannerLeft}>
+            <TouchableOpacity
+              style={[
+                styles.backButton,
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)' },
+              ]}
+              onPress={() => navigation.goBack()}
+            >
+              <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={styles.bannerIconCircle}>
+              <Icon name="chatbubbles" size={22} color={ORANGE} />
+            </View>
+            <View style={styles.bannerTextGroup}>
               <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>
                 Expert Feedback
               </Text>
+              <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
+                Reviews and ratings from students
+              </Text>
             </View>
-            <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
-              Review and manage feedback from course experts
-            </Text>
           </View>
         </View>
 
         {/* Stats Section */}
         <View style={styles.statsSection}>
-          <AppCard style={styles.statCard}>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+          {/* Total Feedback */}
+          <View
+            style={[
+              styles.statCardNew,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(255,140,66,0.12)' }]}>
+              <Icon name="chatbubbles" size={20} color={ORANGE} />
+            </View>
+            <Text style={[styles.statValueNew, { color: ORANGE }]}>{stats.totalFeedback}</Text>
+            <Text style={[styles.statLabelNew, { color: theme.colors.textSecondary }]}>
               Total Feedback
             </Text>
-            <Text style={[styles.statValue, { color: theme.colors.primary }]}>
-              {stats.totalFeedback}
-            </Text>
-          </AppCard>
-          <AppCard style={styles.statCard}>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Average Rating
-            </Text>
-            <View style={styles.ratingStatRow}>
-              <Text style={[styles.statValue, { color: '#F59E0B' }]}>
-                {stats.avgRating}
-              </Text>
+          </View>
+
+          {/* Average Rating */}
+          <View
+            style={[
+              styles.statCardNew,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
               <Icon name="star" size={20} color="#F59E0B" />
             </View>
-          </AppCard>
-          <AppCard style={styles.statCard}>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={[styles.statValueNew, { color: '#F59E0B' }]}>{stats.avgRating}</Text>
+              <Icon name="star" size={16} color="#F59E0B" />
+            </View>
+            <Text style={[styles.statLabelNew, { color: theme.colors.textSecondary }]}>
+              Average Rating
+            </Text>
+          </View>
+
+          {/* High Rated */}
+          <View
+            style={[
+              styles.statCardNew,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+              <Icon name="thumbs-up" size={20} color="#10B981" />
+            </View>
+            <Text style={[styles.statValueNew, { color: '#10B981' }]}>{stats.highRated}</Text>
+            <Text style={[styles.statLabelNew, { color: theme.colors.textSecondary }]}>
               High Rated (4+)
             </Text>
-            <Text style={[styles.statValue, { color: '#10B981' }]}>
-              {stats.highRated}
-            </Text>
-          </AppCard>
+          </View>
         </View>
 
-        {/* Search Section */}
-        <AppCard style={styles.searchCard}>
+        {/* Search Bar */}
+        <View
+          style={[
+            styles.searchBar,
+            {
+              backgroundColor: isDark ? theme.colors.card : '#FFFFFF',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)',
+            },
+          ]}
+        >
+          <Icon name="search" size={18} color={theme.colors.textTertiary} style={{ marginRight: 10 }} />
           <AppInput
             placeholder="Search by course or expert name..."
             value={searchQuery}
             onChangeText={setSearchQuery}
-            leftIcon={<Icon name="search" size={20} color={theme.colors.textSecondary} />}
+            containerStyle={{ flex: 1, marginBottom: 0 }}
           />
-        </AppCard>
+        </View>
 
         {/* Feedback List */}
         {filteredFeedback.length > 0 ? (
@@ -288,13 +372,25 @@ const FeedbackScreen = () => {
             {filteredFeedback.map((feedback, index) => renderFeedbackCard(feedback, index))}
           </View>
         ) : (
-          <AppCard style={styles.emptyContainer}>
-            <EmptyState
-              icon="chatbubbles-outline"
-              title="No feedback found"
-              subtitle="Expert feedback will appear here once courses are reviewed"
-            />
-          </AppCard>
+          <View
+            style={[
+              styles.emptyCard,
+              {
+                backgroundColor: isDark ? theme.colors.card : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.05)' }]}>
+              <Icon name="chatbubbles-outline" size={36} color={theme.colors.textTertiary} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>
+              No feedback found
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: theme.colors.textSecondary }]}>
+              Expert feedback will appear here once courses are reviewed
+            </Text>
+          </View>
         )}
       </ScrollView>
     </MainLayout>
@@ -320,37 +416,49 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       fontSize: 14,
     },
 
-    // Header Section
-    headerSection: {
+    // Page Header Banner
+    pageHeaderBanner: {
+      flexDirection: isTablet ? 'row' : 'column',
+      justifyContent: 'space-between',
+      alignItems: isTablet ? 'center' : 'flex-start',
+      padding: isMobile ? 16 : 20,
       marginBottom: 24,
-      width: '100%',
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 12,
     },
-    headerTextContainer: {
-      width: '100%',
-    },
-    titleRow: {
+    bannerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      marginBottom: 4,
-      flexWrap: 'wrap',
+      flex: isTablet ? 1 : undefined,
     },
     backButton: {
       width: 40,
       height: 40,
-      borderRadius: 12,
+      borderRadius: 20,
       justifyContent: 'center',
       alignItems: 'center',
-      ...theme.shadows.sm,
+    },
+    bannerIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(255,140,66,0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerTextGroup: {
+      flex: 1,
     },
     pageTitle: {
-      fontSize: isMobile ? 20 : 28,
+      fontSize: isMobile ? 18 : 22,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
-      flex: isMobile ? 1 : undefined,
+      marginBottom: 2,
     },
     pageSubtitle: {
-      fontSize: 14,
+      fontSize: 13,
       fontFamily: theme.typography.fontFamily.regular,
     },
 
@@ -361,99 +469,187 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       gap: isMobile ? 12 : 16,
       marginBottom: 24,
     },
-    statCard: {
-      flex: isMobile ? undefined : 1,
-      width: isMobile ? '100%' : undefined,
-      minWidth: isMobile ? undefined : isTablet ? 150 : 180,
-      maxWidth: isLargeScreen ? 250 : undefined,
-      padding: isMobile ? 16 : 20,
+    statCardNew: {
+      flex: 1,
+      minWidth: 120,
+      padding: 16,
+      borderRadius: 14,
+      borderWidth: 1,
+      alignItems: 'center',
+      gap: 4,
+      ...(Platform.OS === 'web' && {
+        boxShadow: isDark ? 'none' : '0 1px 8px rgba(26,26,46,0.06)',
+      }),
     },
-    statLabel: {
-      fontSize: 13,
-      marginBottom: 8,
-      fontFamily: theme.typography.fontFamily.regular,
+    statIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 4,
     },
-    statValue: {
+    statValueNew: {
       fontSize: isMobile ? 28 : 32,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
+      lineHeight: isMobile ? 34 : 38,
     },
-    ratingStatRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
+    statLabelNew: {
+      fontSize: 13,
+      fontFamily: theme.typography.fontFamily.regular,
+      textAlign: 'center',
     },
 
-    // Search Section
-    searchCard: {
-      padding: isMobile ? 12 : 16,
+    // Search Bar
+    searchBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderRadius: 12,
+      borderWidth: 1,
+      paddingHorizontal: 14,
+      paddingVertical: isMobile ? 4 : 6,
       marginBottom: isMobile ? 16 : 24,
+      ...(Platform.OS === 'web' && {
+        boxShadow: isDark ? 'none' : '0 1px 8px rgba(26,26,46,0.05)',
+      }),
     },
 
     // Feedback List
     feedbackList: {
-      gap: 16,
+      gap: 14,
     },
     feedbackCardWrapper: {
       width: '100%',
     },
     feedbackCard: {
-      padding: isMobile ? 14 : 20,
+      borderRadius: 16,
+      borderWidth: 1,
+      padding: isMobile ? 14 : 18,
+      ...(Platform.OS === 'web' && {
+        boxShadow: isDark ? 'none' : '0 1px 8px rgba(26,26,46,0.06)',
+      }),
     },
     feedbackHeader: {
       flexDirection: isMobile ? 'column' : 'row',
       justifyContent: 'space-between',
-      alignItems: isMobile ? 'flex-start' : 'flex-start',
+      alignItems: isMobile ? 'flex-start' : 'center',
       marginBottom: 12,
-      gap: isMobile ? 8 : 12,
+      gap: 10,
     },
-    feedbackTitleSection: {
+    reviewerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
       flex: isMobile ? undefined : 1,
     },
-    courseName: {
-      fontSize: 16,
-      fontWeight: '600',
-      marginBottom: 4,
-      fontFamily: theme.typography.fontFamily.semiBold,
+    reviewerAvatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
-    expertRow: {
+    reviewerInitial: {
+      fontSize: 16,
+      fontWeight: '700',
+      fontFamily: theme.typography.fontFamily.bold,
+    },
+    reviewerInfo: {
+      flex: 1,
+    },
+    reviewerName: {
+      fontSize: 15,
+      fontWeight: '600',
+      fontFamily: theme.typography.fontFamily.semiBold,
+      marginBottom: 2,
+    },
+    courseRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
     },
-    expertName: {
-      fontSize: 13,
+    courseName: {
+      fontSize: 12,
       fontFamily: theme.typography.fontFamily.regular,
+      flex: 1,
     },
-    ratingContainer: {
+    starRow: {
       flexDirection: 'row',
       gap: 2,
     },
-    feedbackText: {
+    starChar: {
+      fontSize: 18,
+      lineHeight: 22,
+    },
+    feedbackComment: {
       fontSize: 14,
       lineHeight: 22,
-      marginBottom: 16,
       fontFamily: theme.typography.fontFamily.regular,
+      fontStyle: 'italic',
+      marginBottom: 14,
     },
     feedbackFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
       paddingTop: 12,
       borderTopWidth: 1,
-      borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : theme.colors.border,
     },
     dateRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      gap: 5,
     },
     feedbackDate: {
       fontSize: 12,
       fontFamily: theme.typography.fontFamily.regular,
     },
+    ratingBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 8,
+      borderWidth: 1,
+    },
+    ratingBadgeText: {
+      fontSize: 12,
+      fontWeight: '600',
+      fontFamily: theme.typography.fontFamily.semiBold,
+    },
 
     // Empty State
-    emptyContainer: {
-      padding: 40,
+    emptyCard: {
+      borderRadius: 16,
+      borderWidth: 1,
+      padding: 48,
       alignItems: 'center',
+      ...(Platform.OS === 'web' && {
+        boxShadow: isDark ? 'none' : '0 1px 8px rgba(26,26,46,0.05)',
+      }),
+    },
+    emptyIconCircle: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    emptyTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      fontFamily: theme.typography.fontFamily.semiBold,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    emptySubtitle: {
+      fontSize: 14,
+      fontFamily: theme.typography.fontFamily.regular,
+      textAlign: 'center',
+      maxWidth: 280,
     },
   });
 

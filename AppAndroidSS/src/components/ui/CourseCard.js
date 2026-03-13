@@ -15,6 +15,8 @@ import StatusBadge from './StatusBadge';
 // Section 12 - Cards (Course Cards)
 // Shows: name, image, category, level, duration, rating, progress
 
+const ORANGE = '#FF8C42';
+
 const CourseCard = ({
   title,
   description,
@@ -59,8 +61,9 @@ const CourseCard = ({
         style={[
           styles.horizontalContainer,
           {
-            backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
-            borderColor: theme.colors.border,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.95)',
+            borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(26,26,46,0.08)',
+            ...(isWeb ? { backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', transition: 'all 0.2s ease', cursor: 'pointer' } : {}),
           },
           theme.shadows.sm,
           style,
@@ -73,8 +76,8 @@ const CourseCard = ({
           {image ? (
             <Image source={{ uri: image }} style={styles.horizontalImage} />
           ) : (
-            <View style={[styles.horizontalImagePlaceholder, { backgroundColor: theme.colors.backgroundTertiary }]}>
-              <Icon name="book-outline" size={32} color={theme.colors.textTertiary} />
+            <View style={[styles.horizontalImagePlaceholder, { backgroundColor: 'rgba(255,140,66,0.12)' }]}>
+              <Icon name="book-outline" size={32} color={ORANGE} />
             </View>
           )}
           {getStatusBadge() && (
@@ -87,7 +90,7 @@ const CourseCard = ({
         {/* Content */}
         <View style={styles.horizontalContent}>
           {category && (
-            <Text style={[styles.category, { color: theme.colors.primary }]}>
+            <Text style={[styles.category, { color: ORANGE }]}>
               {category}
             </Text>
           )}
@@ -160,8 +163,9 @@ const CourseCard = ({
         style={[
           styles.compactContainer,
           {
-            backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
-            borderColor: theme.colors.border,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.95)',
+            borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(26,26,46,0.08)',
+            ...(isWeb ? { backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', transition: 'all 0.2s ease', cursor: 'pointer' } : {}),
           },
           theme.shadows.sm,
           style,
@@ -173,8 +177,8 @@ const CourseCard = ({
           {image ? (
             <Image source={{ uri: image }} style={styles.compactImage} />
           ) : (
-            <View style={[styles.compactImagePlaceholder, { backgroundColor: theme.colors.backgroundTertiary }]}>
-              <Icon name="book-outline" size={24} color={theme.colors.textTertiary} />
+            <View style={[styles.compactImagePlaceholder, { backgroundColor: 'rgba(255,140,66,0.12)' }]}>
+              <Icon name="book-outline" size={24} color={ORANGE} />
             </View>
           )}
         </View>
@@ -205,8 +209,9 @@ const CourseCard = ({
       style={[
         styles.container,
         {
-          backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
-          borderColor: theme.colors.border,
+          backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.95)',
+          borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(26,26,46,0.08)',
+          ...(isWeb ? { backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', transition: 'all 0.2s ease', cursor: 'pointer' } : {}),
         },
         theme.shadows.sm,
         style,
@@ -219,8 +224,8 @@ const CourseCard = ({
         {image ? (
           <Image source={{ uri: image }} style={styles.image} />
         ) : (
-          <View style={[styles.imagePlaceholder, { backgroundColor: theme.colors.backgroundTertiary }]}>
-            <Icon name="book-outline" size={48} color={theme.colors.textTertiary} />
+          <View style={[styles.imagePlaceholder, { backgroundColor: 'rgba(255,140,66,0.12)' }]}>
+            <Icon name="book-outline" size={48} color={ORANGE} />
           </View>
         )}
         {getStatusBadge() && (
@@ -229,7 +234,7 @@ const CourseCard = ({
           </View>
         )}
         {(price || isFree) && (
-          <View style={[styles.priceTag, { backgroundColor: isFree ? theme.colors.success : theme.colors.primary }]}>
+          <View style={[styles.priceTag, { backgroundColor: isFree ? theme.colors.success : ORANGE }]}>
             <Text style={styles.priceText}>
               {isFree ? 'Free' : price}
             </Text>
@@ -240,7 +245,7 @@ const CourseCard = ({
       {/* Content */}
       <View style={styles.content}>
         {category && (
-          <Text style={[styles.category, { color: theme.colors.primary }]}>
+          <Text style={[styles.category, { color: ORANGE }]}>
             {category}
           </Text>
         )}
@@ -289,7 +294,7 @@ const CourseCard = ({
         )}
 
         {/* Footer Meta */}
-        <View style={styles.footer}>
+        <View style={[styles.footer, { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)' }]}>
           <View style={styles.meta}>
             {duration && (
               <View style={styles.metaItem}>
@@ -412,7 +417,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
   },
   meta: {
     flexDirection: 'row',

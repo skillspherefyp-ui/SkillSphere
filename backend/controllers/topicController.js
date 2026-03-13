@@ -1,8 +1,8 @@
-const { Topic, Course, Material } = require('../models');
+const { Topic, Course, Material, Quiz } = require('../models');
 
 exports.createTopic = async (req, res) => {
   try {
-    const { courseId, title, materials } = req.body;
+    const { courseId, title, materials, questions } = req.body;
 
     if (!courseId || !title) {
       return res.status(400).json({ error: 'Course ID and title are required' });
@@ -52,6 +52,18 @@ exports.createTopic = async (req, res) => {
       await Material.bulkCreate(topicMaterials);
     }
 
+    // Create quiz if questions provided (manual mode courses)
+    if (questions && Array.isArray(questions) && questions.length > 0) {
+      await Quiz.create({
+        courseId,
+        topicId: topic.id,
+        title: `${title} Quiz`,
+        questions,
+        passingScore: 70,
+        isActive: true,
+      });
+    }
+
     const createdTopic = await Topic.findByPk(topic.id, {
       include: [{ model: Material, as: 'materials' }]
     });
@@ -83,7 +95,7 @@ exports.getTopicsByCourse = async (req, res) => {
 exports.updateTopic = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, status, completed, order } = req.body;
+    const { title, status, completed, order, materials, questions } = req.body;
 
     const topic = await Topic.findByPk(id, {
       include: [{ model: Course, as: 'course' }]
@@ -110,8 +122,43 @@ exports.updateTopic = async (req, res) => {
 
     await topic.save();
 
+    if (Array.isArray(materials)) {
+      await Material.destroy({ where: { topicId: topic.id } });
+
+      if (materials.length > 0) {
+        await Material.bulkCreate(
+          materials.map((material) => ({
+            ...material,
+            topicId: topic.id,
+            courseId: topic.courseId
+          }))
+        );
+      }
+    }
+
+    if (Array.isArray(questions)) {
+      const existingQuiz = await Quiz.findOne({ where: { topicId: topic.id } });
+      const quizPayload = {
+        courseId: topic.courseId,
+        topicId: topic.id,
+        title: `${topic.title} Quiz`,
+        questions,
+        passingScore: 70,
+        isActive: true,
+      };
+
+      if (existingQuiz) {
+        await existingQuiz.update(quizPayload);
+      } else if (questions.length > 0) {
+        await Quiz.create(quizPayload);
+      }
+    }
+
     const updatedTopic = await Topic.findByPk(id, {
-      include: [{ model: Material, as: 'materials' }]
+      include: [
+        { model: Material, as: 'materials' },
+        { model: Quiz, as: 'quizzes' }
+      ]
     });
 
     res.json({ success: true, topic: updatedTopic });
@@ -151,6 +198,5 @@ exports.deleteTopic = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-
 
 

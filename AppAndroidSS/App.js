@@ -27,9 +27,9 @@ const AppContent = () => {
                 primary: theme.colors.primary,
                 background: theme.colors.background,
                 card: theme.colors.card,
-                text: theme.colors.textPrimary,
+                text: theme.colors.text,
                 border: theme.colors.border,
-                notification: theme.colors.notification,
+                notification: theme.colors.primary,
               },
             }}
           >

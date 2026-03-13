@@ -4,8 +4,8 @@ import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../../context/ThemeContext';
 
-const QuickActionButton = ({ title, icon, onPress, badge }) => {
-  const { theme } = useTheme();
+const QuickActionButton = ({ title, icon, onPress, badge, glass }) => {
+  const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
 
   const isWeb = Platform.OS === 'web';
@@ -17,22 +17,48 @@ const QuickActionButton = ({ title, icon, onPress, badge }) => {
   const iconSize = isLargeScreen ? 36 : 28;
   const fontSize = isLargeScreen ? 18 : 16;
 
-  const styles = getStyles(theme, isWeb, isLargeScreen, buttonWidth, buttonHeight, iconSize, fontSize);
+  const styles = getStyles(theme, isWeb, isLargeScreen, buttonWidth, buttonHeight, iconSize, fontSize, isDark, glass);
+
+  // Resolve glass background color
+  const getGlassBackgroundColor = () => {
+    if (glass) {
+      return isDark
+        ? 'rgba(255,255,255,0.08)'
+        : 'rgba(26,26,46,0.06)';
+    }
+    return null;
+  };
 
   // Button content component
   const ButtonContent = () => (
     <>
-      {icon && <Icon name={icon} size={iconSize} color={theme.colors.textInverse} style={styles.icon} />}
-      <Text style={[styles.title, { color: theme.colors.textInverse }]} numberOfLines={2}>
+      {icon && <Icon name={icon} size={iconSize} color={glass ? (isDark ? '#FFFFFF' : '#1A1A2E') : theme.colors.textInverse} style={styles.icon} />}
+      <Text
+        style={[
+          styles.title,
+          { color: glass ? (isDark ? 'rgba(255,255,255,0.9)' : 'rgba(26,26,46,0.85)') : theme.colors.textInverse },
+        ]}
+        numberOfLines={2}
+      >
         {title}
       </Text>
       {badge > 0 && (
-        <View style={[styles.badgeContainer, { backgroundColor: theme.colors.error }]}>
+        <View style={[styles.badgeContainer, { backgroundColor: badge === 'info' ? '#FF8C42' : theme.colors.error }]}>
           <Text style={[styles.badgeText, { color: theme.colors.textInverse }]}>{badge}</Text>
         </View>
       )}
     </>
   );
+
+  if (glass) {
+    return (
+      <TouchableOpacity onPress={onPress} style={styles.container} activeOpacity={0.8}>
+        <View style={[styles.gradient, styles.glassView]}>
+          <ButtonContent />
+        </View>
+      </TouchableOpacity>
+    );
+  }
 
   return (
     <TouchableOpacity onPress={onPress} style={styles.container} activeOpacity={0.8}>
@@ -54,7 +80,7 @@ const QuickActionButton = ({ title, icon, onPress, badge }) => {
   );
 };
 
-const getStyles = (theme, isWeb, isLargeScreen, buttonWidth, buttonHeight, iconSize, fontSize) =>
+const getStyles = (theme, isWeb, isLargeScreen, buttonWidth, buttonHeight, iconSize, fontSize, isDark, glass) =>
   StyleSheet.create({
     container: {
       width: buttonWidth,
@@ -84,6 +110,17 @@ const getStyles = (theme, isWeb, isLargeScreen, buttonWidth, buttonHeight, iconS
       backgroundColor: theme.colors.secondary,
       ...(isWeb && {
         background: `linear-gradient(135deg, ${theme.colors.secondary} 0%, ${theme.colors.secondaryDark} 50%, ${theme.colors.secondaryLight} 100%)`,
+        boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+      }),
+    },
+    glassView: {
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.10)',
+      ...(isWeb && {
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
       }),
     },
     icon: {

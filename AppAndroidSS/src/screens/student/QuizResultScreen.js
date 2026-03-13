@@ -1,95 +1,120 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, useWindowDimensions } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import AppHeader from '../../components/ui/AppHeader';
+import MainLayout from '../../components/ui/MainLayout';
 import AppCard from '../../components/ui/AppCard';
 import AppButton from '../../components/ui/AppButton';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
+
+const ORANGE = '#FF8C42';
 
 const QuizResultScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
-  const {
-    courseId,
-    topicId,
-    lectureId,
-    score,
-    totalQuestions,
-    correctAnswers,
-    passed,
-    passingThreshold,
-    unlockedTopic,
-  } = route.params || {};
+  const { logout } = useAuth();
+  const { score, totalQuestions, correctCount } = route.params;
 
+  const sidebarItems = [
+    { label: 'Dashboard', icon: 'grid-outline', iconActive: 'grid', route: 'Dashboard' },
+    { label: 'Browse Courses', icon: 'library-outline', iconActive: 'library', route: 'Courses' },
+    { label: 'My Learning', icon: 'school-outline', iconActive: 'school', route: 'EnrolledCourses' },
+    { label: 'AI Assistant', icon: 'sparkles-outline', iconActive: 'sparkles', route: 'AITutor' },
+    { label: 'Certificates', icon: 'ribbon-outline', iconActive: 'ribbon', route: 'Certificates' },
+    { label: 'Reminders', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle', route: 'Todo' },
+  ];
+  const handleNavigate = (route) => navigation.navigate(route);
+  
   const isWeb = Platform.OS === 'web';
   const maxWidth = isWeb && width > 1200 ? 1200 : '100%';
-  const scoreColor = passed ? theme.colors.success : theme.colors.warning;
-  const canReviewLecture = Boolean(courseId && topicId);
-  const canOpenNext = Boolean(courseId && passed && unlockedTopic?.id);
-  const scoreLabel = passed ? 'Passed' : 'Retry Needed';
+
+  const getScoreColor = () => {
+    if (score >= 80) return theme.colors.success;
+    if (score >= 60) return theme.colors.warning;
+    return theme.colors.error;
+  };
+
+  const getScoreMessage = () => {
+    if (score >= 80) return 'Excellent!';
+    if (score >= 60) return 'Good job!';
+    return 'Keep practicing!';
+  };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <AppHeader title="Quiz Results" />
-      <ScrollView style={styles.scrollView} contentContainerStyle={[styles.contentContainer, { maxWidth, alignSelf: 'center', width: '100%' }]}>
+    <MainLayout
+      showSidebar={true}
+      sidebarItems={sidebarItems}
+      activeRoute="EnrolledCourses"
+      onNavigate={handleNavigate}
+    >
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.contentContainer, { maxWidth, alignSelf: 'center', width: '100%' }]}
+      >
+        {/* Page Header Banner */}
+        <View style={[styles.pageHeaderBanner, {
+          backgroundColor: isDark ? 'rgba(255,140,66,0.06)' : 'rgba(255,140,66,0.05)',
+          borderColor: 'rgba(255,140,66,0.15)',
+        }]}>
+          <View style={styles.bannerLeft}>
+            <TouchableOpacity
+              style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)' }]}
+              onPress={() => navigation.goBack()}
+            >
+              <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={styles.bannerIconCircle}>
+              <Icon name="trophy" size={22} color={ORANGE} />
+            </View>
+            <View style={styles.bannerTextGroup}>
+              <Text style={[styles.bannerTitle, { color: theme.colors.textPrimary }]}>Quiz Results</Text>
+              <Text style={[styles.bannerSubtitle, { color: theme.colors.textSecondary }]}>See how you performed</Text>
+            </View>
+          </View>
+        </View>
+
         <Animated.View entering={FadeIn.duration(600)}>
-          <AppCard style={[styles.resultCard, { backgroundColor: theme.colors.card }]}>
-            <View style={[styles.resultBadge, { backgroundColor: `${scoreColor}18` }]}>
-              <Text style={[styles.resultBadgeText, { color: scoreColor }]}>{scoreLabel}</Text>
+          <AppCard style={styles.resultCard}>
+            <View style={[styles.scoreCircle, { borderColor: getScoreColor() }]}>
+              <Text style={[styles.scoreText, { color: getScoreColor() }]}>{score}%</Text>
             </View>
-            <View style={[styles.scoreCircle, { borderColor: scoreColor }]}>
-              <Text style={[styles.scoreText, { color: scoreColor }]}>{score}%</Text>
-            </View>
-            <Text style={[styles.scoreMessage, { color: theme.colors.textPrimary }]}>{passed ? 'Lecture Passed' : 'Review and Retry'}</Text>
+            <Text style={[styles.scoreMessage, { color: theme.colors.textPrimary }]}>{getScoreMessage()}</Text>
             <Text style={[styles.scoreDetails, { color: theme.colors.textSecondary }]}>
-              You answered {correctAnswers} out of {totalQuestions} questions correctly.
+              You answered {correctCount} out of {totalQuestions} questions correctly
             </Text>
-            <Text style={[styles.scoreDetails, { color: theme.colors.textSecondary }]}>
-              Passing threshold: {passingThreshold}%
-            </Text>
-            <View style={styles.scoreSummaryRow}>
-              <View style={[styles.scoreSummaryCard, { backgroundColor: theme.colors.backgroundSecondary }]}>
-                <Text style={[styles.scoreSummaryLabel, { color: theme.colors.textSecondary }]}>Correct</Text>
-                <Text style={[styles.scoreSummaryValue, { color: theme.colors.textPrimary }]}>{correctAnswers}</Text>
-              </View>
-              <View style={[styles.scoreSummaryCard, { backgroundColor: theme.colors.backgroundSecondary }]}>
-                <Text style={[styles.scoreSummaryLabel, { color: theme.colors.textSecondary }]}>Questions</Text>
-                <Text style={[styles.scoreSummaryValue, { color: theme.colors.textPrimary }]}>{totalQuestions}</Text>
-              </View>
-            </View>
           </AppCard>
         </Animated.View>
 
-        <AppCard style={[styles.feedbackCard, { backgroundColor: theme.colors.card }]}>
-          <Icon name={passed ? 'checkmark-circle' : 'refresh-circle'} size={32} color={scoreColor} />
-          <Text style={[styles.feedbackTitle, { color: theme.colors.textPrimary }]}>{passed ? 'Next Topic Unlocked' : 'Review and Retry'}</Text>
+        <AppCard style={styles.feedbackCard}>
+          <Icon name="bulb" size={32} color={theme.colors.warning} />
+          <Text style={[styles.feedbackTitle, { color: theme.colors.textPrimary }]}>AI Feedback</Text>
           <Text style={[styles.feedbackText, { color: theme.colors.textSecondary }]}>
-            {passed
-              ? unlockedTopic
-                ? `You passed the stored lecture quiz. "${unlockedTopic.title}" is now unlocked.`
-                : 'You passed the final topic in this course.'
-              : 'The next topic remains locked until you pass this lecture quiz. Review the lecture notes and try again.'}
+            {score >= 80
+              ? 'Great work! You have a strong understanding of this topic. Consider moving to the next topic.'
+              : score >= 60
+              ? 'Good progress! Review the incorrect answers and consider revisiting the lecture material.'
+              : 'Don\'t worry! Review the lecture material and try the quiz again to improve your understanding.'}
           </Text>
         </AppCard>
 
         <View style={styles.actions}>
           <AppButton
             title="Review Lecture"
-            onPress={() => canReviewLecture && navigation.navigate('Learning', { courseId, topicId, lectureId })}
+            onPress={() => navigation.navigate('Learning', route.params)}
             variant="outline"
             fullWidth
-            disabled={!canReviewLecture}
             icon={<Icon name="book" size={16} color={theme.colors.primary} />}
             iconPosition="left"
             style={styles.actionButton}
           />
+
           <AppButton
-            title={passed && unlockedTopic ? 'Open Next Topic' : 'Back to Course'}
-            onPress={() => navigation.navigate(canOpenNext ? 'Learning' : 'CourseDetail', canOpenNext ? { courseId, topicId: unlockedTopic.id } : { courseId })}
+            title="Continue"
+            onPress={() => navigation.navigate('CourseDetail', { courseId: route.params.courseId })}
             variant="primary"
             fullWidth
             icon={<Icon name="arrow-forward" size={16} color="#ffffff" />}
@@ -98,30 +123,111 @@ const QuizResultScreen = () => {
           />
         </View>
       </ScrollView>
-    </View>
+    </MainLayout>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollView: { flex: 1 },
-  contentContainer: { padding: 20 },
-  resultCard: { alignItems: 'center', marginBottom: 20 },
-  resultBadge: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 14 },
-  resultBadgeText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
-  scoreCircle: { width: 120, height: 120, borderRadius: 60, borderWidth: 4, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  scoreText: { fontSize: 36, fontWeight: 'bold' },
-  scoreMessage: { fontSize: 24, fontWeight: 'bold', marginBottom: 8 },
-  scoreDetails: { fontSize: 16, textAlign: 'center', marginBottom: 4 },
-  scoreSummaryRow: { flexDirection: 'row', gap: 12, marginTop: 18 },
-  scoreSummaryCard: { minWidth: 110, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center' },
-  scoreSummaryLabel: { fontSize: 12, fontWeight: '600', marginBottom: 4 },
-  scoreSummaryValue: { fontSize: 20, fontWeight: '700' },
-  feedbackCard: { alignItems: 'center', marginBottom: 20 },
-  feedbackTitle: { fontSize: 20, fontWeight: 'bold', marginTop: 12, marginBottom: 8 },
-  feedbackText: { fontSize: 16, textAlign: 'center', lineHeight: 24 },
-  actions: { gap: 12 },
-  actionButton: { marginTop: 0 },
+  scrollView: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 20,
+  },
+  resultCard: {
+    alignItems: 'center',
+    marginBottom: 20,
+    borderTopWidth: 3,
+    borderTopColor: '#FF8C42',
+    overflow: 'hidden',
+  },
+  scoreCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  scoreText: {
+    fontSize: 36,
+    fontWeight: 'bold',
+  },
+  scoreMessage: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  scoreDetails: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  feedbackCard: {
+    alignItems: 'center',
+    marginBottom: 20,
+    borderTopWidth: 3,
+    borderTopColor: '#7C6FCD',
+    overflow: 'hidden',
+  },
+  feedbackTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  feedbackText: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  actions: {
+    gap: 12,
+  },
+  actionButton: {
+    marginTop: 0,
+  },
+  pageHeaderBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    marginBottom: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  bannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bannerIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,140,66,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bannerTextGroup: {
+    flex: 1,
+  },
+  bannerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  bannerSubtitle: {
+    fontSize: 13,
+  },
 });
 
 export default QuizResultScreen;
+

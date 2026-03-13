@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, Modal, FlatList, TouchableOpacity, TextInput, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, Modal, FlatList, TouchableOpacity, TextInput, SafeAreaView, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../../context/ThemeContext';
 
 const SearchableDropdown = ({ options, selectedValue, onSelect, placeholder, label }) => {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -23,7 +23,7 @@ const SearchableDropdown = ({ options, selectedValue, onSelect, placeholder, lab
     setModalVisible(false);
   };
 
-  const styles = getStyles(theme);
+  const styles = getStyles(theme, isDark);
 
   return (
     <View style={styles.container}>
@@ -44,8 +44,22 @@ const SearchableDropdown = ({ options, selectedValue, onSelect, placeholder, lab
         animationType="fade"
         onRequestClose={() => setModalVisible(false)}
       >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalContent}>
+        <SafeAreaView
+          style={[
+            styles.modalContainer,
+            Platform.OS === 'web'
+              ? { backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }
+              : {},
+          ]}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              Platform.OS === 'web'
+                ? { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }
+                : {},
+            ]}
+          >
             <View style={styles.modalHeader}>
               <TextInput
                 style={styles.searchInput}
@@ -80,7 +94,7 @@ const SearchableDropdown = ({ options, selectedValue, onSelect, placeholder, lab
   );
 };
 
-const getStyles = (theme) => StyleSheet.create({
+const getStyles = (theme, isDark) => StyleSheet.create({
   container: {
     marginBottom: 20,
   },
@@ -97,8 +111,8 @@ const getStyles = (theme) => StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
+    borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.10)',
+    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.04)',
     height: 50,
   },
   dropdownButtonText: {
@@ -112,19 +126,22 @@ const getStyles = (theme) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: 20,
   },
   modalContent: {
     width: '90%',
     maxHeight: '80%',
-    backgroundColor: theme.colors.card,
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: isDark ? 'rgba(15,15,30,0.92)' : 'rgba(255,255,255,0.96)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.08)',
+    padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: isDark ? 0.5 : 0.15,
+    shadowRadius: 40,
+    elevation: 20,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -137,15 +154,17 @@ const getStyles = (theme) => StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.10)',
     marginRight: 12,
     fontSize: 16,
     color: theme.colors.textPrimary,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.04)',
   },
   optionItem: {
     paddingVertical: 14,
     paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
   },
   optionText: {
     fontSize: 16,
@@ -153,7 +172,7 @@ const getStyles = (theme) => StyleSheet.create({
   },
   separator: {
     height: 1,
-    backgroundColor: theme.colors.border,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.06)',
   },
 });
 

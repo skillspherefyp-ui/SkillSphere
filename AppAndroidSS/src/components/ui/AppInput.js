@@ -38,21 +38,23 @@ const AppInput = ({
 
   const getContainerStyle = () => {
     const baseStyle = {
-      backgroundColor: theme.colors.inputBackground,
+      backgroundColor: isDark
+        ? 'rgba(255,255,255,0.06)'
+        : 'rgba(26,26,46,0.04)',
       borderColor: error
         ? theme.colors.error
         : isFocused
-          ? theme.colors.inputBorderFocus
-          : theme.colors.inputBorder,
+          ? '#FF8C42'  // ORANGE focus color
+          : isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.10)',
       borderWidth: isFocused ? 2 : 1,
       borderRadius: theme.borderRadius.lg, // 12px as per Section 12
       minHeight: multiline ? currentSize.height * numberOfLines : currentSize.height,
     };
 
-    // Glassmorphism for dark mode on web
-    if (isDark && isWeb) {
-      baseStyle.backdropFilter = `blur(${theme.glass.backdropBlur}px)`;
-      baseStyle.WebkitBackdropFilter = `blur(${theme.glass.backdropBlur}px)`;
+    if (isWeb) {
+      baseStyle.backdropFilter = 'blur(12px)';
+      baseStyle.WebkitBackdropFilter = 'blur(12px)';
+      baseStyle.transition = 'all 0.15s ease';
     }
 
     return baseStyle;
@@ -71,9 +73,9 @@ const AppInput = ({
       };
     }
 
-    // Focus State: Gradient border effect (Section 12)
+    // Focus State: Orange glow (Section 12)
     return {
-      shadowColor: theme.colors.primary,
+      shadowColor: '#FF8C42',
       shadowOffset: { width: 0, height: 0 },
       shadowOpacity: isDark ? 0.4 : 0.2,
       shadowRadius: 8,
@@ -121,6 +123,7 @@ const AppInput = ({
               paddingVertical: currentSize.padding - 4,
             },
             multiline && styles.multilineInput,
+            isWeb && { outlineStyle: 'none' },
             inputStyle,
           ]}
           value={value}

@@ -3,18 +3,27 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const DEFAULT_PORT = '5000';
 
+const getWebFallbackHost = () => {
+  if (typeof window === 'undefined' || !window.location?.hostname) {
+    return `http://localhost:${DEFAULT_PORT}`;
+  }
+
+  const { protocol, hostname } = window.location;
+  const normalizedProtocol = protocol === 'https:' ? 'https:' : 'http:';
+  return `${normalizedProtocol}//${hostname}:${DEFAULT_PORT}`;
+};
+
 const getHost = () => {
-  // Check if we have a production API URL configured
   if (Platform.OS === 'web' && process.env.REACT_APP_API_URL) {
-    console.log('🌐 Using production API:', process.env.REACT_APP_API_URL);
+    console.log('Using production API:', process.env.REACT_APP_API_URL);
     return process.env.REACT_APP_API_URL;
   }
 
-  // Development environments
   if (Platform.OS === 'android') return `http://10.0.2.2:${DEFAULT_PORT}`;
   if (Platform.OS === 'web') {
-    console.log('⚠️  No REACT_APP_API_URL found, using localhost');
-    return `http://localhost:${DEFAULT_PORT}`;
+    const fallbackHost = getWebFallbackHost();
+    console.log('No REACT_APP_API_URL found, using browser host fallback:', fallbackHost);
+    return fallbackHost;
   }
   return `http://localhost:${DEFAULT_PORT}`;
 };
@@ -48,7 +57,7 @@ export async function get(path, authenticated = true) {
 
   if (authenticated) {
     const token = await getAuthToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (token) headers.Authorization = `Bearer ${token}`;
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -63,10 +72,8 @@ export async function post(path, data, authenticated = true) {
 
   if (authenticated) {
     const token = await getAuthToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (token) headers.Authorization = `Bearer ${token}`;
   }
-
-  console.log(`📡 POST ${API_BASE}${path}`, JSON.stringify(data));
 
   try {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -74,11 +81,8 @@ export async function post(path, data, authenticated = true) {
       headers,
       body: JSON.stringify(data)
     });
-    const result = await handleResponse(res);
-    console.log(`📡 POST ${path} response:`, JSON.stringify(result));
-    return result;
+    return await handleResponse(res);
   } catch (err) {
-    console.log(`❌ POST ${path} error:`, err.message);
     if (err.message === 'Network request failed') {
       throw new Error('Cannot connect to server. Make sure the backend is running.');
     }
@@ -91,7 +95,7 @@ export async function put(path, data, authenticated = true) {
 
   if (authenticated) {
     const token = await getAuthToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (token) headers.Authorization = `Bearer ${token}`;
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -107,7 +111,7 @@ export async function del(path, authenticated = true) {
 
   if (authenticated) {
     const token = await getAuthToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (token) headers.Authorization = `Bearer ${token}`;
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -122,7 +126,7 @@ export async function patch(path, data, authenticated = true) {
 
   if (authenticated) {
     const token = await getAuthToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (token) headers.Authorization = `Bearer ${token}`;
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -142,16 +146,14 @@ export async function health() {
   }
 }
 
-// Upload file with FormData
 export async function uploadFile(formData, authenticated = true) {
   const headers = {};
 
   if (authenticated) {
     const token = await getAuthToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (token) headers.Authorization = `Bearer ${token}`;
   }
 
-  // Don't set Content-Type for FormData - browser will set it automatically with boundary
   const res = await fetch(`${API_BASE}/upload/file`, {
     method: 'POST',
     headers,
@@ -160,33 +162,26 @@ export async function uploadFile(formData, authenticated = true) {
   return handleResponse(res);
 }
 
-// Auth APIs
 export const authAPI = {
   login: (email, password) => post('/auth/login', { email, password }, false),
   register: (data) => post('/auth/register', data, false),
   getProfile: () => get('/auth/profile'),
   updateProfile: (data) => put('/auth/profile', data),
   changePassword: (data) => put('/auth/change-password', data),
-  // OTP Authentication (for signup)
   sendOTP: (email, name) => post('/auth/send-otp', { email, name }, false),
   verifyOTP: (email, otp) => post('/auth/verify-otp', { email, otp }, false),
   resendOTP: (email) => post('/auth/resend-otp', { email }, false),
   completeRegistration: (data) => post('/auth/complete-registration', data, false),
-  // OTP Login (for existing users)
   sendLoginOTP: (email) => post('/auth/send-login-otp', { email }, false),
   loginWithOTP: (email, otp) => post('/auth/login-with-otp', { email, otp }, false),
-  // Password Reset
   forgotPassword: (email) => post('/auth/forgot-password', { email }, false),
   resetPassword: (email, otp, newPassword) => post('/auth/reset-password', { email, otp, newPassword }, false),
   verifySignupOTP: (email, otp) => post('/auth/verify-signup-otp', { email, otp }, false),
-  // Google OAuth
   googleAuth: (idToken) => post('/auth/google-auth', { idToken }, false),
-  // Privacy Policy
   acceptPrivacyPolicy: () => post('/auth/accept-privacy-policy', {}),
   getPrivacyPolicyStatus: () => get('/auth/privacy-policy-status'),
 };
 
-// Admin APIs
 export const adminAPI = {
   getAll: () => get('/admins'),
   getById: (id) => get(`/admins/${id}`),
@@ -197,7 +192,6 @@ export const adminAPI = {
   delete: (id) => del(`/admins/${id}`),
 };
 
-// User APIs
 export const userAPI = {
   getAll: () => get('/users'),
   getStudents: () => get('/users/students'),
@@ -206,29 +200,27 @@ export const userAPI = {
   update: (id, data) => put(`/users/${id}`, data),
   toggleStatus: (id) => patch(`/users/${id}/toggle-status`, {}),
   delete: (id) => del(`/users/${id}`),
-  getStats: (id) => get(`/users/stats/${id || ''}`),
+  getStats: (id) => get(id ? `/users/stats/${id}` : '/users/stats'),
 };
 
-// Category APIs
 export const categoryAPI = {
-  getAll: () => get('/categories', false), // Public access
-  getById: (id) => get(`/categories/${id}`, false), // Public access
+  getAll: () => get('/categories', false),
+  getById: (id) => get(`/categories/${id}`, false),
   create: (data) => post('/categories', data),
   update: (id, data) => put(`/categories/${id}`, data),
   delete: (id) => del(`/categories/${id}`),
 };
 
-// Course APIs
 export const courseAPI = {
-  getAll: () => get('/courses', false), // Public access
-  getById: (id) => get(`/courses/${id}`, false), // Public access
+  getAll: () => get('/courses', false),
+  getTopCourses: (limit = 3) => get(`/courses/top?limit=${limit}`, false),
+  getById: (id) => get(`/courses/${id}`, false),
   create: (data) => post('/courses', data),
   update: (id, data) => put(`/courses/${id}`, data),
   delete: (id) => del(`/courses/${id}`),
   publish: (id) => patch(`/courses/${id}/publish`, {}),
 };
 
-// Topic APIs
 export const topicAPI = {
   getAll: () => get('/topics'),
   getById: (id) => get(`/topics/${id}`),
@@ -237,7 +229,6 @@ export const topicAPI = {
   delete: (id) => del(`/topics/${id}`),
 };
 
-// Material APIs
 export const materialAPI = {
   getAll: () => get('/materials'),
   getById: (id) => get(`/materials/${id}`),
@@ -246,7 +237,6 @@ export const materialAPI = {
   delete: (id) => del(`/materials/${id}`),
 };
 
-// Enrollment APIs
 export const enrollmentAPI = {
   enroll: (courseId) => post('/enrollments', { courseId }),
   getMyEnrollments: () => get('/enrollments/my'),
@@ -256,21 +246,20 @@ export const enrollmentAPI = {
   unenroll: (courseId) => del(`/enrollments/${courseId}`),
 };
 
-// Quiz APIs
 export const quizAPI = {
   getAll: (params) => get(`/quizzes${params ? `?${new URLSearchParams(params)}` : ''}`),
   getById: (id) => get(`/quizzes/${id}`),
+  getByTopic: (topicId) => get(`/quizzes/topic/${topicId}`),
   create: (data) => post('/quizzes', data),
   update: (id, data) => put(`/quizzes/${id}`, data),
   delete: (id) => del(`/quizzes/${id}`),
   submit: (data) => post('/quizzes/submit', data),
-  getMyResults: () => get('/quizzes/results'),
+  getMyResults: () => get('/quizzes/results/my'),
   addQuestion: (data) => post('/quizzes/questions', data),
   updateQuestion: (id, data) => put(`/quizzes/questions/${id}`, data),
   deleteQuestion: (id) => del(`/quizzes/questions/${id}`),
 };
 
-// Certificate APIs
 export const certificateAPI = {
   generate: (data) => post('/certificates', data),
   getMyCertificates: () => get('/certificates/my'),
@@ -280,7 +269,6 @@ export const certificateAPI = {
   delete: (id) => del(`/certificates/${id}`),
 };
 
-// Certificate Template APIs
 export const certificateTemplateAPI = {
   getAll: () => get('/certificate-templates'),
   getActive: () => get('/certificate-templates/active'),
@@ -293,11 +281,10 @@ export const certificateTemplateAPI = {
   activateForCourses: (id, courseIds) => put(`/certificate-templates/${id}/activate-for-courses`, { courseIds }),
   delete: (id) => del(`/certificate-templates/${id}`),
   getStats: () => get('/certificate-templates/stats'),
-  // Fetch preview PDF with authentication and return blob URL
   getPreview: async (id) => {
     const token = await AsyncStorage.getItem('@skillsphere:token');
     const headers = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (token) headers.Authorization = `Bearer ${token}`;
     const url = `${API_BASE}/certificate-templates/preview${id ? `/${id}` : ''}`;
     const res = await fetch(url, { method: 'GET', headers });
     if (!res.ok) {
@@ -310,7 +297,7 @@ export const certificateTemplateAPI = {
   uploadBackground: async (id, formData) => {
     const token = await AsyncStorage.getItem('@skillsphere:token');
     const headers = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(`${API_BASE}/certificate-templates/${id}/upload/background`, {
       method: 'POST',
       headers,
@@ -321,7 +308,7 @@ export const certificateTemplateAPI = {
   uploadSignature: async (id, formData) => {
     const token = await AsyncStorage.getItem('@skillsphere:token');
     const headers = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(`${API_BASE}/certificate-templates/${id}/upload/signature`, {
       method: 'POST',
       headers,
@@ -331,16 +318,14 @@ export const certificateTemplateAPI = {
   },
 };
 
-// Notification APIs
 export const notificationAPI = {
   getMyNotifications: (unreadOnly) => get(`/notifications/my${unreadOnly ? '?unreadOnly=true' : ''}`),
   markAsRead: (id) => put(`/notifications/read/${id}`, {}),
   markAllAsRead: () => put('/notifications/read-all', {}),
   delete: (id) => del(`/notifications/${id}`),
-  clearAll: () => del('/notifications/clear'),
+  clearAll: () => del('/notifications/clear/all'),
 };
 
-// Progress APIs
 export const progressAPI = {
   updateTopicProgress: (data) => post('/progress/topic', data),
   getCourseProgress: (courseId) => get(`/progress/course/${courseId}`),
@@ -349,7 +334,18 @@ export const progressAPI = {
   resetCourseProgress: (courseId) => del(`/progress/reset/${courseId}`),
 };
 
-// Feedback APIs
+export const todoAPI = {
+  getMyTodos: () => get('/todos/my'),
+  create: (data) => post('/todos', data),
+  toggle: (id) => patch(`/todos/${id}/toggle`, {}),
+  delete: (id) => del(`/todos/${id}`),
+};
+
+export const streakAPI = {
+  recordActivity: () => post('/streak/activity', {}),
+  getStreak: () => get('/streak'),
+};
+
 export const feedbackAPI = {
   getAll: () => get('/feedback'),
   getById: (id) => get(`/feedback/${id}`),
@@ -358,20 +354,22 @@ export const feedbackAPI = {
   delete: (id) => del(`/feedback/${id}`),
 };
 
-// Upload APIs
 export const uploadAPI = {
   uploadFile: (formData) => uploadFile(formData),
 };
 
-// AI Chat APIs
+export const lectureChatAPI = {
+  getHistory: (courseId, topicId) => get(`/lecture-chat/${courseId}/${topicId}`),
+  sendMessage: (courseId, topicId, content) => post(`/lecture-chat/${courseId}/${topicId}/messages`, { content }),
+  clearHistory: (courseId, topicId) => del(`/lecture-chat/${courseId}/${topicId}`),
+};
+
 export const aiChatAPI = {
-  // Sessions
   createSession: (data) => post('/ai-chat/sessions', data || {}),
   getSessions: () => get('/ai-chat/sessions'),
   getSession: (id) => get(`/ai-chat/sessions/${id}`),
   updateSession: (id, data) => put(`/ai-chat/sessions/${id}`, data),
   deleteSession: (id) => del(`/ai-chat/sessions/${id}`),
-  // Messages
   sendMessage: (sessionId, content) => post(`/ai-chat/sessions/${sessionId}/messages`, { content }),
 };
 
@@ -419,5 +417,8 @@ export default {
   feedbackAPI,
   uploadAPI,
   aiChatAPI,
-  aiTutorAPI
+  aiTutorAPI,
+  lectureChatAPI,
+  streakAPI,
+  todoAPI,
 };

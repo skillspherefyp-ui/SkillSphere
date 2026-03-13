@@ -1,26 +1,80 @@
 import React from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, useWindowDimensions } from 'react-native';
-import AppHeader from '../../components/ui/AppHeader';
+import MainLayout from '../../components/ui/MainLayout';
 import AppCard from '../../components/ui/AppCard';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useData } from '../../context/DataContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+const ORANGE = '#FF8C42';
+
 const CategoriesScreen = () => {
   const { categories } = useData();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const navigation = useNavigation();
+  const { logout } = useAuth();
   const { width } = useWindowDimensions();
 
-  const getStyles = (theme) => StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: theme.colors.background,
-    },
+  const sidebarItems = [
+    { label: 'Dashboard', icon: 'grid-outline', iconActive: 'grid', route: 'Dashboard' },
+    { label: 'Browse Courses', icon: 'library-outline', iconActive: 'library', route: 'Courses' },
+    { label: 'My Learning', icon: 'school-outline', iconActive: 'school', route: 'EnrolledCourses' },
+    { label: 'AI Assistant', icon: 'sparkles-outline', iconActive: 'sparkles', route: 'AITutor' },
+    { label: 'Certificates', icon: 'ribbon-outline', iconActive: 'ribbon', route: 'Certificates' },
+    { label: 'Reminders', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle', route: 'Todo' },
+  ];
+  const handleNavigate = (route) => navigation.navigate(route);
+
+  const getStyles = (theme, isDark) => StyleSheet.create({
     listContent: {
       padding: 16,
+      paddingTop: 0,
+    },
+    pageHeaderBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+      margin: 16,
+      marginBottom: 12,
+      borderRadius: 16,
+      borderWidth: 1,
+    },
+    bannerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      flex: 1,
+    },
+    backButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(255,140,66,0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerTextGroup: {
+      flex: 1,
+    },
+    bannerTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+      marginBottom: 2,
+    },
+    bannerSubtitle: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
     },
     categoryCard: {
       marginBottom: 16,
@@ -28,6 +82,10 @@ const CategoriesScreen = () => {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+      borderLeftWidth: 3,
+      borderLeftColor: theme.colors.primary,
+      borderRadius: 12,
+      overflow: 'hidden',
     },
     categoryInfo: {
       flexDirection: 'row',
@@ -40,15 +98,17 @@ const CategoriesScreen = () => {
       justifyContent: 'center',
       alignItems: 'center',
       marginRight: 16,
+      backgroundColor: theme.colors.primary + '20',
     },
     categoryName: {
       fontSize: 18,
       fontWeight: '600',
       color: theme.colors.textPrimary,
+      letterSpacing: 0.1,
     },
   });
 
-  const styles = getStyles(theme);
+  const styles = getStyles(theme, isDark);
 
   const renderCategory = ({ item, index }) => (
     <Animated.View entering={FadeInDown.duration(400).delay(index * 50)}>
@@ -66,17 +126,45 @@ const CategoriesScreen = () => {
     </Animated.View>
   );
 
+  const renderHeader = () => (
+    <View style={[styles.pageHeaderBanner, {
+      backgroundColor: isDark ? 'rgba(255,140,66,0.06)' : 'rgba(255,140,66,0.05)',
+      borderColor: 'rgba(255,140,66,0.15)',
+    }]}>
+      <View style={styles.bannerLeft}>
+        <TouchableOpacity
+          style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)' }]}
+          onPress={() => navigation.goBack()}
+        >
+          <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+        </TouchableOpacity>
+        <View style={styles.bannerIconCircle}>
+          <Icon name="layers" size={22} color={ORANGE} />
+        </View>
+        <View style={styles.bannerTextGroup}>
+          <Text style={styles.bannerTitle}>Categories</Text>
+          <Text style={styles.bannerSubtitle}>Browse courses by category</Text>
+        </View>
+      </View>
+    </View>
+  );
+
   return (
-    <View style={styles.container}>
-      <AppHeader title="Browse Categories" showBack={true} />
+    <MainLayout
+      showSidebar={true}
+      sidebarItems={sidebarItems}
+      activeRoute="Courses"
+      onNavigate={handleNavigate}
+    >
       <FlatList
         data={categories}
         renderItem={renderCategory}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={renderHeader}
       />
-    </View>
+    </MainLayout>
   );
 };
 

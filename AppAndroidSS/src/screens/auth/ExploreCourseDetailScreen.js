@@ -1,115 +1,131 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Platform,
-  useWindowDimensions,
-  Image,
-  ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  Image, Platform, useWindowDimensions, ActivityIndicator,
 } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/Ionicons';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
-import AppCard from '../../components/ui/AppCard';
-import AppButton from '../../components/ui/AppButton';
 import { useTheme } from '../../context/ThemeContext';
+import ThemeToggle from '../../components/ThemeToggle';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { courseAPI } from '../../services/apiClient';
-import ThemeToggle from '../../components/ThemeToggle';
-import BrandLogo from '../../components/BrandLogo';
 import { resolveFileUrl } from '../../utils/urlHelpers';
 
+const LOGO   = require('../../assets/images/skillsphere-logo.png');
+const ORANGE = '#F68B3C';
+const NAVY   = '#1A1A2E';
+const NAVY2  = '#16213E';
+
+const CAT_COLORS = {
+  Programming: '#6366F1', Technology: '#6366F1', Design: '#EC4899',
+  Business: '#10B981', 'Data Science': '#3B82F6', Data: '#3B82F6',
+  Marketing: '#F59E0B', General: ORANGE,
+};
+
+// ── Navbar ────────────────────────────────────────────────────────────────────
+const Navbar = ({ navigation, isDark, isMobile }) => {
+  const isWeb = Platform.OS === 'web';
+  const stickyStyle = isWeb ? { position: 'sticky', top: 0, zIndex: 999 } : {};
+
+  return (
+    <View style={[nb.container, { background: 'linear-gradient(135deg, #1A1A2E 0%, #1E1E38 100%)' }, stickyStyle]}>
+      <View style={nb.content}>
+        <View style={nb.left}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={nb.backBtn} activeOpacity={0.7}>
+            <Icon name="arrow-back" size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Image source={LOGO} style={nb.logoImg} resizeMode="cover" />
+          <Text style={nb.logoText}>
+            SKILL<Text style={{ color: ORANGE }}>SPHERE</Text>
+          </Text>
+        </View>
+        <View style={nb.right}>
+          <ThemeToggle iconColor="#FFFFFF" />
+          {!isMobile && (
+            <>
+              <TouchableOpacity style={nb.signInBtn} onPress={() => navigation.navigate('Login')}>
+                <Text style={nb.signInText}>Sign In</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={nb.getStartedBtn} onPress={() => navigation.navigate('Signup')}>
+                <Text style={nb.getStartedText}>Get Started</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const nb = StyleSheet.create({
+  container: { height: 62, paddingHorizontal: 20, backgroundColor: NAVY, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 10 },
+  content: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  left: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  backBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+  logoImg: { width: 46, height: 46, borderRadius: 13 },
+  logoText: { color: '#FFFFFF', fontWeight: '800', fontSize: 16, letterSpacing: 1.2 },
+  right: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  signInBtn: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)' },
+  signInText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
+  getStartedBtn: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 10, backgroundColor: ORANGE, borderWidth: 1, borderColor: '#E77828', shadowColor: '#C96A24', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.14, shadowRadius: 6, elevation: 3 },
+  getStartedText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+});
+
+// ── Section Card ──────────────────────────────────────────────────────────────
+const SCard = ({ children, isDark, style }) => (
+  <View style={[{
+    backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+    borderRadius: 18, borderWidth: 1,
+    borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)',
+    padding: 22, marginBottom: 18,
+  }, style]}>
+    {children}
+  </View>
+);
+
+const SectionLabel = ({ text }) => (
+  <View style={{ backgroundColor: ORANGE + '20', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4, alignSelf: 'flex-start', marginBottom: 10 }}>
+    <Text style={{ color: ORANGE, fontSize: 10, fontWeight: '700', letterSpacing: 1 }}>{text.toUpperCase()}</Text>
+  </View>
+);
+
+// ── Main Screen ───────────────────────────────────────────────────────────────
 const ExploreCourseDetailScreen = () => {
   const { theme, isDark } = useTheme();
   const navigation = useNavigation();
   const route = useRoute();
   const { width } = useWindowDimensions();
 
-  const [course, setCourse] = useState(route.params?.course || null);
-  const [loading, setLoading] = useState(!route.params?.course);
+  const isMobile  = width < 768;
+  const isDesktop = width >= 1024;
+  const maxW      = isDesktop ? 900 : '100%';
 
-  const isWeb = Platform.OS === 'web';
-  const maxWidth = isWeb && width > 1200 ? 1200 : '100%';
-  const isLargeScreen = width > 768;
-
-  // Gradient colors matching landing page
-  const gradientColors = theme.mode === 'dark'
-    ? [theme.colors.background, theme.colors.backgroundSecondary, theme.colors.surface]
-    : [theme.colors.gradientStart, theme.colors.gradientMid, theme.colors.gradientEnd];
+  const [course, setCourse] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]   = useState(false);
 
   useEffect(() => {
-    if (!course && route.params?.courseId) {
-      fetchCourseDetails();
-    }
-  }, [route.params?.courseId]);
+    const id = route.params?.courseId || route.params?.course?.id;
+    if (!id) { setError(true); setLoading(false); return; }
+    courseAPI.getById(id)
+      .then(res => { if (res.course) setCourse(res.course); else setError(true); })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const fetchCourseDetails = async () => {
-    try {
-      setLoading(true);
-      const response = await courseAPI.getById(route.params.courseId);
-      if (response.success && response.course) {
-        setCourse(response.course);
-      }
-    } catch (error) {
-      console.error('Error fetching course:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const bgMain = isDark ? NAVY  : '#F0F2FF';
+  const catName  = course?.category?.name || 'General';
+  const catColor = CAT_COLORS[catName] || ORANGE;
+  const thumb    = course?.thumbnailImage ? resolveFileUrl(course.thumbnailImage) : null;
 
-  const handleEnroll = () => {
-    navigation.navigate('Register', {
-      message: `Sign up to enroll in ${course.name}`,
-      redirectCourse: course.id
-    });
-  };
-
-  const NavbarContent = () => (
-    <View style={styles.navbarContent}>
-      <View style={styles.navbarLeft}>
-        <BrandLogo size={40} />
-        <Text style={styles.navbarTitle}>SkillSphere</Text>
-      </View>
-      <View style={styles.navbarRight}>
-        <ThemeToggle />
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Icon name="arrow-back" size={20} color="#ffffff" />
-          <Text style={styles.backButtonText}>Back</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+  const renderNav = () => <Navbar navigation={navigation} isDark={isDark} isMobile={isMobile} />;
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        {/* Custom Header/Navbar with Gradient */}
-        {isWeb ? (
-          <View style={[styles.navbar, {
-            backgroundColor: gradientColors[0],
-            background: `linear-gradient(135deg, ${gradientColors[0]} 0%, ${gradientColors[1]} 100%)`,
-          }]}>
-            <NavbarContent />
-          </View>
-        ) : (
-          <LinearGradient
-            colors={[gradientColors[0], gradientColors[1]]}
-            style={styles.navbar}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          >
-            <NavbarContent />
-          </LinearGradient>
-        )}
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
+      <View style={{ flex: 1, backgroundColor: bgMain }}>
+        {renderNav()}
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 }}>
+          <ActivityIndicator size="large" color={ORANGE} />
+          <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(26,26,46,0.5)', fontSize: 14 }}>
             Loading course details...
           </Text>
         </View>
@@ -117,485 +133,198 @@ const ExploreCourseDetailScreen = () => {
     );
   }
 
-  if (!course) {
+  if (error || !course) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        {/* Custom Header/Navbar with Gradient */}
-        {isWeb ? (
-          <View style={[styles.navbar, {
-            backgroundColor: gradientColors[0],
-            background: `linear-gradient(135deg, ${gradientColors[0]} 0%, ${gradientColors[1]} 100%)`,
-          }]}>
-            <NavbarContent />
-          </View>
-        ) : (
-          <LinearGradient
-            colors={[gradientColors[0], gradientColors[1]]}
-            style={styles.navbar}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          >
-            <NavbarContent />
-          </LinearGradient>
-        )}
-        <View style={styles.loadingContainer}>
-          <Icon name="alert-circle-outline" size={64} color={theme.colors.textTertiary} />
-          <Text style={[styles.errorText, { color: theme.colors.textSecondary }]}>
-            Course not found
+      <View style={{ flex: 1, backgroundColor: bgMain }}>
+        {renderNav()}
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 14, padding: 32 }}>
+          <Icon name="alert-circle-outline" size={56} color={ORANGE + '80'} />
+          <Text style={{ fontSize: 20, fontWeight: '800', color: isDark ? '#FFFFFF' : NAVY }}>Course Not Found</Text>
+          <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(26,26,46,0.5)', textAlign: 'center', fontSize: 14 }}>
+            This course may have been removed or is no longer available.
           </Text>
-          <AppButton
-            title="Go Back"
-            onPress={() => navigation.goBack()}
-            variant="primary"
-            style={{ marginTop: 20 }}
-          />
+          <TouchableOpacity style={{ marginTop: 8, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, backgroundColor: ORANGE, borderWidth: 1, borderColor: '#E77828', shadowColor: '#C96A24', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.14, shadowRadius: 6, elevation: 3 }} onPress={() => navigation.goBack()}>
+            <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>Go Back</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
   }
 
+  const learns = [
+    { icon: 'checkmark-circle', text: 'Comprehensive understanding of all course topics' },
+    { icon: 'checkmark-circle', text: 'Hands-on practice with real-world examples' },
+    { icon: 'checkmark-circle', text: 'Industry-recognised certificate upon completion' },
+    { icon: 'checkmark-circle', text: 'Lifetime access to course materials and updates' },
+  ];
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* Custom Header/Navbar with Gradient */}
-      {isWeb ? (
-        <View style={[styles.navbar, {
-          backgroundColor: gradientColors[0],
-          background: `linear-gradient(135deg, ${gradientColors[0]} 0%, ${gradientColors[1]} 100%)`,
-        }]}>
-          <NavbarContent />
-        </View>
-      ) : (
-        <LinearGradient
-          colors={[gradientColors[0], gradientColors[1]]}
-          style={styles.navbar}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-        >
-          <NavbarContent />
-        </LinearGradient>
-      )}
+    <View style={{ flex: 1, backgroundColor: bgMain }}>
+      {renderNav()}
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.content, { maxWidth, alignSelf: 'center', width: '100%' }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Course Header with Image */}
-        <Animated.View entering={FadeInDown.duration(600)} style={styles.courseHeader}>
-          {course.thumbnailImage ? (
-            <Image
-              source={{ uri: resolveFileUrl(course.thumbnailImage) }}
-              style={[styles.courseThumbnail, isLargeScreen && styles.courseThumbnailLarge]}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[
-              styles.courseThumbnailPlaceholder,
-              isLargeScreen && styles.courseThumbnailLarge,
-              { backgroundColor: theme.colors.primary + '20' }
-            ]}>
-              <Icon name="book" size={80} color={theme.colors.primary} />
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={{ maxWidth: maxW, alignSelf: 'center', width: '100%', padding: isMobile ? 16 : 28 }}>
+
+          {/* ── Thumbnail Hero ── */}
+          <View style={[s.thumbWrap, { backgroundColor: catColor + '20', height: isMobile ? 220 : 340 }]}>
+            {thumb ? (
+              <Image source={{ uri: thumb }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+            ) : (
+              <Icon name="book-outline" size={80} color={catColor} />
+            )}
+            {/* Category badge over image */}
+            <View style={[s.thumbBadge, { backgroundColor: catColor }]}>
+              <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>{catName}</Text>
             </View>
-          )}
-        </Animated.View>
+          </View>
 
-        {/* Course Info Card */}
-        <Animated.View entering={FadeInDown.duration(600).delay(100)}>
-          <AppCard style={styles.courseInfoCard}>
-            <Text style={[styles.courseTitle, { color: theme.colors.textPrimary }]}>
+          {/* ── Course Info Card ── */}
+          <SCard isDark={isDark}>
+            <Text style={{ fontSize: isMobile ? 22 : 28, fontWeight: '900', color: isDark ? '#FFFFFF' : NAVY, lineHeight: isMobile ? 30 : 36, marginBottom: 14 }}>
               {course.name}
             </Text>
 
-            {/* Course Meta Info */}
-            <View style={styles.metaContainer}>
-              <View style={[styles.metaBadge, { backgroundColor: theme.colors.primary + '15' }]}>
-                <Icon name="bar-chart-outline" size={18} color={theme.colors.primary} />
-                <Text style={[styles.metaText, { color: theme.colors.primary }]}>
-                  {course.level || 'All Levels'}
-                </Text>
-              </View>
-              <View style={[styles.metaBadge, { backgroundColor: theme.colors.success + '15' }]}>
-                <Icon name="time-outline" size={18} color={theme.colors.success} />
-                <Text style={[styles.metaText, { color: theme.colors.success }]}>
-                  {course.duration || 'Self-paced'}
-                </Text>
-              </View>
-              <View style={[styles.metaBadge, { backgroundColor: theme.colors.warning + '15' }]}>
-                <Icon name="language-outline" size={18} color={theme.colors.warning} />
-                <Text style={[styles.metaText, { color: theme.colors.warning }]}>
-                  {course.language || 'English'}
+            {/* Meta badges */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+              {[
+                { icon: 'bar-chart-outline', label: course.level || 'All Levels',      color: '#6366F1' },
+                { icon: 'time-outline',       label: course.duration || 'Self-paced',  color: '#10B981' },
+                { icon: 'language-outline',   label: course.language || 'English',     color: '#3B82F6' },
+              ].map(m => (
+                <View key={m.label} style={[s.metaBadge, { backgroundColor: m.color + '18' }]}>
+                  <Icon name={m.icon} size={15} color={m.color} />
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: m.color }}>{m.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Instructor + Enrollment */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
+              {course.user?.name && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Icon name="person-circle-outline" size={16} color={isDark ? 'rgba(255,255,255,0.5)' : 'rgba(26,26,46,0.5)'} />
+                  <Text style={{ fontSize: 13, color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(26,26,46,0.6)' }}>
+                    {course.user.name}
+                  </Text>
+                </View>
+              )}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Icon name="people-outline" size={16} color={isDark ? 'rgba(255,255,255,0.5)' : 'rgba(26,26,46,0.5)'} />
+                <Text style={{ fontSize: 13, color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(26,26,46,0.6)' }}>
+                  {(course.enrollmentCount || 0).toLocaleString()} students enrolled
                 </Text>
               </View>
             </View>
+          </SCard>
 
-            {/* Category */}
-            {course.category && (
-              <View style={styles.categoryRow}>
-                <Icon name="folder-outline" size={18} color={theme.colors.textTertiary} />
-                <Text style={[styles.categoryText, { color: theme.colors.textSecondary }]}>
-                  {course.category.name}
-                </Text>
-              </View>
-            )}
-
-            {/* Enrollment Count */}
-            {(course.enrollmentCount || course._count?.enrollments) && (
-              <View style={styles.enrollmentRow}>
-                <Icon name="people-outline" size={18} color={theme.colors.textTertiary} />
-                <Text style={[styles.enrollmentText, { color: theme.colors.textSecondary }]}>
-                  {course.enrollmentCount || course._count?.enrollments || 0} students enrolled
-                </Text>
-              </View>
-            )}
-          </AppCard>
-        </Animated.View>
-
-        {/* Course Description */}
-        <Animated.View entering={FadeInDown.duration(600).delay(200)}>
-          <AppCard style={styles.descriptionCard}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-              About This Course
-            </Text>
-            <Text style={[styles.description, { color: theme.colors.textSecondary }]}>
+          {/* ── About ── */}
+          <SCard isDark={isDark}>
+            <SectionLabel text="About This Course" />
+            <Text style={{ fontSize: 15, lineHeight: 26, color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(26,26,46,0.75)' }}>
               {course.description || 'No description available for this course.'}
             </Text>
-          </AppCard>
-        </Animated.View>
+          </SCard>
 
-        {/* Course Topics */}
-        {course.topics && course.topics.length > 0 && (
-          <Animated.View entering={FadeInDown.duration(600).delay(300)}>
-            <AppCard style={styles.topicsCard}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-                Course Content
-              </Text>
-              <Text style={[styles.topicsCount, { color: theme.colors.textSecondary }]}>
-                {course.topics.length} topic{course.topics.length !== 1 ? 's' : ''}
-              </Text>
-              {course.topics.map((topic, index) => (
+          {/* ── What You'll Learn ── */}
+          <SCard isDark={isDark}>
+            <SectionLabel text="What You'll Learn" />
+            <Text style={{ fontSize: isMobile ? 18 : 22, fontWeight: '800', color: isDark ? '#FFFFFF' : NAVY, marginBottom: 16 }}>
+              Skills you'll gain
+            </Text>
+            <View style={{ gap: 12 }}>
+              {learns.map((item, i) => (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+                  <Icon name={item.icon} size={20} color={ORANGE} style={{ marginTop: 2 }} />
+                  <Text style={{ flex: 1, fontSize: 14, lineHeight: 22, color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(26,26,46,0.75)' }}>
+                    {item.text}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </SCard>
+
+          {/* ── Course Content ── */}
+          {course.topics && course.topics.length > 0 && (
+            <SCard isDark={isDark}>
+              <SectionLabel text="Course Content" />
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                <Text style={{ fontSize: isMobile ? 18 : 22, fontWeight: '800', color: isDark ? '#FFFFFF' : NAVY }}>
+                  {course.topics.length} {course.topics.length === 1 ? 'Topic' : 'Topics'}
+                </Text>
+                <View style={{ backgroundColor: ORANGE + '20', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
+                  <Text style={{ color: ORANGE, fontSize: 11, fontWeight: '700' }}>
+                    {course.topics.reduce((sum, t) => sum + (t.materials?.length || 0), 0)} materials
+                  </Text>
+                </View>
+              </View>
+              {course.topics.map((topic, i) => (
                 <View
-                  key={topic.id || index}
-                  style={[
-                    styles.topicItem,
-                    { borderBottomColor: theme.colors.border },
-                    index === course.topics.length - 1 && { borderBottomWidth: 0 }
-                  ]}
+                  key={topic.id || i}
+                  style={[s.topicRow, {
+                    borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.06)',
+                    borderBottomWidth: i < course.topics.length - 1 ? 1 : 0,
+                  }]}
                 >
-                  <View style={[styles.topicNumber, { backgroundColor: theme.colors.primary + '20' }]}>
-                    <Text style={[styles.topicNumberText, { color: theme.colors.primary }]}>
-                      {index + 1}
-                    </Text>
+                  <View style={[s.topicNum, { backgroundColor: ORANGE + '20' }]}>
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: ORANGE }}>{i + 1}</Text>
                   </View>
-                  <View style={styles.topicContent}>
-                    <Text style={[styles.topicTitle, { color: theme.colors.textPrimary }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: isDark ? '#FFFFFF' : NAVY }} numberOfLines={2}>
                       {topic.title}
                     </Text>
                     {topic.materials && topic.materials.length > 0 && (
-                      <Text style={[styles.topicMaterials, { color: theme.colors.textTertiary }]}>
+                      <Text style={{ fontSize: 11, color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(26,26,46,0.45)', marginTop: 3 }}>
                         {topic.materials.length} material{topic.materials.length !== 1 ? 's' : ''}
                       </Text>
                     )}
                   </View>
-                  <Icon name="lock-closed-outline" size={18} color={theme.colors.textTertiary} />
+                  <Icon name="lock-closed-outline" size={16} color={isDark ? 'rgba(255,255,255,0.25)' : 'rgba(26,26,46,0.25)'} />
                 </View>
               ))}
-            </AppCard>
-          </Animated.View>
-        )}
+            </SCard>
+          )}
 
-        {/* What You'll Learn */}
-        <Animated.View entering={FadeInDown.duration(600).delay(400)}>
-          <AppCard style={styles.learnCard}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-              What You'll Learn
+          {/* ── CTA ── */}
+          <View style={[s.cta, { backgroundColor: isDark ? NAVY2 : NAVY }]}>
+            <View style={s.ctaGlowDot} />
+            <Icon name="school-outline" size={48} color={ORANGE} style={{ marginBottom: 16 }} />
+            <Text style={s.ctaTitle}>Ready to Start Learning?</Text>
+            <Text style={s.ctaSub}>
+              Create a free account to enroll in this course, track your progress, and earn a certificate.
             </Text>
-            <View style={styles.learnList}>
-              <View style={styles.learnItem}>
-                <Icon name="checkmark-circle" size={20} color={theme.colors.success} />
-                <Text style={[styles.learnText, { color: theme.colors.textSecondary }]}>
-                  Comprehensive understanding of course topics
-                </Text>
-              </View>
-              <View style={styles.learnItem}>
-                <Icon name="checkmark-circle" size={20} color={theme.colors.success} />
-                <Text style={[styles.learnText, { color: theme.colors.textSecondary }]}>
-                  Hands-on practice with real examples
-                </Text>
-              </View>
-              <View style={styles.learnItem}>
-                <Icon name="checkmark-circle" size={20} color={theme.colors.success} />
-                <Text style={[styles.learnText, { color: theme.colors.textSecondary }]}>
-                  Certificate upon completion
-                </Text>
-              </View>
-              <View style={styles.learnItem}>
-                <Icon name="checkmark-circle" size={20} color={theme.colors.success} />
-                <Text style={[styles.learnText, { color: theme.colors.textSecondary }]}>
-                  Lifetime access to course materials
-                </Text>
-              </View>
-            </View>
-          </AppCard>
-        </Animated.View>
+            <TouchableOpacity
+              style={s.ctaBtn}
+              onPress={() => navigation.navigate('Signup')}
+              activeOpacity={0.85}
+            >
+              <Icon name="person-add-outline" size={18} color="#FFFFFF" />
+              <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700' }}>Create Free Account</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')} style={{ marginTop: 14 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
+                Already have an account? <Text style={{ color: ORANGE, fontWeight: '700' }}>Sign In</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-        {/* Enroll CTA */}
-        <Animated.View entering={FadeInDown.duration(600).delay(500)} style={styles.ctaSection}>
-          <AppCard style={[styles.ctaCard, { backgroundColor: theme.colors.primary + '10' }]}>
-            <Icon name="school-outline" size={48} color={theme.colors.primary} />
-            <Text style={[styles.ctaTitle, { color: theme.colors.textPrimary }]}>
-              Ready to Start Learning?
-            </Text>
-            <Text style={[styles.ctaSubtitle, { color: theme.colors.textSecondary }]}>
-              Sign up now to enroll in this course and start your learning journey!
-            </Text>
-            <AppButton
-              title="Sign Up to Enroll"
-              onPress={handleEnroll}
-              variant="primary"
-              style={styles.enrollButton}
-              icon={<Icon name="person-add" size={20} color="#ffffff" />}
-              iconPosition="left"
-            />
-          </AppCard>
-        </Animated.View>
-
-        {/* Bottom Spacing */}
-        <View style={{ height: 40 }} />
+          <View style={{ height: 40 }} />
+        </View>
       </ScrollView>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  navbar: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    ...Platform.select({
-      web: {
-        position: 'sticky',
-        top: 0,
-        zIndex: 1000,
-      },
-    }),
-  },
-  navbarContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    maxWidth: 1200,
-    width: '100%',
-    alignSelf: 'center',
-  },
-  navbarLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  navbarTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  navbarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  backButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 20,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-  },
-  errorText: {
-    marginTop: 16,
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  courseHeader: {
-    marginBottom: 20,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  courseThumbnail: {
-    width: '100%',
-    height: 220,
-    borderRadius: 16,
-  },
-  courseThumbnailLarge: {
-    height: 320,
-  },
-  courseThumbnailPlaceholder: {
-    width: '100%',
-    height: 220,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  courseInfoCard: {
-    padding: 20,
-    marginBottom: 16,
-  },
-  courseTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 16,
-  },
-  metaContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 16,
-  },
-  metaBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  metaText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  categoryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  categoryText: {
-    fontSize: 14,
-  },
-  enrollmentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  enrollmentText: {
-    fontSize: 14,
-  },
-  descriptionCard: {
-    padding: 20,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  description: {
-    fontSize: 15,
-    lineHeight: 24,
-  },
-  topicsCard: {
-    padding: 20,
-    marginBottom: 16,
-  },
-  topicsCount: {
-    fontSize: 14,
-    marginBottom: 16,
-  },
-  topicItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    gap: 12,
-  },
-  topicNumber: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  topicNumberText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  topicContent: {
-    flex: 1,
-  },
-  topicTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  topicMaterials: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  learnCard: {
-    padding: 20,
-    marginBottom: 16,
-  },
-  learnList: {
-    gap: 12,
-  },
-  learnItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  learnText: {
-    flex: 1,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  ctaSection: {
-    marginTop: 8,
-  },
-  ctaCard: {
-    padding: 32,
-    alignItems: 'center',
-    borderWidth: 0,
-  },
-  ctaTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  ctaSubtitle: {
-    fontSize: 15,
-    textAlign: 'center',
-    marginBottom: 20,
-    maxWidth: 400,
-    lineHeight: 22,
-  },
-  enrollButton: {
-    minWidth: 200,
-  },
+const s = StyleSheet.create({
+  thumbWrap: { borderRadius: 18, overflow: 'hidden', marginBottom: 20, justifyContent: 'center', alignItems: 'center' },
+  thumbBadge: { position: 'absolute', top: 14, left: 14, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 10 },
+  metaBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10 },
+  topicRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 },
+  topicNum: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
+  cta: { borderRadius: 20, padding: 40, alignItems: 'center', overflow: 'hidden', marginBottom: 8 },
+  ctaGlowDot: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: ORANGE + '15', top: -60, right: -40 },
+  ctaTitle: { fontSize: 24, fontWeight: '900', color: '#FFFFFF', textAlign: 'center', marginBottom: 10 },
+  ctaSub: { fontSize: 14, color: 'rgba(255,255,255,0.65)', textAlign: 'center', lineHeight: 22, maxWidth: 400, marginBottom: 4 },
+  ctaBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 22, paddingHorizontal: 28, paddingVertical: 14, borderRadius: 12, backgroundColor: ORANGE, borderWidth: 1, borderColor: '#E77828', shadowColor: '#C96A24', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.16, shadowRadius: 6, elevation: 3 },
 });
 
 export default ExploreCourseDetailScreen;

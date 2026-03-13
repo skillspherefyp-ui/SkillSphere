@@ -18,4 +18,7 @@ router.delete('/:courseId', enrollmentController.unenrollFromCourse);
 // Check enrollment status
 router.get('/check/:courseId', enrollmentController.checkEnrollment);
 
+// Update enrollment progress
+router.put('/progress', enrollmentController.updateEnrollmentProgress);
+
 module.exports = router;

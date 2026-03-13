@@ -7,6 +7,8 @@ const { authenticateToken } = require('../middleware/auth');
 router.post('/login', authController.login);
 router.post('/register', authController.register);
 router.get('/profile', authenticateToken, authController.getProfile);
+router.put('/profile', authenticateToken, authController.updateProfile);
+router.put('/change-password', authenticateToken, authController.changePassword);
 
 // OTP verification routes (for signup)
 router.post('/send-otp', authController.sendOTP);
@@ -31,5 +33,4 @@ router.post('/accept-privacy-policy', authenticateToken, authController.acceptPr
 router.get('/privacy-policy-status', authenticateToken, authController.getPrivacyPolicyStatus);
 
 module.exports = router;
-
 

@@ -24,20 +24,18 @@ const StatusBadge = ({ status, style, textStyle, size = 'md' }) => {
       case 'completed':
       case 'success':
         return {
-          backgroundColor: isDark
-            ? theme.colors.successLight
-            : theme.colors.successLight,
-          color: isDark ? theme.colors.success : theme.colors.successDark,
+          backgroundColor: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.10)',
+          color: '#10B981',
+          borderColor: isDark ? 'rgba(16,185,129,0.30)' : 'rgba(16,185,129,0.25)',
         };
       case 'draft':
       case 'pending':
       case 'in progress':
       case 'running':
         return {
-          backgroundColor: isDark
-            ? theme.colors.warningLight
-            : theme.colors.warningLight,
-          color: isDark ? theme.colors.warning : theme.colors.warningDark,
+          backgroundColor: isDark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.10)',
+          color: '#F59E0B',
+          borderColor: isDark ? 'rgba(245,158,11,0.30)' : 'rgba(245,158,11,0.25)',
         };
       case 'hidden':
       case 'locked':
@@ -45,19 +43,17 @@ const StatusBadge = ({ status, style, textStyle, size = 'md' }) => {
       case 'failed':
       case 'error':
         return {
-          backgroundColor: isDark
-            ? theme.colors.errorLight
-            : theme.colors.errorLight,
-          color: isDark ? theme.colors.error : theme.colors.errorDark,
+          backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.10)',
+          color: '#EF4444',
+          borderColor: isDark ? 'rgba(239,68,68,0.30)' : 'rgba(239,68,68,0.25)',
         };
       case 'queued':
       case 'info':
       default:
         return {
-          backgroundColor: isDark
-            ? theme.colors.infoLight
-            : theme.colors.infoLight,
-          color: isDark ? theme.colors.info : theme.colors.infoDark,
+          backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.10)',
+          color: '#6366F1',
+          borderColor: isDark ? 'rgba(99,102,241,0.30)' : 'rgba(99,102,241,0.25)',
         };
     }
   };
@@ -73,10 +69,14 @@ const StatusBadge = ({ status, style, textStyle, size = 'md' }) => {
           paddingHorizontal: currentSize.paddingH,
           paddingVertical: currentSize.paddingV,
           borderRadius: currentSize.borderRadius,
+          borderWidth: 1,
+          borderColor: config.borderColor,
         },
         style,
       ]}
     >
+      {/* Dot indicator */}
+      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: config.color, marginRight: 5 }} />
       <Text
         style={[
           styles.text,
@@ -97,6 +97,8 @@ const StatusBadge = ({ status, style, textStyle, size = 'md' }) => {
 const styles = StyleSheet.create({
   badge: {
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   text: {
     fontWeight: '600',

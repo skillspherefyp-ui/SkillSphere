@@ -22,7 +22,6 @@ const LogoImage = require('../../assets/images/skillsphere-logo.png');
 const SIDEBAR_WIDTH = 260;       // Section 4.2: Width 260px
 const TRIGGER_ZONE = 12;         // Section 4.2: Collapsed trigger zone 12px
 const ANIMATION_DURATION = 220;  // Section 22.2: Slide-in duration 220ms
-const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 const Sidebar = ({
   items = [],
@@ -76,12 +75,12 @@ const Sidebar = ({
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: ANIMATION_DURATION,
-        useNativeDriver: USE_NATIVE_DRIVER,
+        useNativeDriver: true,
       }),
       Animated.timing(overlayOpacity, {
         toValue: 0.5,
         duration: ANIMATION_DURATION,
-        useNativeDriver: USE_NATIVE_DRIVER,
+        useNativeDriver: true,
       }),
     ]).start();
   };
@@ -93,12 +92,12 @@ const Sidebar = ({
       Animated.timing(slideAnim, {
         toValue: -SIDEBAR_WIDTH,
         duration: ANIMATION_DURATION,
-        useNativeDriver: USE_NATIVE_DRIVER,
+        useNativeDriver: true,
       }),
       Animated.timing(overlayOpacity, {
         toValue: 0,
         duration: ANIMATION_DURATION,
-        useNativeDriver: USE_NATIVE_DRIVER,
+        useNativeDriver: true,
       }),
     ]).start(() => {
       setIsVisible(false);
@@ -136,23 +135,17 @@ const Sidebar = ({
 
   const styles = getStyles(theme, isDark, isWeb, isPersistent);
 
-  // Glassmorphism background style
+  // Glassmorphism background style — always dark navy (#1A1A2E)
   const getGlassBackground = () => {
     if (isWeb) {
       return {
-        backgroundColor: isDark
-          ? 'rgba(27, 38, 51, 0.9)'
-          : 'rgba(255, 252, 248, 0.9)',
+        backgroundColor: '#1A1A2E',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
       };
     }
-    // For native, use semi-transparent background
-    // Note: True blur requires @react-native-community/blur
     return {
-      backgroundColor: isDark
-        ? 'rgba(27, 38, 51, 0.96)'
-        : 'rgba(255, 252, 248, 0.96)',
+      backgroundColor: '#1A1A2E',
     };
   };
 
@@ -166,8 +159,8 @@ const Sidebar = ({
             style={styles.logoImage}
             resizeMode="cover"
           />
-          <Text style={[styles.logoText, { color: theme.colors.textPrimary }]}>
-            SKILLSPHERE
+          <Text style={[styles.logoText, { color: '#FFFFFF' }]}>
+            SKILL<Text style={{ color: '#FF8C42' }}>SPHERE</Text>
           </Text>
         </View>
       </View>
@@ -190,7 +183,7 @@ const Sidebar = ({
               <Icon
                 name={isActive ? item.iconActive || item.icon : item.icon}
                 size={24}
-                color={isActive ? theme.colors.primary : theme.colors.textSecondary}
+                color={isActive ? '#1A1A2E' : 'rgba(255,255,255,0.6)'}
                 style={styles.navIcon}
               />
               <Text style={[
@@ -214,7 +207,7 @@ const Sidebar = ({
           <Icon
             name="settings-outline"
             size={24}
-            color={theme.colors.textSecondary}
+            color={'rgba(255,255,255,0.6)'}
             style={styles.navIcon}
           />
           <Text style={styles.navLabel}>Settings</Text>
@@ -241,7 +234,7 @@ const Sidebar = ({
                 style={styles.logoutButton}
                 activeOpacity={0.7}
               >
-                <Icon name="log-out-outline" size={20} color={theme.colors.textSecondary} />
+                <Icon name="log-out-outline" size={20} color={'rgba(255,255,255,0.65)'} />
               </TouchableOpacity>
             </View>
           </View>
@@ -361,7 +354,7 @@ const getStyles = (theme, isDark, isWeb, isPersistent) => StyleSheet.create({
     bottom: 0,
     width: SIDEBAR_WIDTH,
     zIndex: 1001,
-    shadowColor: theme.colors.shadow,
+    shadowColor: '#000',
     shadowOffset: { width: 4, height: 0 },
     shadowOpacity: isDark ? 0.4 : 0.15,
     shadowRadius: 20,
@@ -374,18 +367,14 @@ const getStyles = (theme, isDark, isWeb, isPersistent) => StyleSheet.create({
   sidebarInner: {
     flex: 1,
     borderRightWidth: 1,
-    borderRightColor: isDark
-      ? theme.colors.border
-      : theme.colors.border,
+    borderRightColor: 'rgba(255,255,255,0.08)',
   },
   logoSection: {
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'ios' ? 60 : isWeb ? 24 : 48,
     paddingBottom: 20,
     borderBottomWidth: 1,
-    borderBottomColor: isDark
-      ? theme.colors.border
-      : theme.colors.border,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
   logoContainer: {
     flexDirection: 'row',
@@ -393,12 +382,12 @@ const getStyles = (theme, isDark, isWeb, isPersistent) => StyleSheet.create({
     justifyContent: 'flex-start',
   },
   logoImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 52,
+    height: 52,
+    borderRadius: 14,
   },
   logoText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     marginLeft: 12,
     letterSpacing: 1,
@@ -417,11 +406,10 @@ const getStyles = (theme, isDark, isWeb, isPersistent) => StyleSheet.create({
     borderRadius: 12,
     marginBottom: 4,
     position: 'relative',
+    gap: 0,
   },
   navItemActive: {
-    backgroundColor: isDark
-      ? theme.colors.primaryGlow
-      : theme.colors.primaryGlow,
+    backgroundColor: 'rgba(255,255,255,0.92)',
   },
   activeIndicator: {
     position: 'absolute',
@@ -429,7 +417,7 @@ const getStyles = (theme, isDark, isWeb, isPersistent) => StyleSheet.create({
     top: 8,
     bottom: 8,
     width: 4,
-    backgroundColor: theme.colors.primary,
+    backgroundColor: '#FF8C42',
     borderRadius: 2,
   },
   navIcon: {
@@ -438,29 +426,25 @@ const getStyles = (theme, isDark, isWeb, isPersistent) => StyleSheet.create({
   navLabel: {
     fontSize: 14,
     fontWeight: '500',
-    color: theme.colors.textSecondary,
+    color: 'rgba(255,255,255,0.65)',
     fontFamily: theme.typography.fontFamily.medium,
   },
   navLabelActive: {
-    color: theme.colors.primary,
-    fontWeight: '600',
+    color: '#1A1A2E',
+    fontWeight: '700',
   },
   bottomSection: {
     paddingHorizontal: 12,
     paddingBottom: Platform.OS === 'ios' ? 20 : 16,
     borderTopWidth: 1,
-    borderTopColor: isDark
-      ? theme.colors.border
-      : theme.colors.border,
+    borderTopColor: 'rgba(255,255,255,0.1)',
     paddingTop: 12,
   },
   userSection: {
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: isDark
-      ? theme.colors.border
-      : theme.colors.border,
+    borderTopColor: 'rgba(255,255,255,0.08)',
   },
   userInfo: {
     flexDirection: 'row',
@@ -491,12 +475,12 @@ const getStyles = (theme, isDark, isWeb, isPersistent) => StyleSheet.create({
   userName: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.textPrimary,
+    color: '#FFFFFF',
     fontFamily: theme.typography.fontFamily.semiBold,
   },
   userRole: {
     fontSize: 12,
-    color: theme.colors.textSecondary,
+    color: 'rgba(255,255,255,0.55)',
     marginTop: 2,
   },
   logoutButton: {

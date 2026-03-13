@@ -25,6 +25,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { uploadAPI } from '../../services/apiClient';
 import { resolveFileUrl } from '../../utils/urlHelpers';
 
+const ORANGE = '#FF8C42';
+
 const CreateCourseScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -82,6 +84,7 @@ const CreateCourseScreen = () => {
   const [language, setLanguage] = useState('English');
   const [category, setCategory] = useState(categories[0]?.name || '');
   const [duration, setDuration] = useState('');
+  const [creationMode, setCreationMode] = useState('ai'); // 'ai' | 'manual'
   const [materials, setMaterials] = useState([]);
   const [showAddMaterialModal, setShowAddMaterialModal] = useState(false);
   const [thumbnailImage, setThumbnailImage] = useState(null);
@@ -100,6 +103,7 @@ const CreateCourseScreen = () => {
       setLanguage(courseData.language || 'English');
       setCategory(courseData.category?.name || categories[0]?.name || '');
       setDuration(courseData.duration || '');
+      setCreationMode(courseData.creationMode || 'ai');
       setThumbnailImage(courseData.thumbnailImage || null);
       setMaterials(courseData.materials || []);
     }
@@ -179,6 +183,7 @@ const CreateCourseScreen = () => {
       language,
       categoryId: selectedCategory.id,
       duration,
+      creationMode,
       materials: formattedMaterials,
       thumbnailImage,
     };
@@ -203,7 +208,7 @@ const CreateCourseScreen = () => {
         setMaterials([]);
         setThumbnailImage(null);
         Toast.show({ type: 'success', text1: 'Success', text2: 'Course created!' });
-        navigation.navigate('AddTopics', { courseId: result.course.id });
+        navigation.navigate('AddTopics', { courseId: result.course.id, creationMode });
       } else {
         Toast.show({ type: 'error', text1: 'Error', text2: result.error || 'Failed to create' });
       }
@@ -227,23 +232,36 @@ const CreateCourseScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Section */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerTextContainer}>
-            <View style={styles.titleRow}>
-              <TouchableOpacity
-                style={[styles.backButton, { backgroundColor: theme.colors.surface }]}
-                onPress={() => navigation.goBack()}
-              >
-                <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-              <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>
-                {isEditMode ? 'Edit Course' : 'Create New Course'}
-              </Text>
-            </View>
-            <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
-              {isEditMode ? 'Update your course information' : 'Add a new course to your catalog'}
+        {/* Page Banner */}
+        <View style={{
+          backgroundColor: isDark ? 'rgba(255,140,66,0.06)' : 'rgba(255,140,66,0.05)',
+          borderColor: 'rgba(255,140,66,0.15)',
+          borderRadius: 16,
+          borderWidth: 1,
+          padding: 20,
+          marginBottom: 24,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 14,
+        }}>
+          <TouchableOpacity
+            style={{
+              backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.08)',
+              borderRadius: 10,
+              padding: 10,
+            }}
+            onPress={() => navigation.goBack()}
+          >
+            <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
+          <View style={{ backgroundColor: ORANGE + '20', borderRadius: 12, padding: 12 }}>
+            <Icon name="create" size={22} color={ORANGE} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: theme.colors.textPrimary, fontSize: 20, fontWeight: '800' }}>
+              {isEditMode ? 'Edit Course' : 'Create New Course'}
             </Text>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Fill in course details below</Text>
           </View>
         </View>
 
@@ -251,11 +269,22 @@ const CreateCourseScreen = () => {
         <View style={styles.formGrid}>
           {/* Left Column - Main Info */}
           <Animated.View entering={FadeInDown.duration(400).delay(100)} style={styles.mainColumn}>
-            {/* Basic Info Card */}
-            <AppCard style={styles.formCard}>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                Basic Information
-              </Text>
+
+            {/* Course Details Section */}
+            <View style={styles.formCard}>
+              <View style={styles.sectionHeader}>
+                <View style={[styles.sectionIconWrap, { backgroundColor: '#6366F1' + '18' }]}>
+                  <Icon name="book" size={18} color="#6366F1" />
+                </View>
+                <View style={styles.sectionTitleBlock}>
+                  <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Course Details</Text>
+                  <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
+                    Basic information about your course
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.sectionDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(99,102,241,0.08)' }]} />
 
               <AppInput
                 label="Course Name *"
@@ -287,13 +316,23 @@ const CreateCourseScreen = () => {
                 onChangeText={setDuration}
                 placeholder="e.g., 4 weeks, 10 hours"
               />
-            </AppCard>
+            </View>
 
-            {/* Course Settings Card */}
-            <AppCard style={styles.formCard}>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                Course Settings
-              </Text>
+            {/* Settings Section */}
+            <View style={styles.formCard}>
+              <View style={styles.sectionHeader}>
+                <View style={[styles.sectionIconWrap, { backgroundColor: ORANGE + '18' }]}>
+                  <Icon name="settings" size={18} color={ORANGE} />
+                </View>
+                <View style={styles.sectionTitleBlock}>
+                  <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Settings</Text>
+                  <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
+                    Configure level and language
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.sectionDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : ORANGE + '12' }]} />
 
               <View style={styles.optionGroup}>
                 <Text style={[styles.optionLabel, { color: theme.colors.textSecondary }]}>Level *</Text>
@@ -304,8 +343,8 @@ const CreateCourseScreen = () => {
                       style={[
                         styles.optionChip,
                         {
-                          backgroundColor: level === lvl ? theme.colors.primary : (isDark ? theme.colors.card : theme.colors.surface),
-                          borderColor: level === lvl ? theme.colors.primary : theme.colors.border,
+                          backgroundColor: level === lvl ? ORANGE : (isDark ? theme.colors.card : theme.colors.surface),
+                          borderColor: level === lvl ? ORANGE : theme.colors.border,
                         }
                       ]}
                       onPress={() => setLevel(lvl)}
@@ -330,8 +369,8 @@ const CreateCourseScreen = () => {
                       style={[
                         styles.optionChip,
                         {
-                          backgroundColor: language === lang ? theme.colors.primary : (isDark ? theme.colors.card : theme.colors.surface),
-                          borderColor: language === lang ? theme.colors.primary : theme.colors.border,
+                          backgroundColor: language === lang ? ORANGE : (isDark ? theme.colors.card : theme.colors.surface),
+                          borderColor: language === lang ? ORANGE : theme.colors.border,
                         }
                       ]}
                       onPress={() => setLanguage(lang)}
@@ -346,16 +385,89 @@ const CreateCourseScreen = () => {
                   ))}
                 </View>
               </View>
-            </AppCard>
+            </View>
           </Animated.View>
 
           {/* Right Column - Media & Materials */}
           <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.sideColumn}>
-            {/* Thumbnail Card */}
-            <AppCard style={styles.formCard}>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                Course Thumbnail
-              </Text>
+
+            {/* Creation Mode Section */}
+            <View style={styles.formCard}>
+              <View style={styles.sectionHeader}>
+                <View style={[styles.sectionIconWrap, { backgroundColor: '#8B5CF6' + '18' }]}>
+                  <Icon name="sparkles" size={18} color="#8B5CF6" />
+                </View>
+                <View style={styles.sectionTitleBlock}>
+                  <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Creation Mode</Text>
+                  <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
+                    How will content be created?
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.sectionDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#8B5CF6' + '12' }]} />
+
+              <TouchableOpacity
+                style={[
+                  styles.modeOption,
+                  creationMode === 'ai' && { borderColor: '#8B5CF6', backgroundColor: '#8B5CF6' + '10' },
+                  creationMode !== 'ai' && { borderColor: theme.colors.border },
+                ]}
+                onPress={() => setCreationMode('ai')}
+              >
+                <View style={[styles.modeIconWrap, { backgroundColor: creationMode === 'ai' ? '#8B5CF6' : theme.colors.surface }]}>
+                  <Icon name="sparkles" size={20} color={creationMode === 'ai' ? '#fff' : theme.colors.textSecondary} />
+                </View>
+                <View style={styles.modeTextWrap}>
+                  <Text style={[styles.modeTitle, { color: theme.colors.textPrimary }]}>AI Generated</Text>
+                  <Text style={[styles.modeSubtitle, { color: theme.colors.textSecondary }]}>
+                    Enter topic names — AI generates content automatically
+                  </Text>
+                </View>
+                {creationMode === 'ai' && (
+                  <Icon name="checkmark-circle" size={22} color="#8B5CF6" />
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modeOption,
+                  { marginTop: 10 },
+                  creationMode === 'manual' && { borderColor: ORANGE, backgroundColor: ORANGE + '10' },
+                  creationMode !== 'manual' && { borderColor: theme.colors.border },
+                ]}
+                onPress={() => setCreationMode('manual')}
+              >
+                <View style={[styles.modeIconWrap, { backgroundColor: creationMode === 'manual' ? ORANGE : theme.colors.surface }]}>
+                  <Icon name="videocam" size={20} color={creationMode === 'manual' ? '#fff' : theme.colors.textSecondary} />
+                </View>
+                <View style={styles.modeTextWrap}>
+                  <Text style={[styles.modeTitle, { color: theme.colors.textPrimary }]}>Manual (Videos)</Text>
+                  <Text style={[styles.modeSubtitle, { color: theme.colors.textSecondary }]}>
+                    Upload YouTube links, PDFs and files yourself
+                  </Text>
+                </View>
+                {creationMode === 'manual' && (
+                  <Icon name="checkmark-circle" size={22} color={ORANGE} />
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Media / Thumbnail Section */}
+            <View style={styles.formCard}>
+              <View style={styles.sectionHeader}>
+                <View style={[styles.sectionIconWrap, { backgroundColor: '#EC4899' + '18' }]}>
+                  <Icon name="image" size={18} color="#EC4899" />
+                </View>
+                <View style={styles.sectionTitleBlock}>
+                  <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Course Thumbnail</Text>
+                  <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
+                    Upload a cover image for your course
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.sectionDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#EC4899' + '12' }]} />
 
               {thumbnailImage ? (
                 <View style={styles.thumbnailPreviewContainer}>
@@ -373,65 +485,101 @@ const CreateCourseScreen = () => {
                 </View>
               ) : (
                 <TouchableOpacity
-                  style={[styles.uploadPlaceholder, { borderColor: theme.colors.border, backgroundColor: isDark ? theme.colors.card : theme.colors.background }]}
+                  style={[
+                    styles.uploadPlaceholder,
+                    {
+                      borderColor: isDark ? 'rgba(255,255,255,0.2)' : ORANGE + '50',
+                      backgroundColor: isDark ? 'rgba(255,140,66,0.04)' : 'rgba(255,140,66,0.04)',
+                    },
+                  ]}
                   onPress={handleImagePick}
                   disabled={uploadingImage}
                 >
-                  <Icon name="cloud-upload-outline" size={36} color={theme.colors.textTertiary} />
-                  <Text style={[styles.uploadText, { color: theme.colors.textSecondary }]}>
-                    {uploadingImage ? 'Uploading...' : 'Click to upload'}
+                  <View style={[styles.uploadIconCircle, { backgroundColor: ORANGE + '18' }]}>
+                    <Icon name="camera-outline" size={32} color={ORANGE} />
+                  </View>
+                  <Text style={[styles.uploadText, { color: theme.colors.textPrimary }]}>
+                    {uploadingImage ? 'Uploading...' : 'Click to upload thumbnail'}
                   </Text>
                   <Text style={[styles.uploadHint, { color: theme.colors.textTertiary }]}>
                     PNG, JPG up to 5MB
                   </Text>
                 </TouchableOpacity>
               )}
-            </AppCard>
+            </View>
 
-            {/* Materials Card */}
-            <AppCard style={styles.formCard}>
-              <View style={styles.cardHeader}>
-                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                  Course Materials
-                </Text>
+            {/* Course Materials Section */}
+            <View style={styles.formCard}>
+              <View style={styles.sectionHeaderRow}>
+                <View style={styles.sectionHeader}>
+                  <View style={[styles.sectionIconWrap, { backgroundColor: '#06B6D4' + '18' }]}>
+                    <Icon name="folder-open" size={18} color="#06B6D4" />
+                  </View>
+                  <View style={styles.sectionTitleBlock}>
+                    <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                      Course Materials
+                    </Text>
+                    <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
+                      PDFs, images and files
+                    </Text>
+                  </View>
+                </View>
                 <TouchableOpacity
-                  style={[styles.addMaterialBtn, { backgroundColor: theme.colors.primary + '15' }]}
+                  style={[styles.addMaterialBtn, { backgroundColor: ORANGE + '18', borderColor: ORANGE + '30' }]}
                   onPress={() => setShowAddMaterialModal(true)}
                 >
-                  <Icon name="add" size={18} color={theme.colors.primary} />
+                  <Icon name="add" size={18} color={ORANGE} />
                 </TouchableOpacity>
               </View>
 
+              <View style={[styles.sectionDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#06B6D4' + '12' }]} />
+
               {materials.length === 0 ? (
-                <View style={[styles.emptyMaterials, { borderColor: theme.colors.border }]}>
+                <View style={[styles.emptyMaterials, { borderColor: isDark ? 'rgba(255,255,255,0.15)' : theme.colors.border }]}>
                   <Icon name="folder-open-outline" size={28} color={theme.colors.textTertiary} />
                   <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
                     No materials added
                   </Text>
+                  <Text style={[styles.emptyHint, { color: theme.colors.textTertiary }]}>
+                    Tap + above to add files
+                  </Text>
                 </View>
               ) : (
                 <View style={styles.materialsList}>
-                  {materials.map((material) => (
-                    <View
-                      key={material.id}
-                      style={[styles.materialItem, { backgroundColor: isDark ? theme.colors.backgroundSecondary : theme.colors.background, borderColor: theme.colors.border }]}
-                    >
-                      <Icon
-                        name={material.type === 'pdf' ? 'document-text-outline' : material.type === 'image' ? 'image-outline' : 'code-slash-outline'}
-                        size={18}
-                        color={theme.colors.primary}
-                      />
-                      <Text style={[styles.materialName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                        {material.fileName || material.uri || 'Material'}
-                      </Text>
-                      <TouchableOpacity onPress={() => handleRemoveMaterial(material.id)}>
-                        <Icon name="close-circle" size={20} color={theme.colors.error} />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
+                  {materials.map((material) => {
+                    const matType = material.type || 'file';
+                    const matColor = matType === 'pdf' ? '#EF4444' : matType === 'image' ? '#EC4899' : '#06B6D4';
+                    return (
+                      <View
+                        key={material.id}
+                        style={[
+                          styles.materialItem,
+                          {
+                            backgroundColor: isDark ? theme.colors.backgroundSecondary : theme.colors.background,
+                            borderColor: theme.colors.border,
+                            borderLeftColor: matColor,
+                          },
+                        ]}
+                      >
+                        <View style={[styles.materialIconWrap, { backgroundColor: matColor + '18' }]}>
+                          <Icon
+                            name={matType === 'pdf' ? 'document-text-outline' : matType === 'image' ? 'image-outline' : 'code-slash-outline'}
+                            size={18}
+                            color={matColor}
+                          />
+                        </View>
+                        <Text style={[styles.materialName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                          {material.fileName || material.uri || 'Material'}
+                        </Text>
+                        <TouchableOpacity onPress={() => handleRemoveMaterial(material.id)}>
+                          <Icon name="close-circle" size={20} color={theme.colors.error} />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
-            </AppCard>
+            </View>
           </Animated.View>
         </View>
 
@@ -472,40 +620,6 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       paddingBottom: 40,
     },
 
-    // Header Section
-    headerSection: {
-      marginBottom: 24,
-      width: '100%',
-    },
-    headerTextContainer: {
-      width: '100%',
-    },
-    titleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      marginBottom: 4,
-      flexWrap: 'wrap',
-    },
-    backButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
-      justifyContent: 'center',
-      alignItems: 'center',
-      ...theme.shadows.sm,
-    },
-    pageTitle: {
-      fontSize: isMobile ? 20 : 28,
-      fontWeight: '700',
-      fontFamily: theme.typography.fontFamily.bold,
-      flex: isMobile ? 1 : undefined,
-    },
-    pageSubtitle: {
-      fontSize: 14,
-      fontFamily: theme.typography.fontFamily.regular,
-    },
-
     // Form Grid
     formGrid: {
       flexDirection: isTablet ? 'row' : 'column',
@@ -522,21 +636,55 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       gap: 20,
     },
 
-    // Cards
+    // Form Cards
     formCard: {
+      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF',
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)',
       padding: isMobile ? 16 : 20,
+      ...(Platform.OS === 'web' && {
+        boxShadow: isDark ? 'none' : '0 1px 8px rgba(26,26,46,0.06)',
+      }),
     },
-    cardHeader: {
+
+    // Section headers
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 0,
+    },
+    sectionHeaderRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 16,
+      alignItems: 'flex-start',
+      marginBottom: 0,
     },
-    cardTitle: {
-      fontSize: 16,
+    sectionIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    sectionTitleBlock: {
+      flex: 1,
+    },
+    sectionTitle: {
+      fontSize: 15,
       fontWeight: '600',
-      marginBottom: 16,
       fontFamily: theme.typography.fontFamily.semiBold,
+      marginBottom: 1,
+    },
+    sectionSubtitle: {
+      fontSize: 12,
+      fontFamily: theme.typography.fontFamily.regular,
+    },
+    sectionDivider: {
+      height: 1,
+      borderRadius: 1,
+      marginVertical: 16,
     },
 
     // Options
@@ -558,7 +706,7 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       paddingHorizontal: 18,
       paddingVertical: 10,
       borderRadius: 20,
-      borderWidth: 1,
+      borderWidth: 1.5,
     },
     optionChipText: {
       fontSize: 14,
@@ -596,10 +744,18 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       alignItems: 'center',
       gap: 8,
     },
+    uploadIconCircle: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
     uploadText: {
       fontSize: 14,
-      fontWeight: '500',
-      fontFamily: theme.typography.fontFamily.medium,
+      fontWeight: '600',
+      fontFamily: theme.typography.fontFamily.semiBold,
     },
     uploadHint: {
       fontSize: 12,
@@ -608,9 +764,10 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
 
     // Materials
     addMaterialBtn: {
-      width: 32,
-      height: 32,
-      borderRadius: 8,
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      borderWidth: 1,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -620,10 +777,15 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       borderWidth: 1,
       borderStyle: 'dashed',
       alignItems: 'center',
-      gap: 8,
+      gap: 6,
     },
     emptyText: {
       fontSize: 13,
+      fontWeight: '500',
+      fontFamily: theme.typography.fontFamily.medium,
+    },
+    emptyHint: {
+      fontSize: 12,
       fontFamily: theme.typography.fontFamily.regular,
     },
     materialsList: {
@@ -635,12 +797,49 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       padding: 12,
       borderRadius: 8,
       borderWidth: 1,
+      borderLeftWidth: 3,
       gap: 10,
+    },
+    materialIconWrap: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     materialName: {
       flex: 1,
       fontSize: 13,
       fontFamily: theme.typography.fontFamily.regular,
+    },
+
+    // Creation Mode
+    modeOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderRadius: 12,
+      borderWidth: 1.5,
+      padding: 12,
+      gap: 12,
+    },
+    modeIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modeTextWrap: {
+      flex: 1,
+    },
+    modeTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      marginBottom: 2,
+    },
+    modeSubtitle: {
+      fontSize: 12,
+      lineHeight: 16,
     },
 
     // Actions

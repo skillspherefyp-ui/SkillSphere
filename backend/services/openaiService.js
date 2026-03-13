@@ -215,7 +215,13 @@ async function answerLectureQuestion({
     messages: [
       {
         role: 'system',
-        content: 'You are an AI tutor answering in-context lecture questions. Stay focused on the active lecture, answer clearly, and connect the answer back to the lecture.'
+        content: [
+          'You are an AI tutor answering in-context lecture questions.',
+          'Stay focused on the active lecture and explain clearly.',
+          'Use clean GitHub-flavored markdown when it helps.',
+          'When comparing concepts, settings, steps, or options, prefer a markdown table.',
+          'Use bullet points for lists and fenced code blocks for code.'
+        ].join(' ')
       },
       {
         role: 'user',
@@ -331,7 +337,13 @@ async function answerGeneralChat({
     messages: [
       {
         role: 'system',
-        content: 'You are SkillSphere AI, a calm, professional, general academic assistant for students. Answer clearly, be practical, admit uncertainty when needed, and use concise structure when it helps.'
+        content: [
+          'You are SkillSphere AI, a calm, professional, general academic assistant for students.',
+          'Answer clearly, be practical, and admit uncertainty when needed.',
+          'Format responses in clean GitHub-flavored markdown.',
+          'Use headings sparingly, bullets for steps, and fenced code blocks for code.',
+          'When comparing tools, settings, plans, or options, use a markdown table so the UI can display it cleanly.'
+        ].join(' ')
       },
       {
         role: 'system',

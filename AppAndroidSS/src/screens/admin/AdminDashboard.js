@@ -19,7 +19,6 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 // UI Components
 import MainLayout from '../../components/ui/MainLayout';
-import PageTitleRow from '../../components/ui/PageTitleRow';
 import AppCard from '../../components/ui/AppCard';
 import AppButton from '../../components/ui/AppButton';
 import StatusBadge from '../../components/ui/StatusBadge';
@@ -76,7 +75,15 @@ const BarChart = ({ data, theme, isDark, height = 200 }) => {
         ))}
       </View>
       <View style={barChartStyles.chartArea}>
-        <View style={[barChartStyles.barsContainer, { height }]}>
+        <View
+          style={[
+            barChartStyles.barsContainer,
+            {
+              height,
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.1)',
+            },
+          ]}
+        >
           {data.map((item, index) => {
             const barHeight = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
             return (
@@ -129,7 +136,6 @@ const barChartStyles = StyleSheet.create({
     justifyContent: 'space-around',
     borderLeftWidth: 1,
     borderBottomWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 8,
   },
   barWrapper: {
@@ -175,14 +181,25 @@ const LineChart = ({ data, theme, isDark, height = 200 }) => {
         })}
       </View>
       <View style={lineChartStyles.chartArea}>
-        <View style={[lineChartStyles.chartContainer, { height }]}>
+        <View
+          style={[
+            lineChartStyles.chartContainer,
+            {
+              height,
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.1)',
+            },
+          ]}
+        >
           {/* Grid lines */}
           {[0, 1, 2, 3, 4].map((_, i) => (
             <View
               key={i}
               style={[
                 lineChartStyles.gridLine,
-                { top: (i * height) / 4, backgroundColor: 'rgba(255,255,255,0.05)' },
+                {
+                  top: (i * height) / 4,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(26,26,46,0.05)',
+                },
               ]}
             />
           ))}
@@ -270,7 +287,6 @@ const lineChartStyles = StyleSheet.create({
     position: 'relative',
     borderLeftWidth: 1,
     borderBottomWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
   },
   gridLine: {
     position: 'absolute',
@@ -307,61 +323,89 @@ const lineChartStyles = StyleSheet.create({
   },
 });
 
-// Enhanced Stats Card Component
+// ============================================
+// REDESIGNED STAT CARD COMPONENT
+// ============================================
+
 const DashboardStatCard = ({ icon, iconColor, value, label, change, theme, isDark, style }) => {
   const isPositive = change && change.startsWith('+');
 
   return (
-    <View style={[dashboardStatStyles.card, { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderColor: theme.colors.border }, style]}>
-      <View style={dashboardStatStyles.header}>
-        <Text style={[dashboardStatStyles.label, { color: theme.colors.textSecondary }]}>{label}</Text>
-        <View style={[dashboardStatStyles.iconContainer, { backgroundColor: iconColor + '15' }]}>
-          <Icon name={icon} size={20} color={iconColor} />
+    <View
+      style={[
+        dsc.card,
+        {
+          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF',
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+          borderLeftColor: iconColor,
+        },
+        style,
+      ]}
+    >
+      <View style={dsc.top}>
+        <Text style={[dsc.label, { color: theme.colors.textSecondary }]}>{label}</Text>
+        <View style={[dsc.iconCircle, { backgroundColor: iconColor + '18' }]}>
+          <Icon name={icon} size={18} color={iconColor} />
         </View>
       </View>
-      <Text style={[dashboardStatStyles.value, { color: theme.colors.textPrimary }]}>
+      <Text style={[dsc.value, { color: theme.colors.textPrimary }]}>
         {typeof value === 'number' ? value.toLocaleString() : value}
       </Text>
       {change && (
-        <Text style={[dashboardStatStyles.change, { color: isPositive ? '#10B981' : '#EF4444' }]}>
-          {change} from last month
-        </Text>
+        <View style={dsc.changeRow}>
+          <Icon
+            name={isPositive ? 'trending-up-outline' : 'trending-down-outline'}
+            size={13}
+            color={isPositive ? '#10B981' : '#EF4444'}
+          />
+          <Text style={[dsc.change, { color: isPositive ? '#10B981' : '#EF4444' }]}>
+            {change} from last month
+          </Text>
+        </View>
       )}
     </View>
   );
 };
 
-const dashboardStatStyles = StyleSheet.create({
+const dsc = StyleSheet.create({
   card: {
-    padding: 20,
-    borderRadius: 16,
+    padding: 18,
+    borderRadius: 14,
     borderWidth: 1,
+    borderLeftWidth: 4,
   },
-  header: {
+  top: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   label: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
+    flex: 1,
   },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+  iconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
   value: {
-    fontSize: 32,
-    fontWeight: '700',
-    marginBottom: 4,
+    fontSize: 34,
+    fontWeight: '900',
+    marginBottom: 6,
+    letterSpacing: -0.5,
+  },
+  changeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   change: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 
@@ -575,7 +619,20 @@ const AdminDashboard = () => {
         onSettings={() => navigation.navigate('Settings')}
       >
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          <PageTitleRow title="Admin Dashboard" subtitle="Welcome back! Here's your platform overview." />
+          {/* Loading banner */}
+          <View style={styles.pageBanner}>
+            <View style={styles.bannerLeft}>
+              <View style={[styles.bannerIconCircle, { backgroundColor: '#6366F1' + '20' }]}>
+                <Icon name="grid" size={24} color="#6366F1" />
+              </View>
+              <View>
+                <Text style={[styles.bannerTitle, { color: theme.colors.textPrimary }]}>Admin Dashboard</Text>
+                <Text style={[styles.bannerSubtitle, { color: theme.colors.textSecondary }]}>
+                  Welcome back! Here's your platform overview.
+                </Text>
+              </View>
+            </View>
+          </View>
           <View style={styles.section}>
             <SkeletonDashboardStats count={4} />
           </View>
@@ -615,16 +672,27 @@ const AdminDashboard = () => {
           />
         }
       >
-        {/* Page Title Row */}
-        <PageTitleRow
-          title="Admin Dashboard"
-          subtitle="Welcome back! Here's your platform overview."
-          primaryAction={{
-            label: 'Create New Course',
-            icon: 'add',
-            onPress: () => navigation.navigate('CreateCourse'),
-          }}
-        />
+        {/* Page Banner — replaces PageTitleRow */}
+        <View style={styles.pageBanner}>
+          <View style={styles.bannerLeft}>
+            <View style={[styles.bannerIconCircle, { backgroundColor: '#6366F1' + '20' }]}>
+              <Icon name="grid" size={24} color="#6366F1" />
+            </View>
+            <View>
+              <Text style={[styles.bannerTitle, { color: theme.colors.textPrimary }]}>Admin Dashboard</Text>
+              <Text style={[styles.bannerSubtitle, { color: theme.colors.textSecondary }]}>
+                Welcome back! Here's your platform overview.
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.createBtn}
+            onPress={() => navigation.navigate('CreateCourse')}
+          >
+            <Icon name="add" size={16} color="#FFFFFF" />
+            <Text style={styles.createBtnText}>Create New Course</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Stats Section - Dynamic Data */}
         <View style={styles.statsSection}>
@@ -677,15 +745,28 @@ const AdminDashboard = () => {
             entering={FadeInDown.duration(400).delay(100)}
             style={styles.chartCard}
           >
-            <AppCard style={styles.chartCardInner}>
+            <AppCard
+              style={[
+                styles.chartCardInner,
+                {
+                  borderLeftWidth: 3,
+                  borderLeftColor: '#6366F1',
+                },
+              ]}
+            >
               <View style={styles.chartHeader}>
-                <View>
-                  <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
-                    Course Growth
-                  </Text>
-                  <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
-                    Total courses created over time
-                  </Text>
+                <View style={styles.chartHeaderLeft}>
+                  <View style={styles.chartIconBadge}>
+                    <Icon name="bar-chart" size={16} color="#6366F1" />
+                  </View>
+                  <View>
+                    <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
+                      Course Growth
+                    </Text>
+                    <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
+                      Total courses created over time
+                    </Text>
+                  </View>
                 </View>
                 <Icon name="trending-up" size={20} color="#10B981" />
               </View>
@@ -703,15 +784,28 @@ const AdminDashboard = () => {
             entering={FadeInDown.duration(400).delay(200)}
             style={styles.chartCard}
           >
-            <AppCard style={styles.chartCardInner}>
+            <AppCard
+              style={[
+                styles.chartCardInner,
+                {
+                  borderLeftWidth: 3,
+                  borderLeftColor: '#22D3EE',
+                },
+              ]}
+            >
               <View style={styles.chartHeader}>
-                <View>
-                  <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
-                    Student Enrollment
-                  </Text>
-                  <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
-                    Active student count growth
-                  </Text>
+                <View style={styles.chartHeaderLeft}>
+                  <View style={[styles.chartIconBadge, { backgroundColor: '#22D3EE' + '18' }]}>
+                    <Icon name="trending-up" size={16} color="#22D3EE" />
+                  </View>
+                  <View>
+                    <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
+                      Student Enrollment
+                    </Text>
+                    <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
+                      Active student count growth
+                    </Text>
+                  </View>
                 </View>
                 <Icon name="trending-up" size={20} color="#10B981" />
               </View>
@@ -728,13 +822,18 @@ const AdminDashboard = () => {
         {/* Recent Courses Table - Dynamic Data */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <View>
-              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-                Recent Courses
-              </Text>
-              <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
-                Latest course activity
-              </Text>
+            <View style={styles.sectionTitleRow}>
+              <View style={styles.sectionIconBadge}>
+                <Icon name="book" size={16} color="#6366F1" />
+              </View>
+              <View>
+                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                  Recent Courses
+                </Text>
+                <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
+                  Latest course activity
+                </Text>
+              </View>
             </View>
             <TouchableOpacity
               style={[styles.viewAllButton, { backgroundColor: theme.colors.primary }]}
@@ -778,6 +877,11 @@ const AdminDashboard = () => {
                   key={course.id || index}
                   style={[
                     styles.tableRow,
+                    index % 2 === 1 && {
+                      backgroundColor: isDark
+                        ? 'rgba(255,255,255,0.02)'
+                        : 'rgba(99,102,241,0.03)',
+                    },
                     index < recentCoursesData.length - 1 && {
                       borderBottomColor: theme.colors.border,
                       borderBottomWidth: 1,
@@ -898,11 +1002,72 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       paddingHorizontal: isMobile ? 16 : 24,
       marginBottom: 24,
     },
+
+    // ---- Page Banner ----
+    pageBanner: {
+      flexDirection: isTablet ? 'row' : 'column',
+      justifyContent: 'space-between',
+      alignItems: isTablet ? 'center' : 'flex-start',
+      paddingHorizontal: isMobile ? 16 : 24,
+      paddingVertical: 20,
+      marginBottom: 8,
+      gap: 12,
+    },
+    bannerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      flex: isTablet ? 1 : undefined,
+    },
+    bannerIconCircle: {
+      width: 48,
+      height: 48,
+      borderRadius: 14,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerTitle: {
+      fontSize: isMobile ? 20 : 26,
+      fontWeight: '800',
+    },
+    bannerSubtitle: {
+      fontSize: 13,
+      marginTop: 2,
+    },
+    createBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      borderRadius: 10,
+      backgroundColor: '#FF8C42',
+    },
+    createBtnText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+
+    // ---- Section Header ----
     sectionHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'flex-start',
       marginBottom: 16,
+    },
+    sectionTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    sectionIconBadge: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      backgroundColor: '#6366F1' + '15',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     sectionTitle: {
       fontSize: 18,
@@ -957,6 +1122,20 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       justifyContent: 'space-between',
       alignItems: 'flex-start',
       marginBottom: 16,
+    },
+    chartHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      flex: 1,
+    },
+    chartIconBadge: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      backgroundColor: '#6366F1' + '18',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     chartTitle: {
       fontSize: 16,

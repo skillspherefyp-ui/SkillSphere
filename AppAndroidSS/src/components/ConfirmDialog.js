@@ -30,26 +30,40 @@ const ConfirmDialog = ({
 
   const maxWidth = sizeConfig[size] || sizeConfig.small;
 
-  // Glassmorphism styles (Section 27.2)
+  // Glassmorphism styles — full effect in both dark and light modes (Section 27.2)
   const getDialogStyle = () => {
     const baseStyle = {
-      backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
+      width: '100%',
       maxWidth,
+      borderRadius: 24,
+      borderWidth: 1,
     };
 
-    // Add glassmorphism for web (Section 27.2)
-    if (isWeb && isDark) {
+    if (isWeb) {
       return {
         ...baseStyle,
-        backgroundColor: theme.glass.background,
-        backdropFilter: `blur(${theme.glass.backdropBlur}px)`,
-        WebkitBackdropFilter: `blur(${theme.glass.backdropBlur}px)`,
-        borderColor: theme.glass.border,
-        borderWidth: 1,
+        backgroundColor: isDark ? 'rgba(15,15,30,0.92)' : 'rgba(255,255,255,0.95)',
+        borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 20 },
+        shadowOpacity: isDark ? 0.5 : 0.15,
+        shadowRadius: 40,
       };
     }
 
-    return baseStyle;
+    // Native (mobile)
+    return {
+      ...baseStyle,
+      backgroundColor: isDark ? '#1A1A2E' : '#FFFFFF',
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.3,
+      shadowRadius: 20,
+      elevation: 15,
+    };
   };
 
   return (
@@ -60,10 +74,10 @@ const ConfirmDialog = ({
       onRequestClose={onCancel}
     >
       <TouchableOpacity
-        style={[
-          styles.overlay,
-          { backgroundColor: theme.colors.overlay }
-        ]}
+        style={[styles.overlay, {
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          ...(isWeb ? { backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' } : {}),
+        }]}
         activeOpacity={1}
         onPress={onCancel}
       >
@@ -71,7 +85,6 @@ const ConfirmDialog = ({
           style={[
             styles.dialog,
             getDialogStyle(),
-            theme.shadows.xl,
           ]}
           activeOpacity={1}
         >
@@ -154,8 +167,6 @@ const styles = StyleSheet.create({
     padding: 24, // Section spacing
   },
   dialog: {
-    width: '100%',
-    borderRadius: 16, // Section 19.2: Radius 16px
     padding: 24,      // Section 19.2: Padding 24px
     position: 'relative',
   },

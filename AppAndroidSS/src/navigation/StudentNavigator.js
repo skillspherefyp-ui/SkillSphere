@@ -11,9 +11,11 @@ import CertificatesScreen from '../screens/student/CertificatesScreen';
 import NotificationsScreen from '../screens/student/NotificationsScreen';
 import TodoScreen from '../screens/student/TodoScreen';
 import PaymentScreen from '../screens/student/PaymentScreen';
+import CertificatePreviewScreen from '../screens/student/CertificatePreviewScreen';
 import ProgressDetailScreen from '../screens/student/ProgressDetailScreen';
 import CategoriesScreen from '../screens/student/CategoriesScreen';
 import EnrolledCoursesScreen from '../screens/student/EnrolledCoursesScreen';
+import StudentSettingsScreen from '../screens/student/StudentSettingsScreen';
 
 const Stack = createStackNavigator();
 
@@ -39,6 +41,8 @@ const StudentNavigator = () => {
       <Stack.Screen name="EnrolledCourses" component={EnrolledCoursesScreen} />
       <Stack.Screen name="AITutor" component={AIChatScreen} />
       <Stack.Screen name="Certificates" component={CertificatesScreen} />
+      <Stack.Screen name="CertificatePreview" component={CertificatePreviewScreen} />
+      <Stack.Screen name="Settings" component={StudentSettingsScreen} />
     </Stack.Navigator>
   );
 };

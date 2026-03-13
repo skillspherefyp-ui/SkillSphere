@@ -26,6 +26,9 @@ const AITutorSession = require('./AITutorSession');
 const AITutorMessage = require('./AITutorMessage');
 const AIStudentProgress = require('./AIStudentProgress');
 const AIAudioAsset = require('./AIAudioAsset');
+const LectureChatMessage = require('./LectureChatMessage');
+const DailyActivity = require('./DailyActivity');
+const Todo = require('./Todo');
 const { sequelize } = require('../config/database');
 
 // Define associations
@@ -197,6 +200,24 @@ AIAudioAsset.belongsTo(AILecture, { foreignKey: 'lectureId', as: 'lecture', onDe
 AITutorSession.hasMany(AIAudioAsset, { foreignKey: 'sessionId', as: 'audioAssets', onDelete: 'CASCADE' });
 AIAudioAsset.belongsTo(AITutorSession, { foreignKey: 'sessionId', as: 'session', onDelete: 'CASCADE' });
 
+// User - Todo
+User.hasMany(Todo, { foreignKey: 'userId', as: 'todos', onDelete: 'CASCADE' });
+Todo.belongsTo(User, { foreignKey: 'userId', as: 'user', onDelete: 'CASCADE' });
+
+// User - DailyActivity
+User.hasMany(DailyActivity, { foreignKey: 'userId', as: 'dailyActivities', onDelete: 'CASCADE' });
+DailyActivity.belongsTo(User, { foreignKey: 'userId', as: 'user', onDelete: 'CASCADE' });
+
+// LectureChatMessage associations
+User.hasMany(LectureChatMessage, { foreignKey: 'userId', as: 'lectureChatMessages', onDelete: 'CASCADE' });
+LectureChatMessage.belongsTo(User, { foreignKey: 'userId', as: 'user', onDelete: 'CASCADE' });
+
+Course.hasMany(LectureChatMessage, { foreignKey: 'courseId', as: 'lectureChatMessages', onDelete: 'CASCADE' });
+LectureChatMessage.belongsTo(Course, { foreignKey: 'courseId', as: 'course', onDelete: 'CASCADE' });
+
+Topic.hasMany(LectureChatMessage, { foreignKey: 'topicId', as: 'lectureChatMessages', onDelete: 'CASCADE' });
+LectureChatMessage.belongsTo(Topic, { foreignKey: 'topicId', as: 'topic', onDelete: 'CASCADE' });
+
 module.exports = {
   sequelize,
   User,
@@ -226,6 +247,10 @@ module.exports = {
   AITutorSession,
   AITutorMessage,
   AIStudentProgress,
-  AIAudioAsset
+  AIAudioAsset,
+  LectureChatMessage,
+  DailyActivity,
+  Todo,
 };
+
 

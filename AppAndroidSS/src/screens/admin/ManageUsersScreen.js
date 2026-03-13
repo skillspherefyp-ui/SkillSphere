@@ -24,6 +24,8 @@ import { useTheme } from '../../context/ThemeContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { adminAPI } from '../../services/apiClient';
 
+const ORANGE = '#FF8C42';
+
 const ManageUsersScreen = () => {
   const { user, logout } = useAuth();
   const { theme, isDark } = useTheme();
@@ -285,13 +287,39 @@ const ManageUsersScreen = () => {
       <View
         style={[
           styles.userCard,
-          { backgroundColor: isDark ? theme.colors.card : theme.colors.surface },
+          {
+            backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+            borderRadius: 16,
+          },
         ]}
       >
+        {/* Left accent bar */}
+        <View style={[styles.cardAccentBar, { backgroundColor: ORANGE }]} />
+
         {/* Avatar & Info */}
         <View style={styles.userHeader}>
-          <View style={[styles.avatar, { backgroundColor: userItem.isActive === false ? theme.colors.error : userType === 'admin' ? '#6366F1' : '#8B5CF6' }]}>
-            <Text style={styles.avatarText}>{userItem.name?.charAt(0)?.toUpperCase() || 'U'}</Text>
+          <View
+            style={[
+              styles.avatar,
+              {
+                backgroundColor: userItem.isActive === false
+                  ? 'rgba(239,68,68,0.15)'
+                  : 'rgba(255,140,66,0.15)',
+                borderWidth: 2,
+                borderColor: userItem.isActive === false
+                  ? 'rgba(239,68,68,0.3)'
+                  : 'rgba(255,140,66,0.3)',
+              },
+            ]}
+          >
+            <Text style={[
+              styles.avatarText,
+              { color: userItem.isActive === false ? '#EF4444' : ORANGE },
+            ]}>
+              {userItem.name?.charAt(0)?.toUpperCase() || 'U'}
+            </Text>
           </View>
           <View style={styles.userInfo}>
             <Text style={[styles.userName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
@@ -301,14 +329,19 @@ const ManageUsersScreen = () => {
               {userItem.email || '-'}
             </Text>
           </View>
-        </View>
-
-        {/* Status Badge */}
-        <View style={styles.statusRow}>
+          {/* Status Badge inline with header */}
           <View
             style={[
               styles.statusBadge,
-              { backgroundColor: userItem.isActive !== false ? '#10B98120' : '#EF444420' },
+              {
+                backgroundColor: userItem.isActive !== false
+                  ? 'rgba(16,185,129,0.12)'
+                  : 'rgba(239,68,68,0.12)',
+                borderWidth: 1,
+                borderColor: userItem.isActive !== false
+                  ? 'rgba(16,185,129,0.25)'
+                  : 'rgba(239,68,68,0.25)',
+              },
             ]}
           >
             <View
@@ -331,40 +364,73 @@ const ManageUsersScreen = () => {
         {/* Meta Info */}
         <View style={styles.metaRow}>
           <View style={styles.metaItem}>
-            <Icon name="time-outline" size={14} color={theme.colors.textTertiary} />
+            <View style={styles.metaIconWrap}>
+              <Icon name="time-outline" size={13} color={ORANGE} />
+            </View>
             <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
               {userItem.createdAt ? new Date(userItem.createdAt).toLocaleDateString() : 'N/A'}
             </Text>
           </View>
           <View style={styles.metaItem}>
-            <Icon name={userType === 'admin' ? 'shield-checkmark-outline' : 'star-outline'} size={14} color={theme.colors.textTertiary} />
+            <View style={styles.metaIconWrap}>
+              <Icon
+                name={userType === 'admin' ? 'shield-checkmark-outline' : 'star-outline'}
+                size={13}
+                color={ORANGE}
+              />
+            </View>
             <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
               {userTypeLabel}
             </Text>
           </View>
         </View>
 
+        {/* Divider */}
+        <View style={[styles.cardDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.06)' }]} />
+
         {/* Actions */}
         <View style={styles.actionRow}>
           {userType === 'admin' && (
             <TouchableOpacity
-              style={[styles.actionBtn, { borderColor: theme.colors.border }]}
+              style={[
+                styles.actionBtn,
+                {
+                  borderColor: 'rgba(255,140,66,0.35)',
+                  borderWidth: 1.5,
+                  backgroundColor: isDark ? 'rgba(255,140,66,0.08)' : 'rgba(255,140,66,0.06)',
+                },
+              ]}
               onPress={() => handleManagePermissions(userItem)}
             >
-              <Icon name="settings-outline" size={16} color={theme.colors.primary} />
-              <Text style={[styles.actionBtnText, { color: theme.colors.primary }]}>Permissions</Text>
+              <Icon name="settings-outline" size={15} color={ORANGE} />
+              <Text style={[styles.actionBtnText, { color: ORANGE }]}>Permissions</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
             style={[
               styles.actionBtn,
               styles.toggleBtn,
-              { backgroundColor: userItem.isActive !== false ? theme.colors.error : '#10B981' },
+              {
+                backgroundColor: userItem.isActive !== false
+                  ? 'rgba(239,68,68,0.12)'
+                  : 'rgba(16,185,129,0.12)',
+                borderWidth: 1.5,
+                borderColor: userItem.isActive !== false
+                  ? 'rgba(239,68,68,0.3)'
+                  : 'rgba(16,185,129,0.3)',
+              },
             ]}
             onPress={() => handleToggleStatus(userItem)}
           >
-            <Icon name={userItem.isActive !== false ? 'close-circle-outline' : 'checkmark-circle-outline'} size={16} color="#FFFFFF" />
-            <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>
+            <Icon
+              name={userItem.isActive !== false ? 'close-circle-outline' : 'checkmark-circle-outline'}
+              size={15}
+              color={userItem.isActive !== false ? '#EF4444' : '#10B981'}
+            />
+            <Text style={[
+              styles.actionBtnText,
+              { color: userItem.isActive !== false ? '#EF4444' : '#10B981' },
+            ]}>
               {userItem.isActive !== false ? 'Deactivate' : 'Activate'}
             </Text>
           </TouchableOpacity>
@@ -385,8 +451,10 @@ const ManageUsersScreen = () => {
         onSettings={() => navigation.navigate('Settings')}
       >
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={{ color: theme.colors.textSecondary, marginTop: 10 }}>Loading {userTypeLabelPlural.toLowerCase()}...</Text>
+          <ActivityIndicator size="large" color={ORANGE} />
+          <Text style={{ color: theme.colors.textSecondary, marginTop: 10 }}>
+            Loading {userTypeLabelPlural.toLowerCase()}...
+          </Text>
         </View>
       </MainLayout>
     );
@@ -407,59 +475,107 @@ const ManageUsersScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Section */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerTextContainer}>
-            <View style={styles.titleRow}>
-              <TouchableOpacity
-                style={[styles.backButton, { backgroundColor: theme.colors.surface }]}
-                onPress={() => navigation.goBack()}
-              >
-                <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
+        {/* Page Header Banner — orange theme matching CourseListScreen */}
+        <View
+          style={[
+            styles.pageHeaderBanner,
+            {
+              backgroundColor: isDark ? 'rgba(255,140,66,0.06)' : 'rgba(255,140,66,0.05)',
+              borderColor: 'rgba(255,140,66,0.15)',
+            },
+          ]}
+        >
+          {/* Left side */}
+          <View style={styles.bannerLeft}>
+            <TouchableOpacity
+              style={[
+                styles.backButton,
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)' },
+              ]}
+              onPress={() => navigation.goBack()}
+            >
+              <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={styles.bannerIconCircle}>
+              <Icon name="person" size={22} color={ORANGE} />
+            </View>
+            <View style={styles.bannerTextGroup}>
               <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>
-                {userTypeLabelPlural}
+                {userType === 'admin' ? 'Manage Admins' : 'Manage Experts'}
+              </Text>
+              <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
+                {userType === 'admin' ? 'Admin accounts and permissions' : 'Expert accounts and permissions'}
               </Text>
             </View>
-            <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
-              Manage {userType} accounts and permissions
-            </Text>
           </View>
+
+          {/* Right side */}
           <TouchableOpacity
-            style={[styles.addButton, { backgroundColor: userType === 'admin' ? '#6366F1' : '#8B5CF6' }]}
+            style={styles.addUserBtn}
             onPress={() => setShowCreateModal(true)}
+            activeOpacity={0.85}
           >
-            <Icon name="add" size={20} color="#FFFFFF" />
-            <Text style={styles.addButtonText}>Add {userTypeLabel}</Text>
+            <Icon name="person-add" size={18} color="#FFFFFF" />
+            <Text style={styles.addUserBtnText}>
+              {userType === 'admin' ? 'New Admin' : 'New Expert'}
+            </Text>
           </TouchableOpacity>
         </View>
 
         {/* Stats Section */}
         <View style={styles.statsSection}>
-          <AppCard style={styles.statCard}>
+          {/* Total */}
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(255,140,66,0.12)' }]}>
+              <Icon name="people" size={20} color={ORANGE} />
+            </View>
+            <Text style={[styles.statValue, { color: ORANGE }]}>{stats.total}</Text>
             <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
               Total {userTypeLabelPlural}
             </Text>
-            <Text style={[styles.statValue, { color: userType === 'admin' ? '#6366F1' : '#8B5CF6' }]}>
-              {stats.total}
-            </Text>
-          </AppCard>
-          <AppCard style={styles.statCard}>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Active
-            </Text>
-            <Text style={[styles.statValue, { color: '#10B981' }]}>
-              {stats.active}
-            </Text>
-          </AppCard>
-          <AppCard style={styles.statCard}>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Inactive
-            </Text>
-            <Text style={[styles.statValue, { color: '#EF4444' }]}>
-              {stats.inactive}
-            </Text>
-          </AppCard>
+          </View>
+
+          {/* Active */}
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+              <Icon name="checkmark-circle" size={20} color="#10B981" />
+            </View>
+            <Text style={[styles.statValue, { color: '#10B981' }]}>{stats.active}</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Active</Text>
+          </View>
+
+          {/* Inactive */}
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(239,68,68,0.12)' }]}>
+              <Icon name="close-circle" size={20} color="#EF4444" />
+            </View>
+            <Text style={[styles.statValue, { color: '#EF4444' }]}>{stats.inactive}</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Inactive</Text>
+          </View>
         </View>
 
         {/* Search & Filter Section */}
@@ -474,29 +590,62 @@ const ManageUsersScreen = () => {
           <View style={styles.filterRow}>
             <View style={styles.filterDropdownContainer}>
               <TouchableOpacity
-                style={[styles.filterBtn, { borderColor: theme.colors.border, backgroundColor: isDark ? theme.colors.card : theme.colors.background }]}
+                style={[
+                  styles.filterBtn,
+                  {
+                    borderColor: statusFilter !== null ? 'rgba(255,140,66,0.4)' : theme.colors.border,
+                    backgroundColor: isDark ? theme.colors.card : theme.colors.background,
+                  },
+                ]}
                 onPress={() => setShowStatusDropdown(!showStatusDropdown)}
               >
-                <Text style={[styles.filterBtnText, { color: theme.colors.textPrimary }]}>
+                <Icon
+                  name="filter"
+                  size={15}
+                  color={statusFilter !== null ? ORANGE : theme.colors.textSecondary}
+                />
+                <Text style={[
+                  styles.filterBtnText,
+                  { color: statusFilter !== null ? ORANGE : theme.colors.textPrimary },
+                ]}>
                   {statusFilter === null ? 'Filter by Status' : statusFilter ? 'Active' : 'Inactive'}
                 </Text>
-                <Icon name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                <Icon name="chevron-down" size={15} color={statusFilter !== null ? ORANGE : theme.colors.textSecondary} />
               </TouchableOpacity>
               {showStatusDropdown && (
-                <View style={[styles.dropdown, { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderColor: theme.colors.border }]}>
+                <View
+                  style={[
+                    styles.dropdown,
+                    {
+                      backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                >
                   {statusOptions.map((option, index) => (
                     <TouchableOpacity
                       key={index}
                       style={[
                         styles.dropdownItem,
-                        statusFilter === option.value && { backgroundColor: theme.colors.primary + '15' }
+                        statusFilter === option.value && {
+                          backgroundColor: 'rgba(255,140,66,0.1)',
+                        },
                       ]}
                       onPress={() => {
                         setStatusFilter(option.value);
                         setShowStatusDropdown(false);
                       }}
                     >
-                      <Text style={[styles.dropdownItemText, { color: theme.colors.textPrimary }]}>
+                      {statusFilter === option.value && (
+                        <Icon name="checkmark" size={14} color={ORANGE} style={{ marginRight: 4 }} />
+                      )}
+                      <Text style={[
+                        styles.dropdownItemText,
+                        {
+                          color: statusFilter === option.value ? ORANGE : theme.colors.textPrimary,
+                          fontWeight: statusFilter === option.value ? '600' : '400',
+                        },
+                      ]}>
                         {option.label}
                       </Text>
                     </TouchableOpacity>
@@ -523,139 +672,378 @@ const ManageUsersScreen = () => {
         )}
       </ScrollView>
 
-      {/* Create Modal */}
+      {/* ─── Create User Modal — Glassmorphic ─── */}
       <Modal
         visible={showCreateModal}
         transparent
         animationType="fade"
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
-                Add New {userTypeLabel}
-              </Text>
-              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                <Icon name="close" size={24} color={theme.colors.textSecondary} />
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 20,
+            ...(Platform.OS === 'web'
+              ? { backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }
+              : {}),
+          }}
+        >
+          <View
+            style={{
+              width: '100%',
+              maxWidth: 480,
+              backgroundColor: isDark ? 'rgba(15,15,30,0.92)' : 'rgba(255,255,255,0.97)',
+              borderRadius: 24,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+              padding: 28,
+              ...(Platform.OS === 'web'
+                ? { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }
+                : {}),
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 20 },
+              shadowOpacity: isDark ? 0.5 : 0.15,
+              shadowRadius: 40,
+              elevation: 20,
+            }}
+          >
+            {/* Modal Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={{ backgroundColor: ORANGE + '20', borderRadius: 10, padding: 10 }}>
+                  <Icon name="person-add" size={20} color={ORANGE} />
+                </View>
+                <View>
+                  <Text style={{ color: isDark ? '#FFFFFF' : '#1A1A2E', fontSize: 18, fontWeight: '800' }}>
+                    Create New {userTypeLabel}
+                  </Text>
+                  <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(26,26,46,0.5)', fontSize: 12, marginTop: 2 }}>
+                    Fill in the details below
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowCreateModal(false)}
+                style={{
+                  padding: 6,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.06)',
+                  borderRadius: 8,
+                }}
+              >
+                <Icon name="close" size={20} color={isDark ? '#FFFFFF' : '#1A1A2E'} />
               </TouchableOpacity>
             </View>
 
-            <AppInput
-              label="Name"
-              value={newUserName}
-              onChangeText={setNewUserName}
-              placeholder={`Enter ${userType} name`}
-              containerStyle={styles.inputContainer}
-            />
-            <AppInput
-              label="Email"
-              value={newUserEmail}
-              onChangeText={setNewUserEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              placeholder={`Enter ${userType} email`}
-              containerStyle={styles.inputContainer}
-            />
-            <AppInput
-              label="Password"
-              value={newUserPassword}
-              onChangeText={setNewUserPassword}
-              secureTextEntry={!showPassword}
-              placeholder={`Enter ${userType} password`}
-              containerStyle={styles.inputContainer}
-              rightIcon={
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                  <Icon name={showPassword ? 'eye-off' : 'eye'} size={20} color={theme.colors.textSecondary} />
-                </TouchableOpacity>
-              }
-            />
+            {/* Form Inputs */}
+            <View style={{ marginBottom: 14 }}>
+              <Text style={{ color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(26,26,46,0.7)', fontSize: 13, fontWeight: '600', marginBottom: 6 }}>
+                Full Name
+              </Text>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.12)',
+                borderRadius: 12,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(26,26,46,0.03)',
+                paddingHorizontal: 14,
+                paddingVertical: 2,
+                gap: 10,
+              }}>
+                <Icon name="person-outline" size={18} color={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(26,26,46,0.4)'} />
+                <AppInput
+                  value={newUserName}
+                  onChangeText={setNewUserName}
+                  placeholder={`Enter ${userType} name`}
+                  containerStyle={{ flex: 1, marginBottom: 0, borderWidth: 0, backgroundColor: 'transparent' }}
+                />
+              </View>
+            </View>
 
-            <View style={styles.modalActions}>
+            <View style={{ marginBottom: 14 }}>
+              <Text style={{ color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(26,26,46,0.7)', fontSize: 13, fontWeight: '600', marginBottom: 6 }}>
+                Email Address
+              </Text>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.12)',
+                borderRadius: 12,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(26,26,46,0.03)',
+                paddingHorizontal: 14,
+                paddingVertical: 2,
+                gap: 10,
+              }}>
+                <Icon name="mail-outline" size={18} color={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(26,26,46,0.4)'} />
+                <AppInput
+                  value={newUserEmail}
+                  onChangeText={setNewUserEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholder={`Enter ${userType} email`}
+                  containerStyle={{ flex: 1, marginBottom: 0, borderWidth: 0, backgroundColor: 'transparent' }}
+                />
+              </View>
+            </View>
+
+            <View style={{ marginBottom: 8 }}>
+              <Text style={{ color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(26,26,46,0.7)', fontSize: 13, fontWeight: '600', marginBottom: 6 }}>
+                Password
+              </Text>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.12)',
+                borderRadius: 12,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(26,26,46,0.03)',
+                paddingHorizontal: 14,
+                paddingVertical: 2,
+                gap: 10,
+              }}>
+                <Icon name="lock-closed-outline" size={18} color={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(26,26,46,0.4)'} />
+                <AppInput
+                  value={newUserPassword}
+                  onChangeText={setNewUserPassword}
+                  secureTextEntry={!showPassword}
+                  placeholder={`Enter ${userType} password`}
+                  containerStyle={{ flex: 1, marginBottom: 0, borderWidth: 0, backgroundColor: 'transparent' }}
+                  rightIcon={
+                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                      <Icon
+                        name={showPassword ? 'eye-off' : 'eye'}
+                        size={20}
+                        color={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(26,26,46,0.4)'}
+                      />
+                    </TouchableOpacity>
+                  }
+                />
+              </View>
+            </View>
+
+            {/* Action Buttons */}
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
               <TouchableOpacity
-                style={[styles.modalBtn, styles.cancelBtn, { borderColor: theme.colors.border }]}
+                style={{
+                  flex: 1,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(26,26,46,0.15)',
+                  padding: 14,
+                  alignItems: 'center',
+                }}
                 onPress={() => setShowCreateModal(false)}
               >
-                <Text style={[styles.cancelBtnText, { color: theme.colors.textSecondary }]}>Cancel</Text>
+                <Text style={{ color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(26,26,46,0.7)', fontWeight: '600', fontSize: 14 }}>
+                  Cancel
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalBtn, styles.submitBtn, { backgroundColor: userType === 'admin' ? '#6366F1' : '#8B5CF6' }]}
+                style={{
+                  flex: 1,
+                  borderRadius: 12,
+                  backgroundColor: ORANGE,
+                  padding: 14,
+                  alignItems: 'center',
+                  opacity: isCreating ? 0.7 : 1,
+                  ...(Platform.OS === 'web' && { boxShadow: '0 4px 16px rgba(255,140,66,0.4)' }),
+                }}
                 onPress={handleCreateAccount}
                 disabled={isCreating}
               >
-                <Text style={styles.submitBtnText}>{isCreating ? 'Creating...' : `Create ${userTypeLabel}`}</Text>
+                <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 14 }}>
+                  {isCreating ? 'Creating...' : `Create ${userTypeLabel}`}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* Permissions Modal */}
+      {/* ─── Permissions Modal — Glassmorphic ─── */}
       <Modal
         visible={showPermissionsModal}
         transparent
         animationType="fade"
         onRequestClose={() => setShowPermissionsModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
-                  Manage Permissions
-                </Text>
-                <Text style={[styles.modalSubtitle, { color: theme.colors.textSecondary }]}>
-                  {selectedUserPermissions?.name}
-                </Text>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 20,
+            ...(Platform.OS === 'web'
+              ? { backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }
+              : {}),
+          }}
+        >
+          <View
+            style={{
+              width: '100%',
+              maxWidth: 480,
+              backgroundColor: isDark ? 'rgba(15,15,30,0.92)' : 'rgba(255,255,255,0.97)',
+              borderRadius: 24,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+              padding: 28,
+              ...(Platform.OS === 'web'
+                ? { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }
+                : {}),
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 20 },
+              shadowOpacity: isDark ? 0.5 : 0.15,
+              shadowRadius: 40,
+              elevation: 20,
+            }}
+          >
+            {/* Modal Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={{ backgroundColor: ORANGE + '20', borderRadius: 10, padding: 10 }}>
+                  <Icon name="shield-checkmark" size={20} color={ORANGE} />
+                </View>
+                <View>
+                  <Text style={{ color: isDark ? '#FFFFFF' : '#1A1A2E', fontSize: 18, fontWeight: '800' }}>
+                    Manage Permissions
+                  </Text>
+                  <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(26,26,46,0.5)', fontSize: 12, marginTop: 2 }}>
+                    {selectedUserPermissions?.name}
+                  </Text>
+                </View>
               </View>
-              <TouchableOpacity onPress={() => setShowPermissionsModal(false)}>
-                <Icon name="close" size={24} color={theme.colors.textSecondary} />
+              <TouchableOpacity
+                onPress={() => setShowPermissionsModal(false)}
+                style={{
+                  padding: 6,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.06)',
+                  borderRadius: 8,
+                }}
+              >
+                <Icon name="close" size={20} color={isDark ? '#FFFFFF' : '#1A1A2E'} />
               </TouchableOpacity>
             </View>
 
+            {/* Permissions List */}
             {selectedUserPermissions && (
-              <View style={styles.permissionsContainer}>
+              <View style={{ marginBottom: 8 }}>
                 {[
                   { key: 'canManageAllCourses', icon: 'school-outline', title: 'Manage All Courses', desc: 'Can edit any course' },
                   { key: 'canManageCategories', icon: 'grid-outline', title: 'Manage Categories', desc: 'Create and edit categories' },
                   { key: 'canManageStudents', icon: 'people-outline', title: 'Manage Students', desc: 'View and manage students' },
                   { key: 'canManageCertificates', icon: 'ribbon-outline', title: 'Manage Certificates', desc: 'Issue certificates' },
                   { key: 'canViewFeedback', icon: 'chatbubbles-outline', title: 'View Feedback', desc: 'See student feedback' },
-                ].map((perm) => (
-                  <TouchableOpacity
-                    key={perm.key}
-                    style={[styles.permissionRow, { borderBottomColor: theme.colors.border }]}
-                    onPress={() => handleTogglePermission(perm.key)}
-                  >
-                    <View style={styles.permissionInfo}>
-                      <Icon name={perm.icon} size={20} color={theme.colors.primary} />
-                      <View style={styles.permissionText}>
-                        <Text style={[styles.permissionTitle, { color: theme.colors.textPrimary }]}>{perm.title}</Text>
-                        <Text style={[styles.permissionDesc, { color: theme.colors.textSecondary }]}>{perm.desc}</Text>
+                ].map((perm, idx, arr) => {
+                  const isEnabled = selectedUserPermissions.permissions[perm.key];
+                  return (
+                    <TouchableOpacity
+                      key={perm.key}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        paddingVertical: 13,
+                        borderBottomWidth: idx < arr.length - 1 ? 1 : 0,
+                        borderBottomColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(26,26,46,0.07)',
+                      }}
+                      onPress={() => handleTogglePermission(perm.key)}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
+                        <View style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 10,
+                          backgroundColor: isEnabled ? ORANGE + '18' : (isDark ? 'rgba(255,255,255,0.07)' : 'rgba(26,26,46,0.05)'),
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                        }}>
+                          <Icon
+                            name={perm.icon}
+                            size={18}
+                            color={isEnabled ? ORANGE : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(26,26,46,0.4)')}
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{
+                            color: isDark ? '#FFFFFF' : '#1A1A2E',
+                            fontSize: 14,
+                            fontWeight: '600',
+                            marginBottom: 2,
+                          }}>
+                            {perm.title}
+                          </Text>
+                          <Text style={{
+                            color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(26,26,46,0.5)',
+                            fontSize: 12,
+                          }}>
+                            {perm.desc}
+                          </Text>
+                        </View>
                       </View>
-                    </View>
-                    <Icon
-                      name={selectedUserPermissions.permissions[perm.key] ? 'checkbox' : 'square-outline'}
-                      size={24}
-                      color={selectedUserPermissions.permissions[perm.key] ? '#10B981' : theme.colors.textSecondary}
-                    />
-                  </TouchableOpacity>
-                ))}
+                      {/* Toggle indicator */}
+                      <View style={{
+                        width: 44,
+                        height: 24,
+                        borderRadius: 12,
+                        backgroundColor: isEnabled ? ORANGE : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)'),
+                        justifyContent: 'center',
+                        paddingHorizontal: 3,
+                        alignItems: isEnabled ? 'flex-end' : 'flex-start',
+                      }}>
+                        <View style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: 9,
+                          backgroundColor: '#FFFFFF',
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 1 },
+                          shadowOpacity: 0.2,
+                          shadowRadius: 2,
+                          elevation: 2,
+                        }} />
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
 
-            <View style={styles.modalActions}>
+            {/* Action Buttons */}
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
               <TouchableOpacity
-                style={[styles.modalBtn, styles.cancelBtn, { borderColor: theme.colors.border }]}
+                style={{
+                  flex: 1,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(26,26,46,0.15)',
+                  padding: 14,
+                  alignItems: 'center',
+                }}
                 onPress={() => setShowPermissionsModal(false)}
               >
-                <Text style={[styles.cancelBtnText, { color: theme.colors.textSecondary }]}>Cancel</Text>
+                <Text style={{ color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(26,26,46,0.7)', fontWeight: '600', fontSize: 14 }}>
+                  Cancel
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalBtn, styles.submitBtn, { backgroundColor: theme.colors.primary }]}
+                style={{
+                  flex: 1,
+                  borderRadius: 12,
+                  backgroundColor: ORANGE,
+                  padding: 14,
+                  alignItems: 'center',
+                  ...(Platform.OS === 'web' && { boxShadow: '0 4px 16px rgba(255,140,66,0.4)' }),
+                }}
                 onPress={handleSavePermissions}
               >
-                <Text style={styles.submitBtnText}>Save Changes</Text>
+                <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 14 }}>
+                  Save Changes
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -692,58 +1080,72 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       paddingBottom: 40,
     },
 
-    // Header Section
-    headerSection: {
+    // ── Page Header Banner (orange theme) ──
+    pageHeaderBanner: {
       flexDirection: isTablet ? 'row' : 'column',
       justifyContent: 'space-between',
       alignItems: isTablet ? 'center' : 'flex-start',
+      padding: isMobile ? 16 : 20,
       marginBottom: 24,
-      gap: 16,
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 12,
     },
-    headerTextContainer: {
-      flex: isTablet ? 1 : undefined,
-      width: isTablet ? undefined : '100%',
-    },
-    titleRow: {
+    bannerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      marginBottom: 4,
-      flexWrap: 'wrap',
+      flex: isTablet ? 1 : undefined,
     },
     backButton: {
       width: 40,
       height: 40,
-      borderRadius: 12,
+      borderRadius: 20,
       justifyContent: 'center',
       alignItems: 'center',
-      ...theme.shadows?.sm,
+    },
+    bannerIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(255,140,66,0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerTextGroup: {
+      flex: 1,
     },
     pageTitle: {
-      fontSize: isMobile ? 20 : 28,
+      fontSize: isMobile ? 18 : 22,
       fontWeight: '700',
       fontFamily: theme.typography?.fontFamily?.bold,
-      flex: isMobile ? 1 : undefined,
+      marginBottom: 2,
     },
     pageSubtitle: {
-      fontSize: 14,
+      fontSize: 13,
       fontFamily: theme.typography?.fontFamily?.regular,
     },
-    addButton: {
+    addUserBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      gap: 6,
+      backgroundColor: ORANGE,
+      paddingHorizontal: 18,
+      paddingVertical: 10,
       borderRadius: 10,
+      alignSelf: isTablet ? 'auto' : 'flex-start',
+      ...(Platform.OS === 'web' && {
+        boxShadow: '0 2px 12px rgba(255,140,66,0.35)',
+      }),
     },
-    addButtonText: {
+    addUserBtnText: {
       color: '#FFFFFF',
       fontSize: 14,
       fontWeight: '600',
+      fontFamily: theme.typography?.fontFamily?.semiBold,
     },
 
-    // Stats Section
+    // ── Stats ──
     statsSection: {
       flexDirection: isMobile ? 'column' : 'row',
       flexWrap: 'wrap',
@@ -751,24 +1153,38 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       marginBottom: 24,
     },
     statCard: {
-      flex: isMobile ? undefined : 1,
-      width: isMobile ? '100%' : undefined,
-      minWidth: isMobile ? undefined : isTablet ? 150 : 180,
-      maxWidth: isLargeScreen ? 250 : undefined,
-      padding: isMobile ? 16 : 20,
+      flex: 1,
+      minWidth: 120,
+      padding: 16,
+      borderRadius: 14,
+      borderWidth: 1,
+      alignItems: 'center',
+      gap: 4,
+      ...(Platform.OS === 'web' && {
+        boxShadow: isDark ? 'none' : '0 1px 8px rgba(26,26,46,0.06)',
+      }),
     },
-    statLabel: {
-      fontSize: 13,
-      marginBottom: 8,
-      fontFamily: theme.typography?.fontFamily?.regular,
+    statIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 4,
     },
     statValue: {
       fontSize: isMobile ? 28 : 32,
       fontWeight: '700',
       fontFamily: theme.typography?.fontFamily?.bold,
+      lineHeight: isMobile ? 34 : 38,
+    },
+    statLabel: {
+      fontSize: 13,
+      fontFamily: theme.typography?.fontFamily?.regular,
+      textAlign: 'center',
     },
 
-    // Filter Section
+    // ── Filter ──
     filterCard: {
       padding: isMobile ? 12 : 16,
       marginBottom: isMobile ? 16 : 24,
@@ -793,26 +1209,27 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: isMobile ? 'space-between' : 'flex-start',
-      paddingHorizontal: 16,
+      paddingHorizontal: 14,
       paddingVertical: 10,
-      borderRadius: 8,
+      borderRadius: 10,
       borderWidth: 1,
-      gap: 8,
+      gap: 7,
       width: isMobile ? '100%' : 'auto',
     },
     filterBtnText: {
       fontSize: 14,
       fontWeight: '500',
       fontFamily: theme.typography?.fontFamily?.medium,
+      flex: isMobile ? 1 : undefined,
     },
     dropdown: {
       position: 'absolute',
       top: '100%',
       left: 0,
       right: isMobile ? 0 : undefined,
-      minWidth: isMobile ? undefined : 180,
+      minWidth: isMobile ? undefined : 190,
       width: isMobile ? '100%' : undefined,
-      borderRadius: 8,
+      borderRadius: 10,
       borderWidth: 1,
       marginTop: 4,
       zIndex: 1000,
@@ -823,6 +1240,8 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       }),
     },
     dropdownItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
       paddingHorizontal: 16,
       paddingVertical: 12,
     },
@@ -831,7 +1250,7 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       fontFamily: theme.typography?.fontFamily?.regular,
     },
 
-    // Users Grid
+    // ── Users Grid ──
     usersGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -848,55 +1267,61 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       }),
     },
     userCard: {
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.1)' : theme.colors.border,
       padding: isMobile ? 14 : 16,
-      ...theme.shadows?.sm,
+      overflow: 'hidden',
+      position: 'relative',
+      ...(Platform.OS === 'web' && {
+        boxShadow: isDark ? 'none' : '0 2px 12px rgba(26,26,46,0.07)',
+      }),
+    },
+    cardAccentBar: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: 3,
+      height: '100%',
+      borderTopLeftRadius: 16,
+      borderBottomLeftRadius: 16,
     },
     userHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       marginBottom: 12,
+      gap: 10,
     },
     avatar: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
+      width: 46,
+      height: 46,
+      borderRadius: 23,
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 12,
     },
     avatarText: {
-      fontSize: 20,
-      fontWeight: 'bold',
-      color: '#ffffff',
+      fontSize: 18,
+      fontWeight: '800',
       fontFamily: theme.typography?.fontFamily?.bold,
     },
     userInfo: {
       flex: 1,
     },
     userName: {
-      fontSize: 16,
-      fontWeight: '600',
+      fontSize: 15,
+      fontWeight: '700',
       marginBottom: 2,
       fontFamily: theme.typography?.fontFamily?.semiBold,
     },
     userEmail: {
-      fontSize: 13,
+      fontSize: 12,
       fontFamily: theme.typography?.fontFamily?.regular,
-    },
-    statusRow: {
-      marginBottom: 12,
     },
     statusBadge: {
       flexDirection: 'row',
       alignItems: 'center',
       alignSelf: 'flex-start',
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 12,
-      gap: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 10,
+      gap: 5,
     },
     statusDot: {
       width: 6,
@@ -904,24 +1329,36 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       borderRadius: 3,
     },
     statusText: {
-      fontSize: 12,
-      fontWeight: '600',
+      fontSize: 11,
+      fontWeight: '700',
       fontFamily: theme.typography?.fontFamily?.semiBold,
     },
     metaRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: 12,
-      marginBottom: 16,
+      marginBottom: 14,
     },
     metaItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      gap: 5,
+    },
+    metaIconWrap: {
+      width: 20,
+      height: 20,
+      borderRadius: 6,
+      backgroundColor: 'rgba(255,140,66,0.1)',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     metaText: {
       fontSize: 12,
       fontFamily: theme.typography?.fontFamily?.regular,
+    },
+    cardDivider: {
+      height: 1,
+      marginBottom: 12,
     },
     actionRow: {
       flexDirection: 'row',
@@ -932,110 +1369,21 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 8,
-      borderRadius: 8,
-      borderWidth: 1,
-      gap: 4,
+      paddingVertical: 9,
+      borderRadius: 10,
+      gap: 5,
     },
-    toggleBtn: {
-      borderWidth: 0,
-    },
+    toggleBtn: {},
     actionBtnText: {
       fontSize: 13,
       fontWeight: '600',
       fontFamily: theme.typography?.fontFamily?.semiBold,
     },
 
-    // Empty State
+    // ── Empty State ──
     emptyContainer: {
       padding: 40,
       alignItems: 'center',
-    },
-
-    // Modal Styles
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 20,
-    },
-    modalContent: {
-      width: '100%',
-      maxWidth: 500,
-      maxHeight: '90%',
-      borderRadius: 16,
-      padding: isMobile ? 20 : 24,
-    },
-    modalHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginBottom: 20,
-    },
-    modalTitle: {
-      fontSize: isMobile ? 18 : 20,
-      fontWeight: '700',
-    },
-    modalSubtitle: {
-      fontSize: 14,
-      marginTop: 4,
-    },
-    inputContainer: {
-      marginBottom: 16,
-    },
-    modalActions: {
-      flexDirection: 'row',
-      gap: 12,
-      marginTop: 20,
-    },
-    modalBtn: {
-      flex: 1,
-      paddingVertical: 14,
-      borderRadius: 10,
-      alignItems: 'center',
-    },
-    cancelBtn: {
-      borderWidth: 1,
-    },
-    cancelBtnText: {
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    submitBtn: {},
-    submitBtnText: {
-      color: '#FFFFFF',
-      fontSize: 14,
-      fontWeight: '600',
-    },
-
-    // Permissions
-    permissionsContainer: {
-      marginBottom: 10,
-    },
-    permissionRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingVertical: 14,
-      borderBottomWidth: 1,
-    },
-    permissionInfo: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      flex: 1,
-      gap: 12,
-    },
-    permissionText: {
-      flex: 1,
-    },
-    permissionTitle: {
-      fontSize: 14,
-      fontWeight: '600',
-      marginBottom: 2,
-    },
-    permissionDesc: {
-      fontSize: 12,
     },
   });
 

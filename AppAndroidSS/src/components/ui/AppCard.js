@@ -34,14 +34,32 @@ const AppCard = ({
       padding,
       borderRadius: theme.borderRadius['2xl'], // 16px as per guide
       borderWidth: noBorder ? 0 : 1,
-      borderColor: theme.colors.cardBorder,
+      borderColor: isDark
+        ? 'rgba(255,255,255,0.08)'
+        : 'rgba(26,26,46,0.08)',
     };
 
-    // Add glassmorphism for web (Section 27.2)
-    if (glass && isWeb) {
-      baseStyle.backdropFilter = `blur(${theme.glass.backdropBlur}px)`;
-      baseStyle.WebkitBackdropFilter = `blur(${theme.glass.backdropBlur}px)`;
-      baseStyle.borderColor = theme.glass.border;
+    // Fix glassmorphism to work in BOTH dark and light modes
+    if (glass) {
+      baseStyle.backgroundColor = isDark
+        ? 'rgba(15,15,30,0.75)'
+        : 'rgba(255,255,255,0.80)';
+      baseStyle.borderColor = isDark
+        ? 'rgba(255,255,255,0.12)'
+        : 'rgba(26,26,46,0.10)';
+      baseStyle.borderWidth = 1;
+      if (isWeb) {
+        baseStyle.backdropFilter = 'blur(16px)';
+        baseStyle.WebkitBackdropFilter = 'blur(16px)';
+      }
+    }
+
+    // Web transition and cursor
+    if (isWeb) {
+      baseStyle.transition = 'all 0.2s ease';
+      if (onPress) {
+        baseStyle.cursor = 'pointer';
+      }
     }
 
     return baseStyle;

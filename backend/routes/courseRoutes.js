@@ -5,6 +5,7 @@ const { authenticateToken } = require('../middleware/auth');
 
 // Read operations - publicly accessible (no authentication required)
 router.get('/', courseController.getAllCourses);
+router.get('/top', courseController.getTopCourses); // must be before /:id
 router.get('/:id', courseController.getCourseById);
 
 // Write operations - require authentication

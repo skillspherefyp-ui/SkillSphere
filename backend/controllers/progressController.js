@@ -1,6 +1,7 @@
 const { Progress, Course, Topic, Enrollment, Certificate, CertificateTemplate, TemplateCourse, User, sequelize } = require('../models');
 const { generateAndSaveCertificate, generateCertificateNumber } = require('../services/certificateService');
 const { sendCertificateEmail } = require('../services/emailService');
+const { recordActivityForUser } = require('./streakController');
 
 // Get all progress for authenticated student
 exports.getMyProgress = async (req, res) => {
@@ -66,6 +67,9 @@ exports.updateTopicProgress = async (req, res) => {
 
     // Update enrollment progress percentage
     await updateEnrollmentProgress(req.user.id, courseId);
+
+    // Record daily activity for streak tracking (fire-and-forget)
+    recordActivityForUser(req.user.id);
 
     res.json({ success: true, progress });
   } catch (error) {

@@ -12,7 +12,7 @@ const Topic = sequelize.define('Topic', {
     allowNull: false
   },
   status: {
-    type: DataTypes.ENUM('locked', 'unlocked'),
+    type: DataTypes.ENUM('locked', 'unlocked', 'completed'),
     defaultValue: 'locked'
   },
   completed: {

@@ -24,6 +24,19 @@ import { useAuth } from '../../context/AuthContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { resolveFileUrl } from '../../utils/urlHelpers';
 
+const ORANGE = '#FF8C42';
+
+const TOPIC_COLORS = [
+  '#3B82F6',
+  '#10B981',
+  '#8B5CF6',
+  '#F97316',
+  '#EC4899',
+  '#06B6D4',
+  '#EF4444',
+  '#F59E0B',
+];
+
 const CourseDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -87,6 +100,9 @@ const CourseDetailScreen = () => {
     Toast.show({ type: 'success', text1: 'Success', text2: message });
   };
 
+  // Alias used by pageHeaderBanner onPress
+  const handlePublishToggle = handlePublish;
+
   const handleDelete = () => {
     setShowConfirmDialog(true);
   };
@@ -132,6 +148,8 @@ const CourseDetailScreen = () => {
     );
   }
 
+  const isPublished = course.status === 'published';
+
   return (
     <MainLayout
       showSidebar={true}
@@ -147,103 +165,204 @@ const CourseDetailScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Section */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerTextContainer}>
-            <View style={styles.titleRow}>
-              <TouchableOpacity
-                style={[styles.backButton, { backgroundColor: theme.colors.surface }]}
-                onPress={() => navigation.goBack()}
-              >
-                <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-              <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>
-                Course Details
+        {/* Page Header Banner — matches CourseListScreen design language */}
+        <View style={[styles.pageHeaderBanner, {
+          backgroundColor: isDark ? 'rgba(255,140,66,0.06)' : 'rgba(255,140,66,0.05)',
+          borderColor: 'rgba(255,140,66,0.15)',
+          borderRadius: 16, borderWidth: 1, padding: 20, marginBottom: 24,
+          flexDirection: isTablet ? 'row' : 'column',
+          justifyContent: 'space-between', alignItems: isTablet ? 'center' : 'flex-start', gap: 12,
+        }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <TouchableOpacity
+              style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.08)', borderRadius: 10, padding: 10 }}
+              onPress={() => navigation.goBack()}
+            >
+              <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={{ backgroundColor: ORANGE + '20', borderRadius: 12, padding: 12 }}>
+              <Icon name="book" size={22} color={ORANGE} />
+            </View>
+            <View>
+              <Text style={{ color: theme.colors.textPrimary, fontSize: 20, fontWeight: '800' }}>
+                {course?.name || 'Course Details'}
+              </Text>
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>
+                {course?.topics?.length || 0} topics · {course?.status || 'draft'}
               </Text>
             </View>
-            <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
-              View and manage course information
-            </Text>
           </View>
-          {canEdit && (
-            <AppButton
-              title="Edit Course"
-              onPress={() => navigation.navigate('CreateCourse', { courseId, courseData: course })}
-              variant="primary"
-              style={styles.editButton}
-              leftIcon="create-outline"
-            />
-          )}
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity
+              style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              onPress={() => navigation.navigate('CreateCourse', { courseId: course.id })}
+            >
+              <Icon name="create-outline" size={16} color={theme.colors.textPrimary} />
+              <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 13 }}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ backgroundColor: course?.status === 'published' ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              onPress={handlePublishToggle}
+            >
+              <Icon name={course?.status === 'published' ? 'eye-off-outline' : 'checkmark-circle-outline'} size={16} color={course?.status === 'published' ? '#EF4444' : '#10B981'} />
+              <Text style={{ color: course?.status === 'published' ? '#EF4444' : '#10B981', fontWeight: '600', fontSize: 13 }}>
+                {course?.status === 'published' ? 'Unpublish' : 'Publish'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Content Grid */}
         <View style={styles.contentGrid}>
           {/* Main Column */}
           <Animated.View entering={FadeInDown.duration(400).delay(100)} style={styles.mainColumn}>
-            {/* Hero Card - Course Name & Description */}
+
+            {/* Hero / Course Info Card */}
             <AppCard style={styles.heroCard}>
-              <View style={styles.heroHeader}>
-                <View style={styles.heroTitleSection}>
-                  <Text style={[styles.courseName, { color: theme.colors.textPrimary }]}>
-                    {course.name}
-                  </Text>
-                  <Text style={[styles.courseCategory, { color: theme.colors.textSecondary }]}>
-                    {course.category?.name || 'No Category'}
-                  </Text>
+              {/* Thumbnail or colored placeholder */}
+              {course.thumbnailImage ? (
+                <View style={styles.heroThumbContainer}>
+                  <Image
+                    source={{ uri: resolveFileUrl(course.thumbnailImage) }}
+                    style={styles.heroThumbImage}
+                    resizeMode="cover"
+                  />
+                  <View style={[styles.heroThumbOverlay, { backgroundColor: 'rgba(0,0,0,0.35)' }]} />
+                  <View style={[
+                    styles.heroStatusOverlay,
+                    { backgroundColor: isPublished ? '#10B981' : '#F59708' },
+                  ]}>
+                    <Icon name={isPublished ? 'checkmark-circle' : 'time'} size={12} color="#fff" />
+                    <Text style={styles.heroStatusOverlayText}>
+                      {isPublished ? 'Published' : 'Draft'}
+                    </Text>
+                  </View>
                 </View>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: course.status === 'published' ? '#10B98120' : '#F5970820' },
-                  ]}
-                >
+              ) : (
+                /* Colored placeholder when no thumbnail */
+                <View style={[styles.heroThumbContainer, styles.heroThumbPlaceholder, {
+                  backgroundColor: isDark ? 'rgba(255,140,66,0.12)' : 'rgba(255,140,66,0.08)',
+                }]}>
+                  <View style={{ backgroundColor: ORANGE + '25', borderRadius: 20, padding: 18 }}>
+                    <Icon name="book" size={40} color={ORANGE} />
+                  </View>
+                  <View style={[
+                    styles.heroStatusOverlay,
+                    { backgroundColor: isPublished ? '#10B981' : '#F59708' },
+                  ]}>
+                    <Icon name={isPublished ? 'checkmark-circle' : 'time'} size={12} color="#fff" />
+                    <Text style={styles.heroStatusOverlayText}>
+                      {isPublished ? 'Published' : 'Draft'}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              <View style={styles.heroBody}>
+                <View style={styles.heroHeader}>
+                  <View style={styles.heroTitleSection}>
+                    <Text style={[styles.courseName, { color: theme.colors.textPrimary }]}>
+                      {course.name}
+                    </Text>
+                  </View>
                   <View
                     style={[
-                      styles.statusDot,
-                      { backgroundColor: course.status === 'published' ? '#10B981' : '#F59708' },
-                    ]}
-                  />
-                  <Text
-                    style={[
-                      styles.statusText,
-                      { color: course.status === 'published' ? '#10B981' : '#F59708' },
+                      styles.statusBadge,
+                      { backgroundColor: isPublished ? '#10B98120' : '#F5970820' },
                     ]}
                   >
-                    {course.status === 'published' ? 'Published' : 'Draft'}
-                  </Text>
+                    <View
+                      style={[
+                        styles.statusDot,
+                        { backgroundColor: isPublished ? '#10B981' : '#F59708' },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.statusText,
+                        { color: isPublished ? '#10B981' : '#F59708' },
+                      ]}
+                    >
+                      {isPublished ? 'Published' : 'Draft'}
+                    </Text>
+                  </View>
                 </View>
-              </View>
 
-              <Text style={[styles.description, { color: theme.colors.textSecondary }]}>
-                {course.description}
-              </Text>
-
-              <View style={styles.metaGrid}>
-                <View style={styles.metaItem}>
-                  <Icon name="person-outline" size={16} color={theme.colors.textTertiary} />
-                  <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
-                    {course.user?.name || 'Unknown'}
-                  </Text>
+                {/* Meta badges row */}
+                <View style={styles.metaBadgesRow}>
+                  {course.category?.name && (
+                    <View style={[styles.metaBadge, { backgroundColor: '#6366F1' + '18', borderWidth: 1, borderColor: '#6366F1' + '30' }]}>
+                      <Icon name="layers" size={13} color="#6366F1" />
+                      <Text style={[styles.metaBadgeText, { color: '#6366F1' }]}>{course.category.name}</Text>
+                    </View>
+                  )}
+                  {course.level && (
+                    <View style={[styles.metaBadge, { backgroundColor: ORANGE + '18', borderWidth: 1, borderColor: ORANGE + '30' }]}>
+                      <Icon name="bar-chart" size={13} color={ORANGE} />
+                      <Text style={[styles.metaBadgeText, { color: ORANGE }]}>{course.level}</Text>
+                    </View>
+                  )}
+                  {course.language && (
+                    <View style={[styles.metaBadge, { backgroundColor: '#10B981' + '18', borderWidth: 1, borderColor: '#10B981' + '30' }]}>
+                      <Icon name="language" size={13} color="#10B981" />
+                      <Text style={[styles.metaBadgeText, { color: '#10B981' }]}>{course.language}</Text>
+                    </View>
+                  )}
+                  {course.duration && (
+                    <View style={[styles.metaBadge, { backgroundColor: '#8B5CF6' + '18', borderWidth: 1, borderColor: '#8B5CF6' + '30' }]}>
+                      <Icon name="time" size={13} color="#8B5CF6" />
+                      <Text style={[styles.metaBadgeText, { color: '#8B5CF6' }]}>{course.duration}</Text>
+                    </View>
+                  )}
+                  {/* Enrollment count chip */}
+                  <View style={[styles.metaBadge, { backgroundColor: '#EC4899' + '18', borderWidth: 1, borderColor: '#EC4899' + '30' }]}>
+                    <Icon name="people" size={13} color="#EC4899" />
+                    <Text style={[styles.metaBadgeText, { color: '#EC4899' }]}>
+                      {course.enrollments?.length || 0} enrolled
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.metaItem}>
-                  <Icon name="calendar-outline" size={16} color={theme.colors.textTertiary} />
-                  <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
-                    {formatDate(course.updatedAt)}
-                  </Text>
+
+                <Text style={[styles.description, { color: theme.colors.textSecondary }]}>
+                  {course.description}
+                </Text>
+
+                <View style={styles.metaGrid}>
+                  <View style={styles.metaItem}>
+                    <Icon name="person-outline" size={15} color={theme.colors.textTertiary} />
+                    <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
+                      {course.user?.name || 'Unknown'}
+                    </Text>
+                  </View>
+                  <View style={styles.metaItem}>
+                    <Icon name="calendar-outline" size={15} color={theme.colors.textTertiary} />
+                    <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
+                      Updated {formatDate(course.updatedAt)}
+                    </Text>
+                  </View>
+                  <View style={styles.metaItem}>
+                    <Icon name="add-circle-outline" size={15} color={theme.colors.textTertiary} />
+                    <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
+                      Created {formatDate(course.createdAt)}
+                    </Text>
+                  </View>
                 </View>
               </View>
             </AppCard>
 
-            {/* Course Info Card - Moved here from sidebar */}
+            {/* Course Info Card */}
             <AppCard style={styles.card}>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                Course Info
-              </Text>
+              <View style={styles.sectionHeader}>
+                <View style={[styles.sectionIconWrap, { backgroundColor: ORANGE + '18' }]}>
+                  <Icon name="information-circle" size={18} color={ORANGE} />
+                </View>
+                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Course Info</Text>
+              </View>
 
               <View style={styles.infoGrid}>
                 <View style={styles.infoGridItem}>
-                  <View style={[styles.infoIcon, { backgroundColor: theme.colors.primary + '15' }]}>
-                    <Icon name="bar-chart-outline" size={18} color={theme.colors.primary} />
+                  <View style={[styles.infoIcon, { backgroundColor: '#6366F1' + '18' }]}>
+                    <Icon name="bar-chart-outline" size={18} color="#6366F1" />
                   </View>
                   <View style={styles.infoContent}>
                     <Text style={[styles.infoLabel, { color: theme.colors.textTertiary }]}>Level</Text>
@@ -252,8 +371,8 @@ const CourseDetailScreen = () => {
                 </View>
 
                 <View style={styles.infoGridItem}>
-                  <View style={[styles.infoIcon, { backgroundColor: theme.colors.primary + '15' }]}>
-                    <Icon name="language-outline" size={18} color={theme.colors.primary} />
+                  <View style={[styles.infoIcon, { backgroundColor: '#10B981' + '18' }]}>
+                    <Icon name="language-outline" size={18} color="#10B981" />
                   </View>
                   <View style={styles.infoContent}>
                     <Text style={[styles.infoLabel, { color: theme.colors.textTertiary }]}>Language</Text>
@@ -262,8 +381,8 @@ const CourseDetailScreen = () => {
                 </View>
 
                 <View style={styles.infoGridItem}>
-                  <View style={[styles.infoIcon, { backgroundColor: theme.colors.primary + '15' }]}>
-                    <Icon name="time-outline" size={18} color={theme.colors.primary} />
+                  <View style={[styles.infoIcon, { backgroundColor: '#8B5CF6' + '18' }]}>
+                    <Icon name="time-outline" size={18} color="#8B5CF6" />
                   </View>
                   <View style={styles.infoContent}>
                     <Text style={[styles.infoLabel, { color: theme.colors.textTertiary }]}>Duration</Text>
@@ -272,8 +391,8 @@ const CourseDetailScreen = () => {
                 </View>
 
                 <View style={styles.infoGridItem}>
-                  <View style={[styles.infoIcon, { backgroundColor: theme.colors.primary + '15' }]}>
-                    <Icon name="calendar-outline" size={18} color={theme.colors.primary} />
+                  <View style={[styles.infoIcon, { backgroundColor: ORANGE + '18' }]}>
+                    <Icon name="calendar-outline" size={18} color={ORANGE} />
                   </View>
                   <View style={styles.infoContent}>
                     <Text style={[styles.infoLabel, { color: theme.colors.textTertiary }]}>Created</Text>
@@ -285,10 +404,15 @@ const CourseDetailScreen = () => {
 
             {/* Topics Card */}
             <AppCard style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                  Topics ({course.topics?.length || 0})
-                </Text>
+              <View style={styles.cardHeaderRow}>
+                <View style={styles.sectionHeader}>
+                  <View style={[styles.sectionIconWrap, { backgroundColor: '#8B5CF6' + '18' }]}>
+                    <Icon name="list" size={18} color="#8B5CF6" />
+                  </View>
+                  <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                    Topics ({course.topics?.length || 0})
+                  </Text>
+                </View>
                 <AppButton
                   title={canEdit ? 'Manage' : 'View'}
                   onPress={() => navigation.navigate('AddTopics', { courseId })}
@@ -300,19 +424,67 @@ const CourseDetailScreen = () => {
 
               {course.topics && course.topics.length > 0 ? (
                 <View style={styles.topicsList}>
-                  {course.topics.map((topic, index) => (
-                    <View
-                      key={topic.id}
-                      style={[styles.topicItem, { backgroundColor: isDark ? theme.colors.backgroundSecondary : theme.colors.background }]}
-                    >
-                      <View style={[styles.topicNumber, { backgroundColor: theme.colors.primary }]}>
-                        <Text style={styles.topicNumberText}>{index + 1}</Text>
+                  {course.topics.map((topic, index) => {
+                    const topicColor = TOPIC_COLORS[index % TOPIC_COLORS.length];
+                    return (
+                      <View
+                        key={topic.id}
+                        style={[
+                          styles.topicItem,
+                          {
+                            backgroundColor: isDark
+                              ? 'rgba(255,255,255,0.04)'
+                              : theme.colors.background,
+                            borderLeftColor: topicColor,
+                            borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(26,26,46,0.07)',
+                          },
+                        ]}
+                      >
+                        <View style={[styles.topicNumber, { backgroundColor: topicColor }]}>
+                          <Text style={styles.topicNumberText}>{index + 1}</Text>
+                        </View>
+                        <Text style={[styles.topicTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                          {topic.title}
+                        </Text>
+                        {/* Materials shown as chips */}
+                        {topic.materials?.length > 0 && (
+                          <View style={styles.topicChipsRow}>
+                            {topic.materials.slice(0, 3).map((mat, mIdx) => {
+                              const isPdf = mat.type === 'pdf';
+                              const chipColor = isPdf ? '#EF4444' : '#06B6D4';
+                              return (
+                                <View
+                                  key={mIdx}
+                                  style={[styles.topicChip, { backgroundColor: chipColor + '18', borderColor: chipColor + '30', borderWidth: 1 }]}
+                                >
+                                  <Icon
+                                    name={isPdf ? 'document-text-outline' : 'image-outline'}
+                                    size={11}
+                                    color={chipColor}
+                                  />
+                                  <Text style={[styles.topicChipText, { color: chipColor }]} numberOfLines={1}>
+                                    {mat.title || mat.fileName || 'File'}
+                                  </Text>
+                                </View>
+                              );
+                            })}
+                            {topic.materials.length > 3 && (
+                              <View style={[styles.topicChip, { backgroundColor: topicColor + '18', borderColor: topicColor + '30', borderWidth: 1 }]}>
+                                <Text style={[styles.topicChipText, { color: topicColor }]}>
+                                  +{topic.materials.length - 3} more
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        )}
+                        <View style={[styles.topicMatCount, { backgroundColor: topicColor + '18' }]}>
+                          <Text style={[styles.topicMatCountText, { color: topicColor }]}>
+                            {topic.materials?.length || 0}
+                          </Text>
+                        </View>
                       </View>
-                      <Text style={[styles.topicTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                        {topic.title}
-                      </Text>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               ) : (
                 <View style={[styles.emptySection, { borderColor: theme.colors.border }]}>
@@ -327,18 +499,35 @@ const CourseDetailScreen = () => {
             {/* Materials Card */}
             {course.materials && course.materials.length > 0 && (
               <AppCard style={styles.card}>
-                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                  Materials ({course.materials.length})
-                </Text>
+                <View style={styles.sectionHeader}>
+                  <View style={[styles.sectionIconWrap, { backgroundColor: '#06B6D4' + '18' }]}>
+                    <Icon name="folder-open" size={18} color="#06B6D4" />
+                  </View>
+                  <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                    Materials ({course.materials.length})
+                  </Text>
+                </View>
 
-                <View style={styles.materialsList}>
+                {/* Materials grid */}
+                <View style={styles.materialsGrid}>
                   {course.materials.map((material, index) => {
                     const fileUrl = resolveFileUrl(material.uri);
+                    const isPdf = material.type === 'pdf';
+                    const matColor = isPdf ? '#EF4444' : '#06B6D4';
 
                     return (
                       <TouchableOpacity
                         key={index}
-                        style={[styles.materialItem, { backgroundColor: isDark ? theme.colors.backgroundSecondary : theme.colors.background, borderColor: theme.colors.border }]}
+                        style={[
+                          styles.materialGridItem,
+                          {
+                            backgroundColor: isDark
+                              ? 'rgba(255,255,255,0.04)'
+                              : theme.colors.background,
+                            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)',
+                            borderTopColor: matColor,
+                          },
+                        ]}
                         onPress={() => {
                           if (Platform.OS === 'web') {
                             window.open(fileUrl, '_blank');
@@ -347,15 +536,25 @@ const CourseDetailScreen = () => {
                           }
                         }}
                       >
-                        <Icon
-                          name={material.type === 'pdf' ? 'document-text-outline' : 'image-outline'}
-                          size={20}
-                          color={theme.colors.primary}
-                        />
-                        <Text style={[styles.materialName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                        <View style={[styles.materialGridIcon, { backgroundColor: matColor + '18' }]}>
+                          <Icon
+                            name={isPdf ? 'document-text-outline' : 'image-outline'}
+                            size={24}
+                            color={matColor}
+                          />
+                        </View>
+                        <Text style={[styles.materialGridName, { color: theme.colors.textPrimary }]} numberOfLines={2}>
                           {material.title || material.fileName || 'Material'}
                         </Text>
-                        <Icon name="download-outline" size={18} color={theme.colors.primary} />
+                        <View style={[styles.materialGridType, { backgroundColor: matColor + '14' }]}>
+                          <Text style={[styles.materialGridTypeText, { color: matColor }]}>
+                            {material.type?.toUpperCase() || 'FILE'}
+                          </Text>
+                        </View>
+                        <View style={[styles.materialDownloadBtn, { backgroundColor: matColor + '15' }]}>
+                          <Icon name="download-outline" size={15} color={matColor} />
+                          <Text style={[styles.materialDownloadText, { color: matColor }]}>Download</Text>
+                        </View>
                       </TouchableOpacity>
                     );
                   })}
@@ -368,19 +567,38 @@ const CourseDetailScreen = () => {
           <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.sideColumn}>
             {/* Course Thumbnail Card */}
             <AppCard style={styles.thumbnailCard}>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                Course Thumbnail
-              </Text>
+              <View style={styles.sectionHeader}>
+                <View style={[styles.sectionIconWrap, { backgroundColor: '#EC4899' + '18' }]}>
+                  <Icon name="image" size={18} color="#EC4899" />
+                </View>
+                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                  Course Thumbnail
+                </Text>
+              </View>
 
               {course.thumbnailImage ? (
-                <Image
-                  source={{ uri: resolveFileUrl(course.thumbnailImage) }}
-                  style={styles.thumbnailImage}
-                  resizeMode="cover"
-                />
+                <View style={styles.thumbContainer}>
+                  <Image
+                    source={{ uri: resolveFileUrl(course.thumbnailImage) }}
+                    style={styles.thumbnailImage}
+                    resizeMode="cover"
+                  />
+                  <View style={[
+                    styles.thumbStatusBadge,
+                    { backgroundColor: isPublished ? '#10B981' : '#F59708' },
+                  ]}>
+                    <Icon name={isPublished ? 'checkmark-circle' : 'time'} size={12} color="#fff" />
+                    <Text style={styles.thumbStatusText}>{isPublished ? 'Published' : 'Draft'}</Text>
+                  </View>
+                </View>
               ) : (
-                <View style={[styles.thumbnailPlaceholder, { backgroundColor: theme.colors.primary + '20', borderColor: theme.colors.border }]}>
-                  <Icon name="image-outline" size={40} color={theme.colors.textTertiary} />
+                <View style={[styles.thumbnailPlaceholder, {
+                  backgroundColor: isDark ? 'rgba(255,140,66,0.08)' : 'rgba(255,140,66,0.06)',
+                  borderColor: ORANGE + '30',
+                }]}>
+                  <View style={{ backgroundColor: ORANGE + '20', borderRadius: 16, padding: 14 }}>
+                    <Icon name="image-outline" size={36} color={ORANGE} />
+                  </View>
                   <Text style={[styles.thumbnailPlaceholderText, { color: theme.colors.textSecondary }]}>
                     No thumbnail
                   </Text>
@@ -391,25 +609,55 @@ const CourseDetailScreen = () => {
             {/* Actions Card */}
             {canEdit ? (
               <AppCard style={styles.card}>
-                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                  Actions
-                </Text>
+                <View style={styles.sectionHeader}>
+                  <View style={[styles.sectionIconWrap, { backgroundColor: ORANGE + '18' }]}>
+                    <Icon name="flash" size={18} color={ORANGE} />
+                  </View>
+                  <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Actions</Text>
+                </View>
 
                 <View style={styles.actionsList}>
-                  <AppButton
-                    title={course.status === 'published' ? 'Unpublish' : 'Publish'}
+                  <TouchableOpacity
+                    style={[
+                      styles.actionCardBtn,
+                      {
+                        backgroundColor: isPublished ? '#F59708' + '12' : '#10B981' + '12',
+                        borderColor: isPublished ? '#F59708' + '40' : '#10B981' + '40',
+                      },
+                    ]}
                     onPress={handlePublish}
-                    variant={course.status === 'published' ? 'outline' : 'primary'}
-                    leftIcon={course.status === 'published' ? 'eye-off-outline' : 'checkmark-circle-outline'}
-                    style={styles.actionBtn}
-                  />
-                  <AppButton
-                    title="Delete Course"
+                  >
+                    <View style={[styles.actionBtnIcon, { backgroundColor: isPublished ? '#F59708' + '25' : '#10B981' + '25' }]}>
+                      <Icon
+                        name={isPublished ? 'eye-off-outline' : 'checkmark-circle-outline'}
+                        size={20}
+                        color={isPublished ? '#F59708' : '#10B981'}
+                      />
+                    </View>
+                    <View style={styles.actionBtnText}>
+                      <Text style={[styles.actionBtnTitle, { color: theme.colors.textPrimary }]}>
+                        {isPublished ? 'Unpublish Course' : 'Publish Course'}
+                      </Text>
+                      <Text style={[styles.actionBtnDesc, { color: theme.colors.textSecondary }]}>
+                        {isPublished ? 'Move back to draft' : 'Make visible to students'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionCardBtn, { backgroundColor: '#EF4444' + '10', borderColor: '#EF4444' + '30' }]}
                     onPress={handleDelete}
-                    variant="danger"
-                    leftIcon="trash-outline"
-                    style={styles.actionBtn}
-                  />
+                  >
+                    <View style={[styles.actionBtnIcon, { backgroundColor: '#EF4444' + '20' }]}>
+                      <Icon name="trash-outline" size={20} color="#EF4444" />
+                    </View>
+                    <View style={styles.actionBtnText}>
+                      <Text style={[styles.actionBtnTitle, { color: theme.colors.textPrimary }]}>Delete Course</Text>
+                      <Text style={[styles.actionBtnDesc, { color: theme.colors.textSecondary }]}>
+                        Permanently remove this course
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
                 </View>
               </AppCard>
             ) : (
@@ -452,45 +700,9 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       padding: 40,
     },
 
-    // Header Section
-    headerSection: {
-      flexDirection: isTablet ? 'row' : 'column',
-      justifyContent: 'space-between',
-      alignItems: isTablet ? 'center' : 'flex-start',
-      marginBottom: 24,
-      gap: 16,
-    },
-    headerTextContainer: {
-      flex: isTablet ? 1 : undefined,
-      width: isTablet ? undefined : '100%',
-    },
-    titleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      marginBottom: 4,
-      flexWrap: 'wrap',
-    },
-    backButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
-      justifyContent: 'center',
-      alignItems: 'center',
-      ...theme.shadows.sm,
-    },
-    pageTitle: {
-      fontSize: isMobile ? 20 : 28,
-      fontWeight: '700',
-      fontFamily: theme.typography.fontFamily.bold,
-      flex: isMobile ? 1 : undefined,
-    },
-    pageSubtitle: {
-      fontSize: 14,
-      fontFamily: theme.typography.fontFamily.regular,
-    },
-    editButton: {
-      minWidth: isMobile ? '100%' : 140,
+    // Page Header Banner (inline styles override via JSX, this is the base)
+    pageHeaderBanner: {
+      // Dimensions and flex direction applied inline from the JSX
     },
 
     // Content Grid
@@ -509,14 +721,73 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       gap: 20,
     },
 
+    // Section headers shared style
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 16,
+    },
+    sectionIconWrap: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    sectionTitle: {
+      fontSize: 15,
+      fontWeight: '600',
+      fontFamily: theme.typography.fontFamily.semiBold,
+    },
+
     // Hero Card
     heroCard: {
+      padding: 0,
+      overflow: 'hidden',
+    },
+    heroThumbContainer: {
+      height: isMobile ? 160 : 200,
+      position: 'relative',
+    },
+    heroThumbPlaceholder: {
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    heroThumbImage: {
+      width: '100%',
+      height: '100%',
+    },
+    heroThumbOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+    },
+    heroStatusOverlay: {
+      position: 'absolute',
+      bottom: 12,
+      right: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 20,
+    },
+    heroStatusOverlayText: {
+      color: '#fff',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    heroBody: {
       padding: isMobile ? 16 : 20,
     },
     heroHeader: {
       flexDirection: isMobile ? 'column' : 'row',
       justifyContent: 'space-between',
-      alignItems: isMobile ? 'flex-start' : 'flex-start',
+      alignItems: 'flex-start',
       marginBottom: 12,
       gap: isMobile ? 8 : 12,
     },
@@ -525,29 +796,46 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       width: isMobile ? '100%' : undefined,
     },
     courseName: {
-      fontSize: isMobile ? 18 : 20,
+      fontSize: isMobile ? 20 : 24,
       fontWeight: '700',
       marginBottom: 4,
       fontFamily: theme.typography.fontFamily.bold,
-    },
-    courseCategory: {
-      fontSize: 14,
-      fontFamily: theme.typography.fontFamily.regular,
+      lineHeight: isMobile ? 26 : 32,
     },
     statusBadge: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 10,
-      paddingVertical: 4,
+      paddingVertical: 5,
       borderRadius: 12,
       gap: 6,
+      alignSelf: 'flex-start',
     },
     statusDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
+      width: 7,
+      height: 7,
+      borderRadius: 4,
     },
     statusText: {
+      fontSize: 12,
+      fontWeight: '600',
+      fontFamily: theme.typography.fontFamily.semiBold,
+    },
+    metaBadgesRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 14,
+    },
+    metaBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 20,
+    },
+    metaBadgeText: {
       fontSize: 12,
       fontWeight: '600',
       fontFamily: theme.typography.fontFamily.semiBold,
@@ -561,15 +849,15 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     metaGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 16,
+      gap: 14,
     },
     metaItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: 5,
     },
     metaText: {
-      fontSize: 13,
+      fontSize: 12,
       fontFamily: theme.typography.fontFamily.regular,
     },
 
@@ -577,17 +865,10 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     card: {
       padding: isMobile ? 16 : 20,
     },
-    cardHeader: {
+    cardHeaderRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 16,
-    },
-    cardTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      marginBottom: 16,
-      fontFamily: theme.typography.fontFamily.semiBold,
     },
 
     // Topics
@@ -598,8 +879,11 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       flexDirection: 'row',
       alignItems: 'center',
       padding: 12,
-      borderRadius: 10,
-      gap: 12,
+      borderRadius: 12,
+      gap: 10,
+      borderLeftWidth: 3,
+      borderWidth: 1,
+      flexWrap: 'wrap',
     },
     topicNumber: {
       width: 28,
@@ -617,25 +901,96 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     topicTitle: {
       flex: 1,
       fontSize: 14,
+      fontWeight: '500',
       fontFamily: theme.typography.fontFamily.regular,
     },
-
-    // Materials
-    materialsList: {
-      gap: 8,
+    topicChipsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 5,
+      flex: isMobile ? undefined : 1,
+      width: isMobile ? '100%' : undefined,
     },
-    materialItem: {
+    topicChip: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 12,
-      borderRadius: 10,
-      borderWidth: 1,
-      gap: 10,
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 20,
     },
-    materialName: {
-      flex: 1,
-      fontSize: 14,
-      fontFamily: theme.typography.fontFamily.regular,
+    topicChipText: {
+      fontSize: 11,
+      fontWeight: '500',
+      maxWidth: 80,
+    },
+    topicMatCount: {
+      minWidth: 26,
+      height: 26,
+      borderRadius: 13,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 6,
+    },
+    topicMatCountText: {
+      fontSize: 12,
+      fontWeight: '700',
+    },
+
+    // Materials Grid
+    materialsGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 12,
+    },
+    materialGridItem: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderTopWidth: 3,
+      padding: 14,
+      gap: 8,
+      alignItems: 'flex-start',
+      ...(Platform.OS === 'web' ? {
+        width: isMobile ? '100%' : 'calc(50% - 6px)',
+      } : {
+        width: isMobile ? '100%' : '48%',
+      }),
+    },
+    materialGridIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    materialGridName: {
+      fontSize: 13,
+      fontWeight: '600',
+      lineHeight: 18,
+      fontFamily: theme.typography.fontFamily.semiBold,
+    },
+    materialGridType: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 6,
+    },
+    materialGridTypeText: {
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+    },
+    materialDownloadBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      alignSelf: 'flex-start',
+    },
+    materialDownloadText: {
+      fontSize: 12,
+      fontWeight: '600',
     },
 
     // Empty Section
@@ -652,7 +1007,7 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       fontFamily: theme.typography.fontFamily.regular,
     },
 
-    // Info Grid (horizontal layout in main column)
+    // Info Grid
     infoGrid: {
       flexDirection: isMobile ? 'column' : 'row',
       flexWrap: 'wrap',
@@ -673,10 +1028,31 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     thumbnailCard: {
       padding: isMobile ? 16 : 20,
     },
+    thumbContainer: {
+      position: 'relative',
+      borderRadius: 12,
+      overflow: 'hidden',
+    },
     thumbnailImage: {
       width: '100%',
       height: isMobile ? 200 : 180,
       borderRadius: 12,
+    },
+    thumbStatusBadge: {
+      position: 'absolute',
+      bottom: 10,
+      right: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 20,
+    },
+    thumbStatusText: {
+      color: '#fff',
+      fontSize: 12,
+      fontWeight: '600',
     },
     thumbnailPlaceholder: {
       width: '100%',
@@ -686,14 +1062,14 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       borderStyle: 'dashed',
       justifyContent: 'center',
       alignItems: 'center',
-      gap: 8,
+      gap: 10,
     },
     thumbnailPlaceholderText: {
       fontSize: 13,
       fontFamily: theme.typography.fontFamily.regular,
     },
 
-    // Info List (keeping for backwards compat)
+    // Info List
     infoList: {
       gap: 16,
     },
@@ -727,8 +1103,33 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     actionsList: {
       gap: 10,
     },
-    actionBtn: {
-      width: '100%',
+    actionCardBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      padding: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+    },
+    actionBtnIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    actionBtnText: {
+      flex: 1,
+    },
+    actionBtnTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      fontFamily: theme.typography.fontFamily.semiBold,
+      marginBottom: 2,
+    },
+    actionBtnDesc: {
+      fontSize: 12,
+      fontFamily: theme.typography.fontFamily.regular,
     },
 
     // Info Card

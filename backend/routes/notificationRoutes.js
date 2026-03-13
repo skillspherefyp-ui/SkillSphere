@@ -20,5 +20,6 @@ router.delete('/:id', notificationController.deleteNotification);
 
 // Clear all notifications
 router.delete('/clear/all', notificationController.clearAllNotifications);
+router.delete('/clear', notificationController.clearAllNotifications);
 
 module.exports = router;

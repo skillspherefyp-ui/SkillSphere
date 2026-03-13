@@ -35,10 +35,8 @@ const AnimatedButton = ({ title, onPress, loading = false, variant = 'primary', 
         activeOpacity={0.8}
       >
         <LinearGradient
-          colors={[theme.colors.buttonGradientStart, theme.colors.buttonGradientEnd]}
+          colors={[theme.colors.secondary, theme.colors.secondaryDark, theme.colors.secondaryLight]}
           style={styles.gradientButton}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
         >
           {loading ? (
             <ActivityIndicator color="#ffffff" />
@@ -74,6 +72,8 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     paddingHorizontal: 36,
     borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(228, 118, 33, 0.55)',
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 140,
@@ -85,9 +85,9 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#ffffff',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 0.2,
     textTransform: 'uppercase',
   },
   secondaryButton: {

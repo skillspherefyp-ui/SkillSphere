@@ -104,6 +104,83 @@ exports.getUserById = async (req, res) => {
   }
 };
 
+exports.updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, phone, role, permissions, isActive } = req.body;
+
+    const user = await User.findByPk(id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.role === 'superadmin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: 'Cannot update super admin' });
+    }
+
+    if (email && email !== user.email) {
+      const existing = await User.findOne({ where: { email } });
+      if (existing && existing.id !== user.id) {
+        return res.status(400).json({ error: 'Email already exists' });
+      }
+    }
+
+    await user.update({
+      name: name ?? user.name,
+      email: email ?? user.email,
+      phone: phone ?? user.phone,
+      role: role ?? user.role,
+      permissions: permissions ?? user.permissions,
+      isActive: typeof isActive === 'boolean' ? isActive : user.isActive
+    });
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        permissions: user.permissions,
+        isActive: user.isActive,
+        createdAt: user.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getUserStats = async (req, res) => {
+  try {
+    const targetUserId = req.params.id ? Number(req.params.id) : null;
+    const baseWhere = {};
+
+    if (targetUserId) {
+      baseWhere.userId = targetUserId;
+    }
+
+    const [totalEnrollments, completedEnrollments] = await Promise.all([
+      Enrollment.count({ where: baseWhere }),
+      Enrollment.count({ where: { ...baseWhere, status: 'completed' } })
+    ]);
+
+    res.json({
+      success: true,
+      stats: {
+        totalEnrollments,
+        completedEnrollments,
+        activeEnrollments: totalEnrollments - completedEnrollments
+      }
+    });
+  } catch (error) {
+    console.error('Get user stats error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Toggle user active status
 exports.toggleUserStatus = async (req, res) => {
   try {

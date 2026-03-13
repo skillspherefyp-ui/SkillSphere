@@ -1,114 +1,146 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, useWindowDimensions, ActivityIndicator } from 'react-native';
 import Toast from 'react-native-toast-message';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import AppHeader from '../../components/ui/AppHeader';
+import MainLayout from '../../components/ui/MainLayout';
 import AppCard from '../../components/ui/AppCard';
 import AppButton from '../../components/ui/AppButton';
 import ProgressBar from '../../components/ui/ProgressBar';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { aiTutorAPI } from '../../services/apiClient';
+import { quizAPI } from '../../services/apiClient';
 import { useData } from '../../context/DataContext';
+import AIQuizScreen from './AIQuizScreen';
 
 const QuizScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const { courseId, topicId, topics } = route.params;
   const { theme } = useTheme();
   const { width } = useWindowDimensions();
   const { fetchCourses } = useData();
-  const { courseId, topicId, lectureId } = route.params || {};
+  const { logout } = useAuth();
+
+  const sidebarItems = [
+    { label: 'Dashboard', icon: 'grid-outline', iconActive: 'grid', route: 'Dashboard' },
+    { label: 'Browse Courses', icon: 'library-outline', iconActive: 'library', route: 'Courses' },
+    { label: 'My Learning', icon: 'school-outline', iconActive: 'school', route: 'EnrolledCourses' },
+    { label: 'AI Assistant', icon: 'sparkles-outline', iconActive: 'sparkles', route: 'AITutor' },
+    { label: 'Certificates', icon: 'ribbon-outline', iconActive: 'ribbon', route: 'Certificates' },
+    { label: 'Reminders', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle', route: 'Todo' },
+  ];
+  const handleNavigate = (route) => navigation.navigate(route);
+
   const [quiz, setQuiz] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState({});
 
+  if (route.params?.lectureId) {
+    return <AIQuizScreen />;
+  }
+
   const isWeb = Platform.OS === 'web';
   const maxWidth = isWeb && width > 1200 ? 1200 : '100%';
-  const questions = quiz?.questions || [];
-  const question = questions[currentQuestion];
-  const totalQuestions = questions.length;
+
   useEffect(() => {
-    if (!lectureId) {
-      setLoading(false);
-      return;
-    }
+    fetchQuiz();
+  }, [topicId]);
 
-    loadQuiz();
-  }, [lectureId]);
-
-  const loadQuiz = async () => {
-    setLoading(true);
+  const fetchQuiz = async () => {
     try {
-      const response = await aiTutorAPI.getQuiz(lectureId);
-      if (!response.success) {
-        throw new Error(response.error || 'Unable to load quiz');
-      }
-      setQuiz(response.quiz);
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Quiz Unavailable',
-        text2: error.message || 'Unable to load the stored quiz.',
-      });
+      setLoading(true);
+      const data = await quizAPI.getByTopic(topicId);
+      setQuiz(data.quiz);
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Failed to load quiz' });
     } finally {
       setLoading(false);
     }
   };
 
-  const canAdvance = useMemo(() => selectedAnswers[question?.id] !== undefined, [selectedAnswers, question]);
+  const question = quiz?.questions?.[currentQuestion];
+  const totalQuestions = quiz?.questions?.length || 0;
 
   const handleSelectAnswer = (optionIndex) => {
     if (!question) return;
-    setSelectedAnswers((prev) => ({ ...prev, [question.id]: optionIndex }));
+    setSelectedAnswers(prev => ({ ...prev, [question.id]: optionIndex }));
   };
 
   const handleNext = () => {
     if (currentQuestion < totalQuestions - 1) {
-      setCurrentQuestion((prev) => prev + 1);
-      return;
+      setCurrentQuestion(currentQuestion + 1);
+    } else {
+      handleSubmit();
     }
-    handleSubmit();
   };
 
   const handlePrevious = () => {
     if (currentQuestion > 0) {
-      setCurrentQuestion((prev) => prev - 1);
+      setCurrentQuestion(currentQuestion - 1);
     }
   };
 
   const handleSubmit = async () => {
-    if (!quiz || !lectureId) return;
+    if (submitting) return;
     setSubmitting(true);
-
     try {
-      const response = await aiTutorAPI.submitQuiz(lectureId, selectedAnswers);
-      if (!response.success) {
-        throw new Error(response.error || 'Unable to submit quiz');
+      const data = await quizAPI.submit({
+        quizId: quiz.id,
+        answers: selectedAnswers,
+      });
+      const result = data.result;
+
+      if (result.passed) {
+        Toast.show({
+          type: 'success',
+          text1: '🎉 Quiz Passed!',
+          text2: `Score: ${result.score}% — Moving to next topic...`,
+        });
+
+        // Refresh DataContext so completion state is current
+        await fetchCourses();
+
+        // Use nextTopicId from backend response (most reliable)
+        const targetTopicId = result.nextTopicId;
+
+        setTimeout(() => {
+          if (targetTopicId) {
+            navigation.replace('Learning', { courseId, topicId: targetTopicId });
+          } else {
+            // Course complete
+            navigation.navigate('QuizResult', {
+              courseId,
+              topicId,
+              score: result.score,
+              totalQuestions: result.totalQuestions,
+              correctCount: result.correctAnswers,
+              passed: result.passed,
+            });
+          }
+        }, 2000);
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Quiz Not Passed',
+          text2: `Score: ${result.score}% — Need ${quiz.passingScore || 70}% to pass`,
+        });
+        setTimeout(() => {
+          navigation.navigate('QuizResult', {
+            courseId,
+            topicId,
+            score: result.score,
+            totalQuestions: result.totalQuestions,
+            correctCount: result.correctAnswers,
+            passed: result.passed,
+          });
+        }, 1500);
       }
-
-      await fetchCourses();
-      const result = response.result;
-      Toast.show({
-        type: result.passed ? 'success' : 'info',
-        text1: result.passed ? 'Quiz Passed' : 'Quiz Submitted',
-        text2: `Score: ${result.score}%`,
-      });
-
-      navigation.replace('QuizResult', {
-        courseId,
-        topicId,
-        lectureId,
-        ...result,
-      });
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Submission Failed',
-        text2: error.message || 'Unable to submit quiz answers.',
-      });
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Failed to submit quiz' });
     } finally {
       setSubmitting(false);
     }
@@ -116,48 +148,65 @@ const QuizScreen = () => {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <AppHeader title="Quiz" />
-        <View style={styles.loadingWrap}>
+      <MainLayout
+        showSidebar={true}
+        sidebarItems={sidebarItems}
+        activeRoute="EnrolledCourses"
+        onNavigate={handleNavigate}
+      >
+        <View style={styles.centered}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Loading lecture quiz...</Text>
+          <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Loading quiz...</Text>
         </View>
-      </View>
+      </MainLayout>
     );
   }
 
-  if (!quiz || !question) {
+  if (!quiz || !quiz.questions || quiz.questions.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <AppHeader title="Quiz" />
-        <View style={styles.loadingWrap}>
-          <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Quiz not available for this lecture.</Text>
+      <MainLayout
+        showSidebar={true}
+        sidebarItems={sidebarItems}
+        activeRoute="EnrolledCourses"
+        onNavigate={handleNavigate}
+      >
+        <View style={styles.centered}>
+          <Icon name="help-circle-outline" size={64} color={theme.colors.textTertiary} />
+          <Text style={[styles.noQuizText, { color: theme.colors.textSecondary }]}>
+            No quiz available for this topic yet.
+          </Text>
+          <AppButton title="Go Back" onPress={() => navigation.goBack()} variant="outline" style={{ marginTop: 16 }} />
         </View>
-      </View>
+      </MainLayout>
     );
   }
+
+  const isLastQuestion = currentQuestion === totalQuestions - 1;
+  const hasAnswered = question && selectedAnswers[question.id] !== undefined;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <AppHeader title={`Quiz - Question ${currentQuestion + 1} of ${totalQuestions}`} />
-      <ProgressBar progress={((currentQuestion + 1) / totalQuestions) * 100} style={styles.progressBar} />
+    <MainLayout
+      showSidebar={true}
+      sidebarItems={sidebarItems}
+      activeRoute="EnrolledCourses"
+      onNavigate={handleNavigate}
+    >
+      <ProgressBar
+        progress={((currentQuestion + 1) / totalQuestions) * 100}
+        style={styles.progressBar}
+      />
 
-      <ScrollView style={styles.content} contentContainerStyle={[styles.contentContainer, { maxWidth, alignSelf: 'center', width: '100%' }]}>
-        <AppCard style={[styles.summaryCard, { backgroundColor: theme.colors.card }]}>
-          <View style={styles.summaryRow}>
-            <View>
-              <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Stored lecture quiz</Text>
-              <Text style={[styles.summaryValue, { color: theme.colors.textPrimary }]}>Question {currentQuestion + 1} of {totalQuestions}</Text>
-            </View>
-            <View style={[styles.summaryBadge, { backgroundColor: canAdvance ? `${theme.colors.primary}18` : theme.colors.border }]}>
-              <Text style={[styles.summaryBadgeText, { color: canAdvance ? theme.colors.primary : theme.colors.textTertiary }]}>{canAdvance ? 'Answered' : 'Select one answer'}</Text>
-            </View>
-          </View>
-        </AppCard>
-
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={[styles.contentContainer, { maxWidth, alignSelf: 'center', width: '100%' }]}
+      >
         <AppCard style={styles.questionContainer}>
-          <Text style={[styles.questionNumber, { color: theme.colors.primary }]}>Question {currentQuestion + 1}</Text>
-          <Text style={[styles.questionText, { color: theme.colors.textPrimary }]}>{question.prompt}</Text>
+          <Text style={[styles.questionNumber, { color: theme.colors.primary }]}>
+            Question {currentQuestion + 1} of {totalQuestions}
+          </Text>
+          <Text style={[styles.questionText, { color: theme.colors.textPrimary }]}>
+            {question.question}
+          </Text>
         </AppCard>
 
         <View style={styles.optionsContainer}>
@@ -169,26 +218,34 @@ const QuizScreen = () => {
                   style={[
                     styles.option,
                     {
-                      backgroundColor: isSelected ? `${theme.colors.primary}12` : theme.colors.card,
+                      backgroundColor: isSelected ? theme.colors.primary + '18' : theme.colors.card,
                       borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                    },
+                      borderWidth: isSelected ? 2 : 1,
+                    }
                   ]}
                   onPress={() => handleSelectAnswer(index)}
                 >
                   <View style={styles.optionContent}>
-                    <View style={styles.optionIndicator}>
-                      <Icon name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={22} color={isSelected ? theme.colors.primary : theme.colors.textTertiary} />
+                    <View style={[styles.optionLetter, { backgroundColor: isSelected ? theme.colors.primary : theme.colors.surface }]}>
+                      <Text style={[styles.optionLetterText, { color: isSelected ? '#fff' : theme.colors.textSecondary }]}>
+                        {String.fromCharCode(65 + index)}
+                      </Text>
                     </View>
-                    <View style={styles.optionTextWrap}>
-                      <Text style={[styles.optionLabel, { color: isSelected ? theme.colors.primary : theme.colors.textSecondary }]}>{String.fromCharCode(65 + index)}</Text>
-                      <Text style={[styles.optionText, { color: theme.colors.textPrimary }]}>{option}</Text>
-                    </View>
+                    <Text style={[styles.optionText, { color: theme.colors.textPrimary }]}>{option}</Text>
+                    {isSelected && (
+                      <Icon name="checkmark-circle" size={20} color={theme.colors.primary} />
+                    )}
                   </View>
                 </TouchableOpacity>
               </Animated.View>
             );
           })}
         </View>
+
+        {/* Passing score info */}
+        <Text style={[styles.passingInfo, { color: theme.colors.textTertiary }]}>
+          Passing score: {quiz.passingScore || 70}%
+        </Text>
       </ScrollView>
 
       <View style={[styles.footer, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
@@ -197,49 +254,112 @@ const QuizScreen = () => {
           onPress={handlePrevious}
           variant="outline"
           disabled={currentQuestion === 0 || submitting}
-          icon={<Icon name="chevron-back" size={16} color={currentQuestion === 0 ? theme.colors.textTertiary : theme.colors.primary} />}
-          iconPosition="left"
+          leftIcon="chevron-back"
           style={styles.footerButton}
         />
         <AppButton
-          title={currentQuestion === totalQuestions - 1 ? (submitting ? 'Submitting...' : 'Submit') : 'Next'}
+          title={submitting ? 'Submitting...' : isLastQuestion ? 'Submit' : 'Next'}
           onPress={handleNext}
           variant="primary"
-          disabled={!canAdvance || submitting}
-          icon={<Icon name="chevron-forward" size={16} color="#ffffff" />}
-          iconPosition="right"
+          disabled={!hasAnswered || submitting}
+          leftIcon={isLastQuestion ? 'checkmark' : 'chevron-forward'}
           style={styles.footerButton}
         />
       </View>
-    </View>
+    </MainLayout>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  progressBar: { marginBottom: 0 },
-  content: { flex: 1 },
-  contentContainer: { padding: 20 },
-  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
-  loadingText: { fontSize: 15 },
-  summaryCard: { marginBottom: 16 },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
-  summaryLabel: { fontSize: 12, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.6 },
-  summaryValue: { fontSize: 16, fontWeight: '700' },
-  summaryBadge: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
-  summaryBadgeText: { fontSize: 11, fontWeight: '700' },
-  questionContainer: { marginBottom: 24 },
-  questionNumber: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
-  questionText: { fontSize: 20, fontWeight: '600', lineHeight: 28 },
-  optionsContainer: { gap: 12 },
-  option: { borderRadius: 16, padding: 16, borderWidth: 2 },
-  optionContent: { flexDirection: 'row', alignItems: 'center' },
-  optionIndicator: { marginRight: 12 },
-  optionTextWrap: { flex: 1 },
-  optionLabel: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
-  optionText: { flex: 1, fontSize: 16 },
-  footer: { flexDirection: 'row', padding: 20, borderTopWidth: 1, gap: 12 },
-  footerButton: { flex: 1 },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 8,
+  },
+  noQuizText: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  progressBar: {
+    marginBottom: 0,
+    backgroundColor: '#FF8C42',
+  },
+  content: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 20,
+    paddingBottom: 32,
+  },
+  questionContainer: {
+    marginBottom: 24,
+    padding: 20,
+    borderTopWidth: 3,
+    borderTopColor: '#FF8C42',
+  },
+  questionNumber: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  questionText: {
+    fontSize: 20,
+    fontWeight: '600',
+    lineHeight: 28,
+  },
+  optionsContainer: {
+    gap: 12,
+  },
+  option: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 0,
+    // Active state border is handled inline via isSelected ? theme.colors.primary : theme.colors.border
+  },
+  optionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  optionLetter: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  optionLetterText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  optionText: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  passingInfo: {
+    marginTop: 24,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  footer: {
+    flexDirection: 'row',
+    padding: 20,
+    borderTopWidth: 1,
+    gap: 12,
+  },
+  footerButton: {
+    flex: 1,
+  },
 });
 
 export default QuizScreen;

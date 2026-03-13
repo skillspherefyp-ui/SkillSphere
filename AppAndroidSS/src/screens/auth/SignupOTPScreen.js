@@ -1,96 +1,86 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  useWindowDimensions,
+  View, Text, StyleSheet, KeyboardAvoidingView, Platform,
+  ScrollView, TouchableOpacity, Image, ActivityIndicator,
+  TextInput, useWindowDimensions, Alert,
 } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/Ionicons';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
-import AppButton from '../../components/ui/AppButton';
-import BrandLogo from '../../components/BrandLogo';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import ThemeToggle from '../../components/ThemeToggle';
+
+const LOGO   = require('../../assets/images/skillsphere-logo.png');
+const ORANGE = '#F68B3C';
+
+const getColors = (isDark) => ({
+  bg:               isDark ? '#0F0F1E'                                                          : '#EEF0FF',
+  webBg:            isDark ? 'linear-gradient(135deg,#0F0F1E 0%,#1A1A2E 50%,#0F1628 100%)'    : 'linear-gradient(135deg,#EEF0FF 0%,#F0F2FF 50%,#E8EEFF 100%)',
+  cardBg:           isDark ? 'rgba(255,255,255,0.06)'   : '#FFFFFF',
+  cardBorder:       isDark ? 'rgba(255,255,255,0.1)'    : 'rgba(26,26,46,0.08)',
+  textPrimary:      isDark ? '#FFFFFF'                  : '#1A1A2E',
+  textSecondary:    isDark ? 'rgba(255,255,255,0.55)'   : 'rgba(26,26,46,0.55)',
+  otpBg:            isDark ? 'rgba(255,255,255,0.05)'   : 'rgba(26,26,46,0.04)',
+  otpBorder:        isDark ? 'rgba(255,255,255,0.15)'   : 'rgba(26,26,46,0.15)',
+  otpText:          isDark ? '#FFFFFF'                  : '#1A1A2E',
+  footerText:       isDark ? 'rgba(255,255,255,0.5)'    : 'rgba(26,26,46,0.5)',
+  resendText:       isDark ? 'rgba(255,255,255,0.5)'    : 'rgba(26,26,46,0.5)',
+  resendDisabled:   isDark ? 'rgba(255,255,255,0.3)'    : 'rgba(26,26,46,0.3)',
+  errorBg:          isDark ? 'rgba(255,107,107,0.12)'   : 'rgba(239,68,68,0.08)',
+  errorBorder:      isDark ? 'rgba(255,107,107,0.25)'   : 'rgba(239,68,68,0.2)',
+  backBtn:          isDark ? 'rgba(255,255,255,0.1)'    : 'rgba(26,26,46,0.1)',
+  logoText:         isDark ? '#FFFFFF'                  : '#1A1A2E',
+});
 
 const SignupOTPScreen = ({ route, navigation }) => {
   const params = route?.params || {};
-  const email = params.email || '';
-  const name = params.name || '';
-  const { theme } = useTheme();
+  const email  = params.email || '';
+  const name   = params.name  || '';
   const { verifyOTP, resendOTP, isLoading } = useAuth();
-
-  // Debug log
-  console.log('SignupOTPScreen mounted with params:', { email, name });
+  const { isDark } = useTheme();
+  const C = getColors(isDark);
   const { width } = useWindowDimensions();
 
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [error, setError] = useState('');
+  const [otp, setOtp]                 = useState(['', '', '', '', '', '']);
+  const [error, setError]             = useState('');
   const [resendCooldown, setResendCooldown] = useState(60);
-  const [verifying, setVerifying] = useState(false);
-  const [sending, setSending] = useState(false);
-  const otpInputRefs = useRef([]);
+  const [verifying, setVerifying]     = useState(false);
+  const [sending, setSending]         = useState(false);
+  const refs = useRef([]);
 
   const isWeb = Platform.OS === 'web';
-  const maxWidth = isWeb ? 440 : '100%';
 
-  // Resend cooldown timer
   useEffect(() => {
     if (resendCooldown > 0) {
-      const timer = setInterval(() => {
-        setResendCooldown(prev => (prev <= 1 ? 0 : prev - 1));
-      }, 1000);
-      return () => clearInterval(timer);
+      const t = setInterval(() => setResendCooldown(p => p <= 1 ? 0 : p - 1), 1000);
+      return () => clearInterval(t);
     }
   }, [resendCooldown]);
 
-  const handleOtpChange = (value, index) => {
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
-
-    if (value && index < 5) {
-      otpInputRefs.current[index + 1]?.focus();
-    }
+  const handleChange = (val, i) => {
+    const next = [...otp];
+    next[i] = val;
+    setOtp(next);
+    if (val && i < 5) refs.current[i + 1]?.focus();
   };
 
-  const handleOtpKeyPress = (key, index) => {
-    if (key === 'Backspace' && !otp[index] && index > 0) {
-      otpInputRefs.current[index - 1]?.focus();
-    }
+  const handleKey = (key, i) => {
+    if (key === 'Backspace' && !otp[i] && i > 0) refs.current[i - 1]?.focus();
   };
 
   const handleVerify = async () => {
     setError('');
-    const otpString = otp.join('');
-
-    if (otpString.length !== 6) {
-      setError('Please enter the complete 6-digit code');
-      return;
-    }
-
+    const code = otp.join('');
+    if (code.length !== 6) return setError('Please enter the complete 6-digit code');
     setVerifying(true);
-    console.log('Verifying OTP for signup:', email);
-
     try {
-      const result = await verifyOTP(email, otpString);
-      console.log('Verify result:', result);
+      const result = await verifyOTP(email, code);
       setVerifying(false);
-
       if (result.success) {
-        // Navigate to details screen to set password
         navigation.replace('SignupDetails', { email, name });
       } else {
         setError(result.error || 'Invalid verification code');
       }
     } catch (err) {
-      console.log('Verify error:', err);
       setVerifying(false);
       setError(err.message || 'Verification failed');
     }
@@ -98,14 +88,10 @@ const SignupOTPScreen = ({ route, navigation }) => {
 
   const handleResend = async () => {
     if (resendCooldown > 0) return;
-
-    setError('');
-    setSending(true);
-
+    setError(''); setSending(true);
     try {
       const result = await resendOTP(email);
       setSending(false);
-
       if (result.success) {
         setResendCooldown(60);
         Alert.alert('Code Sent', 'A new verification code has been sent to your email.');
@@ -118,250 +104,119 @@ const SignupOTPScreen = ({ route, navigation }) => {
     }
   };
 
-  const gradientColors = theme.mode === 'dark'
-    ? [theme.colors.background, theme.colors.backgroundSecondary]
-    : [theme.colors.background, theme.colors.backgroundSecondary];
-
-  const content = (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.keyboardView}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          >
-            <Icon name="arrow-back" size={24} color={theme.colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
-
-        <Animated.View
-          entering={FadeInDown.duration(600).delay(200)}
-          style={[
-            styles.formContainer,
-            {
-              backgroundColor: theme.colors.card,
-              maxWidth,
-              alignSelf: 'center',
-              width: '100%',
-            },
-          ]}
-        >
-          <Animated.View entering={FadeIn.duration(600)} style={styles.logoContainer}>
-            <BrandLogo size={80} />
-            <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
-              Verify Your Email
-            </Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
-              Enter the 6-digit code sent to{'\n'}
-              <Text style={{ fontWeight: '600', color: theme.colors.textPrimary }}>{email}</Text>
-            </Text>
-          </Animated.View>
-          {error ? (
-            <Animated.View
-              entering={FadeIn.duration(300)}
-              style={[styles.errorBox, { backgroundColor: theme.colors.errorLight || '#fee2e2' }]}
-            >
-              <Icon name="alert-circle" size={20} color={theme.colors.error || '#ef4444'} />
-              <Text style={[styles.errorText, { color: theme.colors.error || '#ef4444' }]}>
-                {error}
-              </Text>
-            </Animated.View>
-          ) : null}
-
-          <View style={styles.otpContainer}>
-            {otp.map((digit, index) => (
-              <TextInput
-                key={index}
-                ref={(ref) => (otpInputRefs.current[index] = ref)}
-                style={[
-                  styles.otpInput,
-                  {
-                    borderColor: digit ? theme.colors.primary : theme.colors.border,
-                    backgroundColor: digit ? theme.colors.surface : theme.colors.card,
-                    color: theme.colors.textPrimary,
-                  },
-                ]}
-                value={digit}
-                onChangeText={(value) => handleOtpChange(value.replace(/[^0-9]/g, ''), index)}
-                onKeyPress={({ nativeEvent }) => handleOtpKeyPress(nativeEvent.key, index)}
-                keyboardType="numeric"
-                maxLength={1}
-                selectTextOnFocus
-              />
-            ))}
-          </View>
-
-          <AppButton
-            title={verifying ? 'Verifying...' : 'Verify Code'}
-            onPress={handleVerify}
-            loading={verifying || isLoading}
-            fullWidth
-            style={styles.verifyButton}
-          />
-
-          <TouchableOpacity
-            style={styles.resendContainer}
-            onPress={handleResend}
-            disabled={resendCooldown > 0 || sending}
-          >
-            <Text style={[styles.resendText, { color: theme.colors.textSecondary }]}>
-              Didn't receive the code?{' '}
-            </Text>
-            <Text
-              style={[
-                styles.resendLink,
-                { color: resendCooldown > 0 ? theme.colors.textTertiary : theme.colors.primary },
-              ]}
-            >
-              {resendCooldown > 0 ? `Resend (${resendCooldown}s)` : 'Resend'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.changeEmailButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Icon name="arrow-back" size={16} color={theme.colors.primary} />
-            <Text style={[styles.changeEmailText, { color: theme.colors.primary }]}>
-              Change email address
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-
-  if (isWeb) {
-    return (
-      <View style={[styles.container, { backgroundColor: gradientColors[0] }]}>
-        {content}
-      </View>
-    );
-  }
+  const bg = isWeb ? { background: C.webBg } : { backgroundColor: C.bg };
 
   return (
-    <LinearGradient
-      colors={gradientColors}
-      style={styles.container}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
-      {content}
-    </LinearGradient>
+    <View style={[s.container, bg]}>
+      <View style={[s.glow1, { backgroundColor: ORANGE + '0C' }]} />
+      <View style={[s.glow2, { backgroundColor: '#6366F1' + (isDark ? '0A' : '08') }]} />
+
+      <View style={s.topBar}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[s.backBtn, { backgroundColor: C.backBtn }]}>
+          <Icon name="arrow-back" size={18} color={C.textPrimary} />
+        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Image source={LOGO} style={s.logoImg} resizeMode="cover" />
+          <Text style={[s.logoText, { color: C.logoText }]}>SKILL<Text style={{ color: ORANGE }}>SPHERE</Text></Text>
+        </View>
+        <ThemeToggle iconColor={C.textPrimary} />
+      </View>
+
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+          <View style={s.brandHeader}>
+            <View style={[s.iconCircle, { backgroundColor: ORANGE + '20', borderColor: ORANGE + '40' }]}>
+              <Icon name="shield-checkmark-outline" size={32} color={ORANGE} />
+            </View>
+            <Text style={[s.title, { color: C.textPrimary }]}>Verify Your Email</Text>
+            <Text style={[s.subtitle, { color: C.textSecondary }]}>
+              We sent a 6-digit code to{'\n'}
+              <Text style={{ color: ORANGE, fontWeight: '700' }}>{email}</Text>
+            </Text>
+          </View>
+
+          <View style={[s.card, { backgroundColor: C.cardBg, borderColor: C.cardBorder, maxWidth: 440, alignSelf: 'center', width: '100%' }]}>
+
+            {!!error && (
+              <View style={[s.errorBox, { backgroundColor: C.errorBg, borderColor: C.errorBorder }]}>
+                <Icon name="alert-circle" size={16} color="#EF4444" />
+                <Text style={s.errorText}>{error}</Text>
+              </View>
+            )}
+
+            <View style={s.otpRow}>
+              {otp.map((digit, i) => (
+                <TextInput
+                  key={i}
+                  ref={r => refs.current[i] = r}
+                  style={[s.otpBox, {
+                    color: C.otpText,
+                    borderColor: digit ? ORANGE : C.otpBorder,
+                    backgroundColor: digit ? ORANGE + '15' : C.otpBg,
+                  }]}
+                  value={digit}
+                  onChangeText={v => handleChange(v.replace(/[^0-9]/g, ''), i)}
+                  onKeyPress={({ nativeEvent }) => handleKey(nativeEvent.key, i)}
+                  keyboardType="numeric"
+                  maxLength={1}
+                  selectTextOnFocus
+                />
+              ))}
+            </View>
+
+            <TouchableOpacity style={s.primaryBtn} onPress={handleVerify} disabled={verifying || isLoading} activeOpacity={0.85}>
+              {verifying || isLoading
+                ? <ActivityIndicator color="#FFFFFF" />
+                : <Text style={s.primaryBtnText}>Verify Email</Text>}
+            </TouchableOpacity>
+
+            <View style={s.resendRow}>
+              <Text style={[s.resendText, { color: C.resendText }]}>Didn't receive the code? </Text>
+              <TouchableOpacity onPress={handleResend} disabled={resendCooldown > 0 || sending}>
+                <Text style={[s.resendLink, { color: resendCooldown > 0 ? C.resendDisabled : ORANGE }]}>
+                  {sending ? 'Sending...' : resendCooldown > 0 ? `Resend (${resendCooldown}s)` : 'Resend'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={s.changeRow} onPress={() => navigation.goBack()}>
+              <Icon name="arrow-back" size={14} color={ORANGE} />
+              <Text style={{ color: ORANGE, fontSize: 13, fontWeight: '600' }}>Change email address</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 20,
-    minHeight: '100%',
-  },
-  header: {
-    position: 'absolute',
-    top: 50,
-    left: 20,
-    right: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  backButton: {
-    padding: 8,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-    marginTop: 16,
-    letterSpacing: 0.5,
-  },
-  subtitle: {
-    fontSize: 15,
-    marginTop: 8,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  formContainer: {
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-  errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  errorText: {
-    flex: 1,
-    marginLeft: 10,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  otpContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  otpInput: {
-    width: 45,
-    height: 55,
-    borderWidth: 2,
-    borderRadius: 12,
-    textAlign: 'center',
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
-  verifyButton: {
-    height: 52,
-  },
-  resendContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 20,
-  },
-  resendText: {
-    fontSize: 14,
-  },
-  resendLink: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  changeEmailButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-    gap: 6,
-  },
-  changeEmailText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
+const s = StyleSheet.create({
+  container: { flex: 1 },
+  glow1: { position: 'absolute', width: 300, height: 300, borderRadius: 150, top: -60, right: -50, zIndex: 0 },
+  glow2: { position: 'absolute', width: 220, height: 220, borderRadius: 110, bottom: 60, left: -70, zIndex: 0 },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 54 : 16, paddingBottom: 12, zIndex: 10 },
+  backBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  logoImg: { width: 42, height: 42, borderRadius: 12 },
+  logoText: { fontWeight: '800', fontSize: 16, letterSpacing: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 40 },
+  brandHeader: { alignItems: 'center', paddingVertical: 36 },
+  iconCircle: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  title: { fontSize: 26, fontWeight: '900', marginBottom: 10 },
+  subtitle: { fontSize: 14, textAlign: 'center', lineHeight: 22 },
+  card: { borderRadius: 24, borderWidth: 1, padding: 24 },
+  errorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, borderWidth: 1, padding: 12, marginBottom: 16 },
+  errorText: { flex: 1, color: '#EF4444', fontSize: 13 },
+  otpRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 28 },
+  otpBox: { width: 46, height: 56, borderRadius: 12, borderWidth: 2, textAlign: 'center', fontSize: 24, fontWeight: '800' },
+  primaryBtn: { height: 52, borderRadius: 12, backgroundColor: ORANGE, borderWidth: 1, borderColor: '#E77828', justifyContent: 'center', alignItems: 'center', shadowColor: '#C96A24', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.16, shadowRadius: 6, elevation: 3 },
+  primaryBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800', letterSpacing: 0.12 },
+  resendRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20 },
+  resendText: { fontSize: 13 },
+  resendLink: { fontSize: 13, fontWeight: '700', letterSpacing: 0.1 },
+  changeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 14 },
 });
 
 export default SignupOTPScreen;

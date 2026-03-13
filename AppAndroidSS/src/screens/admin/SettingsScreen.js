@@ -10,9 +10,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 
+const ORANGE = '#FF8C42';
+
 const SettingsScreen = () => {
   const { logout, user } = useAuth();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const navigation = useNavigation();
   const { width } = useWindowDimensions();
 
@@ -23,6 +25,9 @@ const SettingsScreen = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
 
   const isWeb = Platform.OS === 'web';
+  const isLargeScreen = width > 1024;
+  const isTablet = width > 768;
+  const isMobile = width <= 480;
   const maxWidth = isWeb && width > 1200 ? 1200 : '100%';
 
   const isSuperAdmin = user?.role === 'superadmin';
@@ -100,55 +105,30 @@ const SettingsScreen = () => {
   };
 
   const handleForgotPassword = () => {
-    navigation.navigate('ForgotPassword', { 
+    navigation.navigate('ForgotPassword', {
       email: user?.email,
-      fromSettings: true 
+      fromSettings: true
     });
   };
 
-  const getStyles = (theme) => StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: theme.colors.background,
-    },
-    scrollView: {
-      flex: 1,
-    },
-    logoutButton: {
-      padding: 8,
-    },
-    content: {
-      padding: 20,
-    },
-    pageTitle: {
-      fontSize: 24,
-      fontWeight: '700',
-      color: theme.colors.textPrimary,
-      marginBottom: 24,
-    },
-    sectionTitle: {
-      fontSize: 20,
-      fontWeight: 'bold',
-      color: theme.colors.textPrimary,
-      marginBottom: 16,
-    },
-    passwordSection: {
-      marginBottom: 24,
-    },
-    changePasswordButton: {
-      marginTop: 10,
-    },
-    forgotPasswordLink: {
-      alignSelf: 'center',
-      marginTop: 16,
-    },
-    forgotPasswordText: {
-      fontSize: 14,
-      fontWeight: '600',
-    },
-  });
+  // Get user initials for avatar
+  const getUserInitials = (name) => {
+    if (!name) return '?';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    }
+    return name.charAt(0).toUpperCase();
+  };
 
-  const styles = getStyles(theme);
+  const getRoleLabel = () => {
+    if (user?.role === 'superadmin') return 'Super Admin';
+    if (user?.role === 'admin') return 'Administrator';
+    if (user?.role === 'expert') return 'Expert';
+    return 'Student';
+  };
+
+  const styles = getStyles(theme, isDark, isLargeScreen, isTablet, isMobile);
 
   return (
     <MainLayout
@@ -162,61 +142,183 @@ const SettingsScreen = () => {
     >
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.content, { maxWidth, alignSelf: 'center', width: '100%' }]}
+        contentContainerStyle={[styles.scrollContent, { maxWidth, alignSelf: 'center', width: '100%' }]}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.pageTitle}>Settings</Text>
-        <Text style={styles.sectionTitle}>Change Password</Text>
-        <AppCard style={styles.passwordSection}>
-          <AppInput
-            label="Current Password"
-            value={currentPassword}
-            onChangeText={setCurrentPassword}
-            secureTextEntry={!showCurrentPassword}
-            placeholder="Enter current password"
-            rightIcon={
-              <TouchableOpacity
-                onPress={() => setShowCurrentPassword(!showCurrentPassword)}
-                activeOpacity={0.7}
-              >
-                <Icon
-                  name={showCurrentPassword ? 'eye-off' : 'eye'}
-                  size={20}
-                  color={theme.colors.textSecondary}
-                />
-              </TouchableOpacity>
-            }
-          />
+        {/* Page Header Banner */}
+        <View
+          style={[
+            styles.pageHeaderBanner,
+            {
+              backgroundColor: isDark ? 'rgba(255,140,66,0.06)' : 'rgba(255,140,66,0.05)',
+              borderColor: 'rgba(255,140,66,0.15)',
+            },
+          ]}
+        >
+          <View style={styles.bannerLeft}>
+            <TouchableOpacity
+              style={[
+                styles.backButton,
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)' },
+              ]}
+              onPress={() => navigation.goBack()}
+            >
+              <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={styles.bannerIconCircle}>
+              <Icon name="settings" size={22} color={ORANGE} />
+            </View>
+            <View style={styles.bannerTextGroup}>
+              <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>
+                Account Settings
+              </Text>
+              <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
+                Manage your profile and security
+              </Text>
+            </View>
+          </View>
+        </View>
 
-          <AppInput
-            label="New Password"
-            value={newPassword}
-            onChangeText={setNewPassword}
-            secureTextEntry={!showNewPassword}
-            placeholder="Enter new password"
-            rightIcon={
-              <TouchableOpacity
-                onPress={() => setShowNewPassword(!showNewPassword)}
-                activeOpacity={0.7}
-              >
-                <Icon
-                  name={showNewPassword ? 'eye-off' : 'eye'}
-                  size={20}
-                  color={theme.colors.textSecondary}
-                />
-              </TouchableOpacity>
-            }
-          />
+        {/* Profile Card */}
+        <View
+          style={[
+            styles.profileCard,
+            {
+              backgroundColor: isDark ? theme.colors.card : '#FFFFFF',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+            },
+          ]}
+        >
+          {/* Avatar */}
+          <View style={[styles.avatarCircle, { backgroundColor: ORANGE + '20', borderColor: ORANGE + '40' }]}>
+            <Text style={[styles.avatarInitials, { color: ORANGE }]}>
+              {getUserInitials(user?.name)}
+            </Text>
+          </View>
 
-          <AppInput
-            label="Confirm New Password"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry={!showNewPassword}
-            placeholder="Confirm new password"
-          />
+          {/* Name & Role */}
+          <View style={styles.profileTextBlock}>
+            <Text style={[styles.profileName, { color: theme.colors.textPrimary }]}>
+              {user?.name || 'User'}
+            </Text>
+            {user?.email ? (
+              <Text style={[styles.profileEmail, { color: theme.colors.textSecondary }]}>
+                {user.email}
+              </Text>
+            ) : null}
+          </View>
 
+          {/* Role Badge */}
+          <View style={[styles.roleBadge, { backgroundColor: ORANGE + '18', borderColor: ORANGE + '35' }]}>
+            <Text style={[styles.roleBadgeText, { color: ORANGE }]}>
+              {getRoleLabel()}
+            </Text>
+          </View>
+        </View>
+
+        {/* Password Change Card */}
+        <View
+          style={[
+            styles.sectionCard,
+            {
+              backgroundColor: isDark ? theme.colors.card : '#FFFFFF',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+            },
+          ]}
+        >
+          {/* Section Header */}
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(26,26,46,0.05)' }]}>
+              <Icon name="lock-closed" size={18} color={theme.colors.textSecondary} />
+            </View>
+            <View>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                Change Password
+              </Text>
+              <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
+                Keep your account secure with a strong password
+              </Text>
+            </View>
+          </View>
+
+          {/* Divider */}
+          <View style={[styles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(26,26,46,0.07)' }]} />
+
+          {/* Current Password */}
+          <View style={styles.inputGroup}>
+            <View style={styles.inputLabelRow}>
+              <Icon name="lock-closed-outline" size={14} color={theme.colors.textTertiary} />
+              <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>
+                Current Password
+              </Text>
+            </View>
+            <AppInput
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+              secureTextEntry={!showCurrentPassword}
+              placeholder="Enter current password"
+              rightIcon={
+                <TouchableOpacity
+                  onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                  activeOpacity={0.7}
+                >
+                  <Icon
+                    name={showCurrentPassword ? 'eye-off' : 'eye'}
+                    size={20}
+                    color={theme.colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              }
+            />
+          </View>
+
+          {/* New Password */}
+          <View style={styles.inputGroup}>
+            <View style={styles.inputLabelRow}>
+              <Icon name="key-outline" size={14} color={theme.colors.textTertiary} />
+              <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>
+                New Password
+              </Text>
+            </View>
+            <AppInput
+              value={newPassword}
+              onChangeText={setNewPassword}
+              secureTextEntry={!showNewPassword}
+              placeholder="Enter new password"
+              rightIcon={
+                <TouchableOpacity
+                  onPress={() => setShowNewPassword(!showNewPassword)}
+                  activeOpacity={0.7}
+                >
+                  <Icon
+                    name={showNewPassword ? 'eye-off' : 'eye'}
+                    size={20}
+                    color={theme.colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              }
+            />
+          </View>
+
+          {/* Confirm Password */}
+          <View style={styles.inputGroup}>
+            <View style={styles.inputLabelRow}>
+              <Icon name="checkmark-circle-outline" size={14} color={theme.colors.textTertiary} />
+              <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>
+                Confirm New Password
+              </Text>
+            </View>
+            <AppInput
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry={!showNewPassword}
+              placeholder="Confirm new password"
+            />
+          </View>
+
+          {/* Change Password Button */}
           <AppButton
-            title="Change Password"
+            title="Update Password"
             onPress={handleChangePassword}
             variant="primary"
             style={styles.changePasswordButton}
@@ -224,18 +326,231 @@ const SettingsScreen = () => {
             iconPosition="left"
           />
 
+          {/* Forgot Password Link */}
           <TouchableOpacity
             onPress={handleForgotPassword}
             style={styles.forgotPasswordLink}
           >
-            <Text style={[styles.forgotPasswordText, { color: theme.colors.primary }]}>
+            <Text style={[styles.forgotPasswordText, { color: ORANGE }]}>
               Forgot Password?
             </Text>
           </TouchableOpacity>
-        </AppCard>
+        </View>
+
+        {/* Logout Button */}
+        <TouchableOpacity
+          style={[
+            styles.logoutButton,
+            {
+              backgroundColor: isDark ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.08)',
+              borderColor: isDark ? 'rgba(239,68,68,0.3)' : 'rgba(239,68,68,0.2)',
+            },
+          ]}
+          onPress={logout}
+          activeOpacity={0.8}
+        >
+          <Icon name="log-out" size={20} color="#EF4444" />
+          <Text style={styles.logoutButtonText}>Log Out</Text>
+        </TouchableOpacity>
       </ScrollView>
     </MainLayout>
   );
 };
+
+const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
+  StyleSheet.create({
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      padding: isMobile ? 16 : 24,
+      paddingBottom: 48,
+    },
+
+    // Page Header Banner
+    pageHeaderBanner: {
+      flexDirection: isTablet ? 'row' : 'column',
+      justifyContent: 'space-between',
+      alignItems: isTablet ? 'center' : 'flex-start',
+      padding: isMobile ? 16 : 20,
+      marginBottom: 24,
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 12,
+    },
+    bannerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      flex: isTablet ? 1 : undefined,
+    },
+    backButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(255,140,66,0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerTextGroup: {
+      flex: 1,
+    },
+    pageTitle: {
+      fontSize: isMobile ? 18 : 22,
+      fontWeight: '700',
+      fontFamily: theme.typography.fontFamily.bold,
+      marginBottom: 2,
+    },
+    pageSubtitle: {
+      fontSize: 13,
+      fontFamily: theme.typography.fontFamily.regular,
+    },
+
+    // Profile Card
+    profileCard: {
+      flexDirection: isTablet ? 'row' : 'column',
+      alignItems: isTablet ? 'center' : 'center',
+      gap: 16,
+      padding: isMobile ? 20 : 24,
+      borderRadius: 16,
+      borderWidth: 1,
+      marginBottom: 20,
+      ...(Platform.OS === 'web' && {
+        boxShadow: isDark ? 'none' : '0 1px 8px rgba(26,26,46,0.06)',
+      }),
+    },
+    avatarCircle: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      borderWidth: 2,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    avatarInitials: {
+      fontSize: 26,
+      fontWeight: '700',
+      fontFamily: theme.typography.fontFamily.bold,
+    },
+    profileTextBlock: {
+      flex: isTablet ? 1 : undefined,
+      alignItems: isTablet ? 'flex-start' : 'center',
+    },
+    profileName: {
+      fontSize: isMobile ? 18 : 20,
+      fontWeight: '700',
+      fontFamily: theme.typography.fontFamily.bold,
+      marginBottom: 4,
+    },
+    profileEmail: {
+      fontSize: 14,
+      fontFamily: theme.typography.fontFamily.regular,
+    },
+    roleBadge: {
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      borderRadius: 20,
+      borderWidth: 1,
+    },
+    roleBadgeText: {
+      fontSize: 13,
+      fontWeight: '600',
+      fontFamily: theme.typography.fontFamily.semiBold,
+    },
+
+    // Section Card (Password)
+    sectionCard: {
+      borderRadius: 16,
+      borderWidth: 1,
+      padding: isMobile ? 18 : 24,
+      marginBottom: 20,
+      ...(Platform.OS === 'web' && {
+        boxShadow: isDark ? 'none' : '0 1px 8px rgba(26,26,46,0.06)',
+      }),
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 20,
+    },
+    sectionIconCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      fontFamily: theme.typography.fontFamily.bold,
+      marginBottom: 2,
+    },
+    sectionSubtitle: {
+      fontSize: 12,
+      fontFamily: theme.typography.fontFamily.regular,
+    },
+    divider: {
+      height: 1,
+      marginBottom: 20,
+    },
+
+    // Input Groups
+    inputGroup: {
+      marginBottom: 4,
+    },
+    inputLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 4,
+    },
+    inputLabel: {
+      fontSize: 13,
+      fontWeight: '500',
+      fontFamily: theme.typography.fontFamily.medium,
+    },
+
+    // Buttons
+    changePasswordButton: {
+      marginTop: 8,
+      marginBottom: 4,
+    },
+    forgotPasswordLink: {
+      alignSelf: 'center',
+      marginTop: 14,
+      paddingVertical: 4,
+    },
+    forgotPasswordText: {
+      fontSize: 14,
+      fontWeight: '600',
+      fontFamily: theme.typography.fontFamily.semiBold,
+    },
+
+    // Logout Button
+    logoutButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      paddingVertical: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+    },
+    logoutButtonText: {
+      color: '#EF4444',
+      fontSize: 15,
+      fontWeight: '600',
+      fontFamily: theme.typography.fontFamily.semiBold,
+    },
+  });
 
 export default SettingsScreen;

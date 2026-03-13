@@ -1,5 +1,7 @@
-const { Certificate, Course, User, Enrollment } = require('../models');
+const { Certificate, Course, User, Enrollment, CertificateTemplate } = require('../models');
 const crypto = require('crypto');
+const { generateAndSaveCertificate } = require('../services/certificateService');
+const { sendCertificateEmail } = require('../services/emailService');
 
 // Get all certificates for authenticated student
 exports.getMyCertificates = async (req, res) => {
@@ -70,6 +72,43 @@ exports.generateCertificate = async (req, res) => {
       grade: grade || 'Pass',
       issuedDate: new Date()
     });
+
+    // Generate PDF and send email if requested (after payment)
+    const sendEmail = req.body.sendEmail === true;
+    if (sendEmail) {
+      try {
+        // Find the active certificate template (course-specific first, then global)
+        const template = await CertificateTemplate.findOne({ where: { isActive: true } });
+
+        const { pdfBuffer, certificateUrl } = await generateAndSaveCertificate(
+          {
+            studentName: user.name,
+            courseName: course.name,
+            certificateNumber,
+            issueDate: new Date(),
+            grade: grade || 'Pass',
+          },
+          template
+        );
+
+        // Save PDF URL back to certificate record
+        await certificate.update({ certificateUrl });
+
+        // Send email with PDF attachment
+        await sendCertificateEmail(
+          user.email,
+          user.name,
+          course.name,
+          certificateNumber,
+          pdfBuffer
+        );
+
+        console.log(`📧 Certificate email sent to ${user.email}`);
+      } catch (emailErr) {
+        // Don't fail the whole request if PDF/email fails — cert is still created
+        console.error('⚠️  Certificate PDF/email error:', emailErr.message);
+      }
+    }
 
     // Include course details in response
     const certificateWithDetails = await Certificate.findByPk(certificate.id, {

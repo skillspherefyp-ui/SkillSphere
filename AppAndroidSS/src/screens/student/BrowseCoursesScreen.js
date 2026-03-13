@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
+
+const ORANGE = '#FF8C42';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
@@ -54,6 +56,7 @@ const BrowseCoursesScreen = () => {
     { label: 'My Learning', icon: 'school-outline', iconActive: 'school', route: 'EnrolledCourses' },
     { label: 'AI Assistant', icon: 'sparkles-outline', iconActive: 'sparkles', route: 'AITutor' },
     { label: 'Certificates', icon: 'ribbon-outline', iconActive: 'ribbon', route: 'Certificates' },
+    { label: 'Reminders', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle', route: 'Todo' },
   ];
 
   const levelOptions = [
@@ -212,23 +215,25 @@ const BrowseCoursesScreen = () => {
           />
         }
       >
-        {/* Header Section */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerTextContainer}>
-            <View style={styles.titleRow}>
-              <TouchableOpacity
-                style={[styles.backButton, { backgroundColor: theme.colors.surface }]}
-                onPress={() => navigation.goBack()}
-              >
-                <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-              <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>
-                Browse Courses
-              </Text>
+        {/* Page Header Banner */}
+        <View style={[styles.pageHeaderBanner, {
+          backgroundColor: isDark ? 'rgba(255,140,66,0.06)' : 'rgba(255,140,66,0.05)',
+          borderColor: 'rgba(255,140,66,0.15)',
+        }]}>
+          <View style={styles.bannerLeft}>
+            <TouchableOpacity
+              style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)' }]}
+              onPress={() => navigation.goBack()}
+            >
+              <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={styles.bannerIconCircle}>
+              <Icon name="library" size={22} color={ORANGE} />
             </View>
-            <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
-              Discover your next learning adventure
-            </Text>
+            <View style={styles.bannerTextGroup}>
+              <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>Browse Courses</Text>
+              <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>Discover your next learning adventure</Text>
+            </View>
           </View>
         </View>
 
@@ -596,38 +601,69 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       fontSize: 14,
     },
 
-    // Header Section
-    headerSection: {
+    // Page Header Banner
+    pageHeaderBanner: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: isMobile ? 14 : 18,
       marginBottom: 24,
-      width: '100%',
+      borderRadius: 16,
+      borderWidth: 1,
     },
-    headerTextContainer: {
-      width: '100%',
-    },
-    titleRow: {
+    bannerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      marginBottom: 4,
-      flexWrap: 'wrap',
+      flex: 1,
     },
     backButton: {
       width: 40,
       height: 40,
-      borderRadius: 12,
+      borderRadius: 20,
       justifyContent: 'center',
       alignItems: 'center',
-      ...theme.shadows.sm,
+    },
+    bannerIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(255,140,66,0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerTextGroup: {
+      flex: 1,
     },
     pageTitle: {
-      fontSize: isMobile ? 20 : 28,
+      fontSize: isMobile ? 18 : 22,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
-      flex: isMobile ? 1 : undefined,
+      marginBottom: 2,
     },
     pageSubtitle: {
-      fontSize: 14,
+      fontSize: 13,
       fontFamily: theme.typography.fontFamily.regular,
+    },
+
+    // Header Section
+    pageHeader: {
+      marginBottom: 24,
+      paddingBottom: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.primary + '30',
+    },
+
+    // Section Title with left orange border accent
+    sectionTitle: {
+      fontSize: isMobile ? 16 : 18,
+      fontWeight: '700',
+      fontFamily: theme.typography.fontFamily.bold,
+      color: theme.colors.textPrimary,
+      borderLeftWidth: 3,
+      borderLeftColor: theme.colors.primary,
+      paddingLeft: 10,
+      marginBottom: 16,
     },
 
     // Stats Section
@@ -771,6 +807,8 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       borderWidth: 1,
       borderColor: isDark ? 'rgba(255,255,255,0.1)' : theme.colors.border,
       overflow: 'hidden',
+      borderTopWidth: 3,
+      borderTopColor: theme.colors.primary,
       ...theme.shadows.sm,
     },
     courseImage: {
@@ -806,10 +844,13 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       paddingHorizontal: 10,
       paddingVertical: 4,
       borderRadius: 12,
+      borderWidth: 1,
+      borderColor: 'transparent',
     },
     levelBadgeText: {
       fontSize: 11,
-      fontWeight: '600',
+      fontWeight: '700',
+      letterSpacing: 0.3,
     },
     courseContent: {
       padding: 16,

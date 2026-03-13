@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,23 +9,34 @@ import {
   Platform,
   RefreshControl,
   Image,
+  TextInput,
+  Animated as RNAnimated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/Ionicons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  FadeInDown,
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { certificateAPI, authAPI } from '../../services/apiClient';
+import { certificateAPI, authAPI, streakAPI } from '../../services/apiClient';
 import { resolveFileUrl } from '../../utils/urlHelpers';
 import PrivacyPolicyModal from '../../components/PrivacyPolicyModal';
 
 // UI Components
 import MainLayout from '../../components/ui/MainLayout';
-import PageTitleRow from '../../components/ui/PageTitleRow';
+
 import AppCard from '../../components/ui/AppCard';
 import Skeleton, { SkeletonDashboardStats, SkeletonTableRow } from '../../components/ui/Skeleton';
+
+const ORANGE = '#FF8C42';
 
 // ============================================
 // UTILITY FUNCTIONS
@@ -57,48 +68,51 @@ const calculatePercentageChange = (current, previous) => {
 };
 
 // ============================================
-// CHART COMPONENTS (Matching Admin Style)
+// CHART COMPONENTS
 // ============================================
 
-// Bar Chart Component
+// Bar Chart — EduView style: pill-shaped tracks, dark bars, active bar warm orange, value labels
 const BarChart = ({ data, theme, isDark, height = 200 }) => {
   const maxValue = Math.max(...data.map(d => d.value), 1);
+  const maxIndex = data.reduce(
+    (best, d, i, arr) => (d.value >= arr[best].value ? i : best),
+    0
+  );
 
   return (
     <View style={barChartStyles.container}>
-      <View style={[barChartStyles.yAxis, { height }]}>
-        {[100, 75, 50, 25, 0].map((val, i) => (
-          <Text key={i} style={[barChartStyles.yLabel, { color: theme.colors.textTertiary }]}>
-            {Math.round((maxValue * val) / 100)}
+      <View style={[barChartStyles.barsContainer, { height }]}>
+        {data.map((item, index) => {
+          const barHeightPct = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
+          const isActive = index === maxIndex;
+          return (
+            <View key={index} style={barChartStyles.barWrapper}>
+              {/* Full-height background track */}
+              <View style={barChartStyles.barTrack} />
+              {/* Actual bar */}
+              <View
+                style={[
+                  barChartStyles.bar,
+                  {
+                    height: `${Math.max(barHeightPct, 3)}%`,
+                    backgroundColor: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.45)',
+                  },
+                ]}
+              >
+                {item.value > 0 && (
+                  <Text style={barChartStyles.barValue}>{item.value}</Text>
+                )}
+              </View>
+            </View>
+          );
+        })}
+      </View>
+      <View style={barChartStyles.xAxis}>
+        {data.map((item, index) => (
+          <Text key={index} style={barChartStyles.xLabel}>
+            {item.label}
           </Text>
         ))}
-      </View>
-      <View style={barChartStyles.chartArea}>
-        <View style={[barChartStyles.barsContainer, { height }]}>
-          {data.map((item, index) => {
-            const barHeight = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
-            return (
-              <View key={index} style={barChartStyles.barWrapper}>
-                <View
-                  style={[
-                    barChartStyles.bar,
-                    {
-                      height: `${Math.max(barHeight, 2)}%`,
-                      backgroundColor: item.color || '#6366F1',
-                    },
-                  ]}
-                />
-              </View>
-            );
-          })}
-        </View>
-        <View style={barChartStyles.xAxis}>
-          {data.map((item, index) => (
-            <Text key={index} style={[barChartStyles.xLabel, { color: theme.colors.textTertiary }]}>
-              {item.label}
-            </Text>
-          ))}
-        </View>
       </View>
     </View>
   );
@@ -106,58 +120,60 @@ const BarChart = ({ data, theme, isDark, height = 200 }) => {
 
 const barChartStyles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    paddingTop: 10,
-  },
-  yAxis: {
-    width: 40,
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingRight: 8,
-  },
-  yLabel: {
-    fontSize: 11,
-  },
-  chartArea: {
-    flex: 1,
+    paddingTop: 8,
   },
   barsContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-around',
-    borderLeftWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
   },
   barWrapper: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-end',
     height: '100%',
-    paddingHorizontal: 4,
+    position: 'relative',
+    paddingHorizontal: 3,
+  },
+  barTrack: {
+    position: 'absolute',
+    bottom: 0,
+    width: 28,
+    height: '100%',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 14,
   },
   bar: {
-    width: '70%',
-    borderTopLeftRadius: 4,
-    borderTopRightRadius: 4,
+    width: 28,
+    borderRadius: 14,
     minHeight: 4,
+    alignItems: 'center',
+    paddingTop: 5,
+    justifyContent: 'flex-start',
+  },
+  barValue: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
   },
   xAxis: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     paddingTop: 8,
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
   },
   xLabel: {
     fontSize: 11,
     flex: 1,
     textAlign: 'center',
+    color: 'rgba(255,255,255,0.78)',
+    fontWeight: '600',
   },
 });
 
 // Line Chart Component
-const LineChart = ({ data, theme, isDark, height = 200, lineColor = '#10B981' }) => {
+const LineChart = ({ data, theme, isDark, height = 200, lineColor = '#7C6FCD' }) => {
   const maxValue = Math.max(...data.map(d => d.value), 1);
 
   return (
@@ -173,14 +189,14 @@ const LineChart = ({ data, theme, isDark, height = 200, lineColor = '#10B981' })
         })}
       </View>
       <View style={lineChartStyles.chartArea}>
-        <View style={[lineChartStyles.chartContainer, { height }]}>
+        <View style={[lineChartStyles.chartContainer, { height, borderColor: isDark ? 'rgba(124,111,205,0.25)' : 'rgba(124,111,205,0.18)' }]}>
           {/* Grid lines */}
           {[0, 1, 2, 3, 4].map((_, i) => (
             <View
               key={i}
               style={[
                 lineChartStyles.gridLine,
-                { top: (i * height) / 4, backgroundColor: 'rgba(255,255,255,0.05)' },
+                { top: (i * height) / 4, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' },
               ]}
             />
           ))}
@@ -268,7 +284,6 @@ const lineChartStyles = StyleSheet.create({
     position: 'relative',
     borderLeftWidth: 1,
     borderBottomWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
   },
   gridLine: {
     position: 'absolute',
@@ -305,25 +320,40 @@ const lineChartStyles = StyleSheet.create({
   },
 });
 
-// Enhanced Stats Card Component (Matching Admin Style)
+// Stats Card — EduView style: colored top accent border, icon+label row, huge bold number
 const DashboardStatCard = ({ icon, iconColor, value, label, change, theme, isDark, style }) => {
   const isPositive = change && change.startsWith('+');
 
   return (
-    <View style={[dashboardStatStyles.card, { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderColor: theme.colors.border }, style]}>
+    <View
+      style={[
+        dashboardStatStyles.card,
+        {
+          backgroundColor: isDark ? theme.colors.card : '#FFFFFF',
+          borderColor: isDark ? theme.colors.border : '#EEEEEE',
+          borderTopColor: iconColor,
+        },
+        style,
+      ]}
+    >
       <View style={dashboardStatStyles.header}>
-        <Text style={[dashboardStatStyles.label, { color: theme.colors.textSecondary }]}>{label}</Text>
-        <View style={[dashboardStatStyles.iconContainer, { backgroundColor: iconColor + '15' }]}>
-          <Icon name={icon} size={20} color={iconColor} />
+        <View style={[dashboardStatStyles.iconContainer, { backgroundColor: iconColor + '18' }]}>
+          <Icon name={icon} size={17} color={iconColor} />
         </View>
+        <Text style={[dashboardStatStyles.label, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+          {label}
+        </Text>
       </View>
-      <Text style={[dashboardStatStyles.value, { color: theme.colors.textPrimary }]}>
+      <Text style={[dashboardStatStyles.value, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
         {typeof value === 'number' ? value.toLocaleString() : value}
       </Text>
       {change && (
-        <Text style={[dashboardStatStyles.change, { color: isPositive ? '#10B981' : '#EF4444' }]}>
-          {change} from last month
-        </Text>
+        <View style={dashboardStatStyles.changeRow}>
+          <View style={[dashboardStatStyles.changeDot, { backgroundColor: isPositive ? '#10B981' : '#EF4444' }]} />
+          <Text style={[dashboardStatStyles.change, { color: isPositive ? '#10B981' : '#EF4444' }]}>
+            {change} from last month
+          </Text>
+        </View>
       )}
     </View>
   );
@@ -331,35 +361,416 @@ const DashboardStatCard = ({ icon, iconColor, value, label, change, theme, isDar
 
 const dashboardStatStyles = StyleSheet.create({
   card: {
-    padding: 20,
+    padding: 16,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 1.5,
+    borderTopWidth: 3,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 12,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
   },
   iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
   value: {
-    fontSize: 32,
-    fontWeight: '700',
-    marginBottom: 4,
+    fontSize: 34,
+    fontWeight: '900',
+    marginBottom: 6,
+    letterSpacing: -0.5,
+  },
+  changeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  changeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   change: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+});
+
+// ============================================
+// STREAK FIRE ICON — animated when active
+// ============================================
+
+const StreakFireIcon = ({ active, size = 28 }) => {
+  const scale = useSharedValue(1);
+
+  useEffect(() => {
+    if (active) {
+      scale.value = withRepeat(
+        withSequence(
+          withTiming(1.25, { duration: 600 }),
+          withTiming(1.0, { duration: 600 })
+        ),
+        -1,
+        false
+      );
+    } else {
+      scale.value = withTiming(1, { duration: 200 });
+    }
+  }, [active]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <Animated.View style={animStyle}>
+      <Icon
+        name={active ? 'flame' : 'flame-outline'}
+        size={size}
+        color={active ? '#F97316' : 'rgba(150,150,150,0.4)'}
+      />
+    </Animated.View>
+  );
+};
+
+// ============================================
+// STREAK CARD COMPONENT
+// ============================================
+
+const StreakCard = ({ streakData, theme, isDark, isMobile }) => {
+  const { currentStreak, longestStreak, last7Days, isActiveToday, totalActiveDays } = streakData;
+  const isStreakAlive = currentStreak > 0;
+  const GREEN = '#10B981';
+  const RED = '#EF4444';
+  const activeColor = isStreakAlive ? GREEN : RED;
+
+  // Animated counter for streak number
+  const countAnim = useRef(new RNAnimated.Value(0)).current;
+  const [displayCount, setDisplayCount] = useState(0);
+
+  // Pulse animation on the hero circle ring
+  const ringScale = useSharedValue(1);
+
+  useEffect(() => {
+    countAnim.setValue(0);
+    RNAnimated.timing(countAnim, {
+      toValue: currentStreak,
+      duration: 1000,
+      useNativeDriver: false,
+    }).start();
+    const listener = countAnim.addListener(({ value }) => {
+      setDisplayCount(Math.round(value));
+    });
+
+    if (isStreakAlive) {
+      ringScale.value = withRepeat(
+        withSequence(
+          withTiming(1.06, { duration: 1200 }),
+          withTiming(1.0, { duration: 1200 })
+        ),
+        -1,
+        false
+      );
+    } else {
+      ringScale.value = withTiming(1);
+    }
+
+    return () => countAnim.removeListener(listener);
+  }, [currentStreak, isStreakAlive]);
+
+  const ringStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: ringScale.value }],
+  }));
+
+  // Next milestone logic
+  const nextMilestone = [7, 14, 21, 30, 60, 90, 180, 365].find(m => m > currentStreak) || currentStreak + 10;
+  const daysToMilestone = nextMilestone - currentStreak;
+  const milestoneProgress = currentStreak / nextMilestone;
+
+  return (
+    <Animated.View entering={FadeInDown.duration(400).delay(200)}>
+      <View
+        style={[
+          streakCardStyles.card,
+          {
+            backgroundColor: isDark ? `${activeColor}12` : `${activeColor}08`,
+            borderColor: `${activeColor}30`,
+            shadowColor: activeColor,
+          },
+        ]}
+      >
+        {/* ── Header ── */}
+        <View style={streakCardStyles.header}>
+          <View style={streakCardStyles.headerLeft}>
+            <View style={[streakCardStyles.iconCircle, { backgroundColor: `${activeColor}20` }]}>
+              <Icon name={isStreakAlive ? 'flame' : 'flame-outline'} size={20} color={activeColor} />
+            </View>
+            <View>
+              <Text style={[streakCardStyles.title, { color: theme.colors.textPrimary }]}>
+                Learning Streak
+              </Text>
+              <Text style={[streakCardStyles.subtitle, { color: theme.colors.textSecondary }]}>
+                {isStreakAlive
+                  ? isActiveToday
+                    ? 'You\'re on fire — active today!'
+                    : 'Log in today to protect your streak!'
+                  : 'Start learning to build your streak'}
+              </Text>
+            </View>
+          </View>
+          <View style={[streakCardStyles.statusPill, {
+            backgroundColor: isStreakAlive
+              ? isDark ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.12)'
+              : isDark ? 'rgba(239,68,68,0.18)' : 'rgba(239,68,68,0.12)',
+          }]}>
+            <View style={[streakCardStyles.statusDot, { backgroundColor: activeColor }]} />
+            <Text style={[streakCardStyles.statusText, { color: activeColor }]}>
+              {isStreakAlive ? 'Active' : 'Broken'}
+            </Text>
+          </View>
+        </View>
+
+        {/* ── Hero: big ring + streak count ── */}
+        <View style={streakCardStyles.heroRow}>
+          {/* Animated ring */}
+          <Animated.View style={[streakCardStyles.heroRingOuter, { borderColor: `${activeColor}35` }, ringStyle]}>
+            <View style={[streakCardStyles.heroRingInner, { borderColor: `${activeColor}70`, backgroundColor: `${activeColor}12` }]}>
+              <Icon name={isStreakAlive ? 'flame' : 'flame-outline'} size={isMobile ? 22 : 26} color={activeColor} style={{ marginBottom: 2 }} />
+              <Text style={[streakCardStyles.heroCount, { color: theme.colors.textPrimary }]}>{displayCount}</Text>
+              <Text style={[streakCardStyles.heroUnit, { color: activeColor }]}>
+                {currentStreak === 1 ? 'day' : 'days'}
+              </Text>
+            </View>
+          </Animated.View>
+
+          {/* Right: quick stats column */}
+          <View style={streakCardStyles.heroStats}>
+            <View style={[streakCardStyles.heroStatItem, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderColor: theme.colors.border }]}>
+              <Icon name="calendar-outline" size={14} color={activeColor} />
+              <Text style={[streakCardStyles.heroStatValue, { color: theme.colors.textPrimary }]}>{totalActiveDays || 0}</Text>
+              <Text style={[streakCardStyles.heroStatLabel, { color: theme.colors.textSecondary }]}>Total Days</Text>
+            </View>
+            <View style={[streakCardStyles.heroStatItem, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderColor: theme.colors.border }]}>
+              <Icon name="trophy-outline" size={14} color="#F59E0B" />
+              <Text style={[streakCardStyles.heroStatValue, { color: theme.colors.textPrimary }]}>{longestStreak}</Text>
+              <Text style={[streakCardStyles.heroStatLabel, { color: theme.colors.textSecondary }]}>Best Ever</Text>
+            </View>
+            <View style={[streakCardStyles.heroStatItem, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderColor: theme.colors.border }]}>
+              <Icon name="flag-outline" size={14} color="#6366F1" />
+              <Text style={[streakCardStyles.heroStatValue, { color: theme.colors.textPrimary }]}>{daysToMilestone}</Text>
+              <Text style={[streakCardStyles.heroStatLabel, { color: theme.colors.textSecondary }]}>To {nextMilestone}d</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ── Milestone progress bar ── */}
+        <View style={streakCardStyles.milestoneRow}>
+          <Text style={[streakCardStyles.milestoneLabel, { color: theme.colors.textSecondary }]}>
+            Next milestone: <Text style={{ color: activeColor, fontWeight: '700' }}>{nextMilestone} days</Text>
+          </Text>
+          <Text style={[streakCardStyles.milestonePct, { color: activeColor }]}>
+            {Math.round(milestoneProgress * 100)}%
+          </Text>
+        </View>
+        <View style={[streakCardStyles.progressTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }]}>
+          <View style={[streakCardStyles.progressFill, { width: `${Math.min(milestoneProgress * 100, 100)}%`, backgroundColor: activeColor }]} />
+        </View>
+
+        {/* ── Divider ── */}
+        <View style={[streakCardStyles.divider, { backgroundColor: `${activeColor}20` }]} />
+
+        {/* ── This week label ── */}
+        <Text style={[streakCardStyles.weekLabel, { color: theme.colors.textSecondary }]}>This Week</Text>
+
+        {/* ── 7-day fire icons ── */}
+        <View style={streakCardStyles.daysRow}>
+          {(last7Days || []).map((day, i) => (
+            <View key={i} style={streakCardStyles.dayCell}>
+              <StreakFireIcon active={day.active} size={isMobile ? 26 : 30} />
+              <Text style={[streakCardStyles.dayLabel, { color: day.active ? activeColor : theme.colors.textTertiary }]}>
+                {day.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </Animated.View>
+  );
+};
+
+const streakCardStyles = StyleSheet.create({
+  card: {
+    borderRadius: 18,
+    borderWidth: 1.5,
+    padding: 18,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  iconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  subtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  // Hero section
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 14,
+  },
+  heroRingOuter: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroRingInner: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroCount: {
+    fontSize: 30,
+    fontWeight: '900',
+    lineHeight: 34,
+    letterSpacing: -1,
+  },
+  heroUnit: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  heroStats: {
+    flex: 1,
+    gap: 8,
+  },
+  heroStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  heroStatValue: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  heroStatLabel: {
+    fontSize: 11,
+    flex: 1,
+  },
+  // Milestone bar
+  milestoneRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  milestoneLabel: {
+    fontSize: 11,
+  },
+  milestonePct: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  progressTrack: {
+    height: 5,
+    borderRadius: 3,
+    marginBottom: 14,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  // Divider
+  divider: {
+    height: 1,
+    marginBottom: 10,
+  },
+  // Week fires
+  weekLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  daysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 2,
+  },
+  dayCell: {
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+  },
+  dayLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
 });
 
@@ -373,10 +784,15 @@ const StudentDashboard = () => {
     courses,
     enrollments,
     notifications,
+    todos,
     fetchCourses,
     fetchMyEnrollments,
     fetchMyNotifications,
     getLearningStats,
+    fetchTodos,
+    addTodo,
+    toggleTodo,
+    deleteTodo,
   } = useData();
   const { theme, isDark } = useTheme();
   const navigation = useNavigation();
@@ -384,9 +800,18 @@ const StudentDashboard = () => {
 
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState(null);
+  const [todoInput, setTodoInput] = useState('');
   const [certificates, setCertificates] = useState([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+  const [streakData, setStreakData] = useState({
+    currentStreak: 0,
+    longestStreak: 0,
+    last7Days: [],
+    isActiveToday: false,
+    lastActive: null,
+    totalActiveDays: 0,
+  });
 
   // Privacy Policy Storage Key (includes user id to track per user)
   const PRIVACY_POLICY_KEY = `@skillsphere:privacy_accepted_${user?.id || 'unknown'}`;
@@ -403,6 +828,7 @@ const StudentDashboard = () => {
     { label: 'My Learning', icon: 'school-outline', iconActive: 'school', route: 'EnrolledCourses' },
     { label: 'AI Assistant', icon: 'sparkles-outline', iconActive: 'sparkles', route: 'AITutor' },
     { label: 'Certificates', icon: 'ribbon-outline', iconActive: 'ribbon', route: 'Certificates' },
+    { label: 'Reminders', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle', route: 'Todo' },
   ];
 
   // Check if privacy policy has been accepted
@@ -478,6 +904,7 @@ const StudentDashboard = () => {
         fetchCourses(),
         fetchMyEnrollments(),
         fetchMyNotifications(),
+        fetchTodos(),
       ]);
       const statsResponse = await getLearningStats();
       if (statsResponse.success) {
@@ -490,6 +917,22 @@ const StudentDashboard = () => {
         }
       } catch (e) {
         console.log('Could not fetch certificates:', e);
+      }
+      // Record daily activity & fetch streak (opening dashboard = active day)
+      try {
+        const sRes = await streakAPI.recordActivity();
+        if (sRes.success) {
+          setStreakData({
+            currentStreak: sRes.currentStreak,
+            longestStreak: sRes.longestStreak,
+            last7Days: sRes.last7Days || [],
+            isActiveToday: sRes.isActiveToday,
+            lastActive: sRes.lastActive,
+            totalActiveDays: sRes.totalActiveDays,
+          });
+        }
+      } catch (e) {
+        console.log('Could not fetch streak:', e);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -516,6 +959,21 @@ const StudentDashboard = () => {
         }
       } catch (e) {
         console.log('Could not fetch certificates:', e);
+      }
+      try {
+        const sRes = await streakAPI.getStreak();
+        if (sRes.success) {
+          setStreakData({
+            currentStreak: sRes.currentStreak,
+            longestStreak: sRes.longestStreak,
+            last7Days: sRes.last7Days || [],
+            isActiveToday: sRes.isActiveToday,
+            lastActive: sRes.lastActive,
+            totalActiveDays: sRes.totalActiveDays,
+          });
+        }
+      } catch (e) {
+        console.log('Could not reload streak:', e);
       }
     } catch (error) {
       console.error('Error reloading data:', error);
@@ -612,27 +1070,6 @@ const StudentDashboard = () => {
     });
   }, [enrollments]);
 
-  // Build completion trend chart data
-  const completionTrendData = useMemo(() => {
-    const last6Months = getLast6Months();
-
-    return last6Months.map((monthData) => {
-      const completedUpToMonth = enrollments.filter(enrollment => {
-        const createdDate = new Date(enrollment.createdAt);
-        return (
-          enrollment.progress >= 100 &&
-          (createdDate.getFullYear() < monthData.year ||
-            (createdDate.getFullYear() === monthData.year && createdDate.getMonth() <= monthData.monthIndex))
-        );
-      }).length;
-
-      return {
-        label: monthData.month,
-        value: completedUpToMonth,
-      };
-    });
-  }, [enrollments]);
-
   // Get recent/active courses for table
   const recentCoursesData = useMemo(() => {
     return enrolledCourses
@@ -664,7 +1101,20 @@ const StudentDashboard = () => {
         onSettings={() => navigation.navigate('Settings')}
       >
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          <PageTitleRow title="My Dashboard" subtitle="Welcome back! Here's your learning overview." />
+          {/* Page Banner */}
+          <View style={styles.pageBanner}>
+            <View style={styles.pageBannerLeft}>
+              <View style={[styles.pageBannerIconCircle, { backgroundColor: '#FF8C42' + '20' }]}>
+                <Icon name="grid" size={24} color="#FF8C42" />
+              </View>
+              <View>
+                <Text style={[styles.pageBannerTitle, { color: theme.colors.textPrimary }]}>My Dashboard</Text>
+                <Text style={[styles.pageBannerSubtitle, { color: theme.colors.textSecondary }]}>
+                  Welcome back! Here's your learning overview.
+                </Text>
+              </View>
+            </View>
+          </View>
           <View style={styles.section}>
             <SkeletonDashboardStats count={4} />
           </View>
@@ -704,18 +1154,58 @@ const StudentDashboard = () => {
           />
         }
       >
-        {/* Page Title Row */}
-        <PageTitleRow
-          title="My Dashboard"
-          subtitle={`Welcome back, ${user?.name || 'Student'}! Here's your learning overview.`}
-          primaryAction={{
-            label: 'Browse Courses',
-            icon: 'library-outline',
-            onPress: () => navigation.navigate('Courses'),
-          }}
-        />
+        {/* Page Banner */}
+        <View style={styles.pageBanner}>
+          <View style={styles.pageBannerLeft}>
+            <View style={[styles.pageBannerIconCircle, { backgroundColor: '#FF8C42' + '20' }]}>
+              <Icon name="grid" size={24} color="#FF8C42" />
+            </View>
+            <View>
+              <Text style={[styles.pageBannerTitle, { color: theme.colors.textPrimary }]}>My Dashboard</Text>
+              <Text style={[styles.pageBannerSubtitle, { color: theme.colors.textSecondary }]}>
+                {`Welcome back, ${user?.name || 'Student'}! Here's your learning overview.`}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.browseCourseBtn}
+            onPress={() => navigation.navigate('Courses')}
+          >
+            <Icon name="library-outline" size={16} color="#FFFFFF" />
+            <Text style={styles.browseCourseBtnText}>Browse Courses</Text>
+          </TouchableOpacity>
+        </View>
 
-        {/* Stats Section - Matching Admin Style */}
+        {/* ── WELCOME BANNER — EduView trophy card style ── */}
+        <Animated.View entering={FadeInDown.duration(400)} style={styles.bannerSection}>
+          <View style={styles.bannerCard}>
+            {/* Decorative circles */}
+            <View style={styles.bannerCircle1} />
+            <View style={styles.bannerCircle2} />
+            {/* Trophy icon top-right */}
+            <View style={styles.bannerTrophyWrapper}>
+              <Icon name="trophy" size={isMobile ? 44 : 56} color="rgba(255,255,255,0.3)" />
+            </View>
+            {/* Content */}
+            <Text style={styles.bannerEyebrow}>SKILLSPHERE LEARNING</Text>
+            <Text style={styles.bannerTitle}>
+              {dashboardStats.inProgress > 0 ? `Empower your skills\nExpand your sphere!` : `Start\nToday!`}
+            </Text>
+            <Text style={styles.bannerBody}>
+              {dashboardStats.inProgress > 0
+                ? `${dashboardStats.inProgress} course${dashboardStats.inProgress > 1 ? 's' : ''} in progress. Keep the momentum!`
+                : 'Explore courses and start your learning journey.'}
+            </Text>
+            <TouchableOpacity
+              style={styles.bannerBtn}
+              onPress={() => navigation.navigate('EnrolledCourses')}
+            >
+              <Icon name="arrow-forward" size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+
+        {/* ── STATS SECTION ── */}
         <View style={styles.statsSection}>
           <DashboardStatCard
             icon="school-outline"
@@ -757,24 +1247,27 @@ const StudentDashboard = () => {
           />
         </View>
 
-        {/* Charts Section - Matching Admin Style */}
+        {/* ── CHARTS SECTION ── */}
         <View style={styles.chartsSection}>
-          {/* Enrollment Growth Chart */}
+
+          {/* Enrollment Growth — warm orange card (EduView Progress style) */}
           <Animated.View
             entering={FadeInDown.duration(400).delay(100)}
-            style={styles.chartCard}
+            style={[styles.chartCard, isLargeScreen && { alignSelf: 'stretch' }]}
           >
-            <AppCard style={styles.chartCardInner}>
+            <AppCard style={styles.enrollmentChartCard}>
               <View style={styles.chartHeader}>
                 <View>
-                  <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
+                  <Text style={styles.enrollmentChartTitle}>
                     Enrollment Growth
                   </Text>
-                  <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
+                  <Text style={styles.enrollmentChartSubtitle}>
                     Your course enrollments over time
                   </Text>
                 </View>
-                <Icon name="trending-up" size={20} color="#10B981" />
+                <View style={styles.enrollmentIconBox}>
+                  <Icon name="trending-up" size={17} color="#FFFFFF" />
+                </View>
               </View>
               <BarChart
                 data={enrollmentGrowthData}
@@ -785,35 +1278,18 @@ const StudentDashboard = () => {
             </AppCard>
           </Animated.View>
 
-          {/* Completion Trend Chart */}
-          <Animated.View
-            entering={FadeInDown.duration(400).delay(200)}
-            style={styles.chartCard}
-          >
-            <AppCard style={styles.chartCardInner}>
-              <View style={styles.chartHeader}>
-                <View>
-                  <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
-                    Completion Trend
-                  </Text>
-                  <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
-                    Courses completed over time
-                  </Text>
-                </View>
-                <Icon name="trophy" size={20} color="#F59E0B" />
-              </View>
-              <LineChart
-                data={completionTrendData}
-                theme={theme}
-                isDark={isDark}
-                height={isMobile ? 160 : 200}
-                lineColor="#10B981"
-              />
-            </AppCard>
-          </Animated.View>
+          {/* Learning Streak Card */}
+          <View style={styles.chartCard}>
+            <StreakCard
+              streakData={streakData}
+              theme={theme}
+              isDark={isDark}
+              isMobile={isMobile}
+            />
+          </View>
         </View>
 
-        {/* My Courses Table - Matching Admin Recent Courses Style */}
+        {/* ── MY COURSES TABLE ── */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View>
@@ -836,7 +1312,7 @@ const StudentDashboard = () => {
 
           <AppCard style={styles.tableCard}>
             {/* Table Header */}
-            <View style={[styles.tableHeader, { borderBottomColor: theme.colors.border }]}>
+            <View style={[styles.tableHeader, { backgroundColor: isDark ? '#1A1A2E' : '#F5F5F8', borderBottomColor: theme.colors.border }]}>
               <Text style={[styles.tableHeaderCell, styles.imageColumn, { color: theme.colors.textSecondary }]}>
                 Image
               </Text>
@@ -863,119 +1339,123 @@ const StudentDashboard = () => {
 
             {/* Table Rows */}
             {recentCoursesData.length > 0 ? (
-              recentCoursesData.map((course, index) => (
-                <View
-                  key={course.id || index}
-                  style={[
-                    styles.tableRow,
-                    index < recentCoursesData.length - 1 && {
-                      borderBottomColor: theme.colors.border,
-                      borderBottomWidth: 1,
-                    },
-                  ]}
-                >
-                  {/* Course Image */}
-                  <View style={[styles.tableCell, styles.imageColumn]}>
-                    {course.thumbnailImage ? (
-                      <Image
-                        source={{ uri: resolveFileUrl(course.thumbnailImage) }}
-                        style={styles.courseImage}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={[styles.courseImagePlaceholder, { backgroundColor: theme.colors.primary + '20' }]}>
-                        <Icon name="image-outline" size={20} color={theme.colors.primary} />
+              <View style={styles.tableRowsWrapper}>
+                {recentCoursesData.map((course, index) => (
+                  <View
+                    key={course.id || index}
+                    style={[
+                      styles.tableRow,
+                      {
+                        backgroundColor: isDark ? theme.colors.backgroundSecondary : '#F9F9FB',
+                        borderColor: isDark ? theme.colors.border : '#EEEEEE',
+                      },
+                    ]}
+                  >
+                    {/* Course Image */}
+                    <View style={[styles.tableCell, styles.imageColumn]}>
+                      {course.thumbnailImage ? (
+                        <Image
+                          source={{ uri: resolveFileUrl(course.thumbnailImage) }}
+                          style={styles.courseImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={[styles.courseImagePlaceholder, { backgroundColor: theme.colors.primary + '20' }]}>
+                          <Icon name="image-outline" size={20} color={theme.colors.primary} />
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Course Title */}
+                    <Text
+                      style={[styles.tableCell, styles.courseNameColumn, styles.courseName, { color: theme.colors.textPrimary }]}
+                      numberOfLines={2}
+                    >
+                      {course.name || 'Untitled Course'}
+                    </Text>
+
+                    {/* Category */}
+                    {!isMobile && (
+                      <Text
+                        style={[styles.tableCell, styles.categoryColumn, { color: theme.colors.textSecondary }]}
+                        numberOfLines={1}
+                      >
+                        {course.category?.name || 'Uncategorized'}
+                      </Text>
+                    )}
+
+                    {/* Progress Bar */}
+                    {(isLargeScreen || isTablet) && (
+                      <View style={[styles.tableCell, styles.progressColumn]}>
+                        <View style={styles.progressContainer}>
+                          <View style={[styles.progressBarBg, { backgroundColor: isDark ? theme.colors.border : '#E5E7EB' }]}>
+                            <View
+                              style={[
+                                styles.progressBarFill,
+                                {
+                                  width: `${course.progress || 0}%`,
+                                  backgroundColor: course.progress >= 100 ? '#10B981' : '#7C6FCD',
+                                },
+                              ]}
+                            />
+                          </View>
+                          <Text style={[styles.progressText, { color: theme.colors.textSecondary }]}>
+                            {course.progress || 0}%
+                          </Text>
+                        </View>
                       </View>
                     )}
-                  </View>
 
-                  {/* Course Title */}
-                  <Text
-                    style={[styles.tableCell, styles.courseNameColumn, styles.courseName, { color: theme.colors.textPrimary }]}
-                    numberOfLines={2}
-                  >
-                    {course.name || 'Untitled Course'}
-                  </Text>
-
-                  {/* Category */}
-                  {!isMobile && (
-                    <Text
-                      style={[styles.tableCell, styles.categoryColumn, { color: theme.colors.textSecondary }]}
-                      numberOfLines={1}
-                    >
-                      {course.category?.name || 'Uncategorized'}
-                    </Text>
-                  )}
-
-                  {/* Progress Bar */}
-                  {(isLargeScreen || isTablet) && (
-                    <View style={[styles.tableCell, styles.progressColumn]}>
-                      <View style={styles.progressContainer}>
-                        <View style={[styles.progressBarBg, { backgroundColor: theme.colors.border }]}>
-                          <View
-                            style={[
-                              styles.progressBarFill,
-                              {
-                                width: `${course.progress || 0}%`,
-                                backgroundColor: course.progress >= 100 ? '#10B981' : '#6366F1',
-                              },
-                            ]}
-                          />
-                        </View>
-                        <Text style={[styles.progressText, { color: theme.colors.textSecondary }]}>
-                          {course.progress || 0}%
-                        </Text>
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Status */}
-                  <View style={[styles.tableCell, styles.statusColumn]}>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        {
-                          backgroundColor: course.progress >= 100 ? '#10B98120' : '#F59E0B20',
-                        },
-                      ]}
-                    >
+                    {/* Status */}
+                    <View style={[styles.tableCell, styles.statusColumn]}>
                       <View
                         style={[
-                          styles.statusDot,
+                          styles.statusBadge,
                           {
-                            backgroundColor: course.progress >= 100 ? '#10B981' : '#F59E0B',
-                          },
-                        ]}
-                      />
-                      <Text
-                        style={[
-                          styles.statusText,
-                          {
-                            color: course.progress >= 100 ? '#10B981' : '#F59E0B',
+                            backgroundColor: course.progress >= 100 ? '#10B98118' : '#F59E0B18',
                           },
                         ]}
                       >
-                        {course.progress >= 100 ? 'Completed' : 'In Progress'}
-                      </Text>
+                        <View
+                          style={[
+                            styles.statusDot,
+                            {
+                              backgroundColor: course.progress >= 100 ? '#10B981' : '#F59E0B',
+                            },
+                          ]}
+                        />
+                        <Text
+                          style={[
+                            styles.statusText,
+                            {
+                              color: course.progress >= 100 ? '#10B981' : '#F59E0B',
+                            },
+                          ]}
+                        >
+                          {course.progress >= 100 ? 'Completed' : 'In Progress'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Action */}
+                    <View style={[styles.tableCell, styles.actionColumn]}>
+                      <TouchableOpacity
+                        style={[styles.viewDetailsButton, { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary + '12' }]}
+                        onPress={() => navigation.navigate('CourseDetail', { courseId: course.id })}
+                      >
+                        <Text style={[styles.viewDetailsText, { color: theme.colors.primary }]}>
+                          {course.progress >= 100 ? 'Review' : 'Continue'}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
-
-                  {/* Action */}
-                  <View style={[styles.tableCell, styles.actionColumn]}>
-                    <TouchableOpacity
-                      style={[styles.viewDetailsButton, { borderColor: theme.colors.primary }]}
-                      onPress={() => navigation.navigate('CourseDetail', { courseId: course.id })}
-                    >
-                      <Text style={[styles.viewDetailsText, { color: theme.colors.primary }]}>
-                        {course.progress >= 100 ? 'Review' : 'Continue'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))
+                ))}
+              </View>
             ) : (
               <View style={styles.emptyState}>
-                <Icon name="school-outline" size={40} color={theme.colors.textTertiary} />
+                <View style={[styles.emptyIconBox, { backgroundColor: isDark ? theme.colors.backgroundSecondary : '#F5F5F8' }]}>
+                  <Icon name="school-outline" size={36} color={theme.colors.textTertiary} />
+                </View>
                 <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
                   No courses yet. Start your learning journey!
                 </Text>
@@ -990,14 +1470,14 @@ const StudentDashboard = () => {
           </AppCard>
         </View>
 
-        {/* Quick Actions - Compact Version */}
+        {/* ── QUICK ACTIONS ── */}
         <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, marginBottom: 16 }]}>
             Quick Actions
           </Text>
           <View style={styles.quickActionsGrid}>
             <TouchableOpacity
-              style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderColor: theme.colors.border }]}
+              style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.card : '#FFFFFF', borderColor: isDark ? theme.colors.border : '#EEEEEE' }]}
               onPress={() => navigation.navigate('Courses')}
             >
               <View style={[styles.quickActionIcon, { backgroundColor: theme.colors.primary + '15' }]}>
@@ -1009,7 +1489,7 @@ const StudentDashboard = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderColor: theme.colors.border }]}
+              style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.card : '#FFFFFF', borderColor: isDark ? theme.colors.border : '#EEEEEE' }]}
               onPress={() => navigation.navigate('EnrolledCourses')}
             >
               <View style={[styles.quickActionIcon, { backgroundColor: '#10B981' + '15' }]}>
@@ -1021,7 +1501,7 @@ const StudentDashboard = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderColor: theme.colors.border }]}
+              style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.card : '#FFFFFF', borderColor: isDark ? theme.colors.border : '#EEEEEE' }]}
               onPress={() => navigation.navigate('AITutor')}
             >
               <View style={[styles.quickActionIcon, { backgroundColor: '#8B5CF6' + '15' }]}>
@@ -1033,7 +1513,7 @@ const StudentDashboard = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderColor: theme.colors.border }]}
+              style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.card : '#FFFFFF', borderColor: isDark ? theme.colors.border : '#EEEEEE' }]}
               onPress={() => navigation.navigate('Certificates')}
             >
               <View style={[styles.quickActionIcon, { backgroundColor: '#F59E0B' + '15' }]}>
@@ -1045,7 +1525,7 @@ const StudentDashboard = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderColor: theme.colors.border }]}
+              style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.card : '#FFFFFF', borderColor: isDark ? theme.colors.border : '#EEEEEE' }]}
               onPress={() => navigation.navigate('Notifications')}
             >
               <View style={[styles.quickActionIcon, { backgroundColor: '#EF4444' + '15' }]}>
@@ -1062,7 +1542,7 @@ const StudentDashboard = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderColor: theme.colors.border }]}
+              style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.card : '#FFFFFF', borderColor: isDark ? theme.colors.border : '#EEEEEE' }]}
               onPress={() => navigation.navigate('Settings')}
             >
               <View style={[styles.quickActionIcon, { backgroundColor: '#64748B' + '15' }]}>
@@ -1075,7 +1555,48 @@ const StudentDashboard = () => {
           </View>
         </Animated.View>
 
-        {/* Recommended Courses - Horizontal Scroll */}
+        {/* ── FEATURED COURSE — EduView dark card style ── */}
+        {coursesInProgress.length > 0 && (
+          <Animated.View entering={FadeInDown.duration(400).delay(350)} style={styles.section}>
+            <View style={[styles.featuredCard, { backgroundColor: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+              {/* Subtle arc decoration */}
+              <View style={styles.featuredArc} />
+              <View style={styles.featuredTop}>
+                <View style={[styles.featuredIconBadge, { backgroundColor: isDark ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.12)' }]}>
+                  <Icon name="play-circle" size={18} color={isDark ? '#1A1A2E' : '#FFFFFF'} />
+                </View>
+                <TouchableOpacity
+                  style={[styles.featuredArrowBtn, { backgroundColor: isDark ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.1)' }]}
+                  onPress={() => navigation.navigate('CourseDetail', { courseId: coursesInProgress[0]?.id })}
+                >
+                  <Icon name="arrow-forward" size={15} color={isDark ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.55)'} />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.featuredMid}>
+                <Text style={styles.featuredBadgeLabel}>CONTINUE LEARNING</Text>
+                <Text style={[styles.featuredCourseTitle, { color: isDark ? '#1A1A2E' : '#FFFFFF' }]} numberOfLines={2}>
+                  {coursesInProgress[0]?.name || 'Your Current Course'}
+                </Text>
+              </View>
+              <View style={styles.featuredFoot}>
+                <View style={styles.featuredProgressRow}>
+                  <View style={[styles.featuredProgressBg, { backgroundColor: isDark ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.18)' }]}>
+                    <View style={[styles.featuredProgressFill, { width: `${coursesInProgress[0]?.progress || 0}%` }]} />
+                  </View>
+                  <Text style={[styles.featuredProgressPct, { color: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.78)' }]}>{coursesInProgress[0]?.progress || 0}%</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.featuredContinueBtn, { backgroundColor: isDark ? '#1A1A2E' : '#FFFFFF' }]}
+                  onPress={() => navigation.navigate('CourseDetail', { courseId: coursesInProgress[0]?.id })}
+                >
+                  <Icon name="arrow-forward" size={16} color={isDark ? '#FFFFFF' : '#1A1A2E'} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Animated.View>
+        )}
+
+        {/* ── RECOMMENDED COURSES ── */}
         {recommendedCourses.length > 0 && (
           <Animated.View entering={FadeInDown.duration(400).delay(400)} style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -1103,7 +1624,7 @@ const StudentDashboard = () => {
               {recommendedCourses.map((course) => (
                 <TouchableOpacity
                   key={course.id}
-                  style={[styles.recommendedCard, { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderColor: theme.colors.border }]}
+                  style={[styles.recommendedCard, { backgroundColor: isDark ? theme.colors.card : '#FFFFFF', borderColor: isDark ? theme.colors.border : '#EEEEEE' }]}
                   onPress={() => navigation.navigate('CourseDetail', { courseId: course.id })}
                 >
                   {course.thumbnailImage ? (
@@ -1113,26 +1634,28 @@ const StudentDashboard = () => {
                       resizeMode="cover"
                     />
                   ) : (
-                    <View style={[styles.recommendedImagePlaceholder, { backgroundColor: theme.colors.primary + '20' }]}>
+                    <View style={[styles.recommendedImagePlaceholder, { backgroundColor: isDark ? theme.colors.backgroundSecondary : '#F5F5F8' }]}>
                       <Icon name="image-outline" size={32} color={theme.colors.primary} />
                     </View>
                   )}
                   <View style={styles.recommendedContent}>
-                    <Text style={[styles.recommendedCategory, { color: theme.colors.primary }]}>
-                      {course.category?.name || 'Course'}
-                    </Text>
+                    <View style={[styles.recommendedCategoryPill, { backgroundColor: theme.colors.primary + '18' }]}>
+                      <Text style={[styles.recommendedCategory, { color: theme.colors.primary }]}>
+                        {course.category?.name || 'Course'}
+                      </Text>
+                    </View>
                     <Text style={[styles.recommendedTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>
                       {course.name}
                     </Text>
                     <View style={styles.recommendedMeta}>
                       <View style={styles.recommendedMetaItem}>
-                        <Icon name="layers-outline" size={14} color={theme.colors.textTertiary} />
+                        <Icon name="layers-outline" size={13} color={theme.colors.textTertiary} />
                         <Text style={[styles.recommendedMetaText, { color: theme.colors.textTertiary }]}>
                           {course.topics?.length || 0} topics
                         </Text>
                       </View>
                       <View style={styles.recommendedMetaItem}>
-                        <Icon name="speedometer-outline" size={14} color={theme.colors.textTertiary} />
+                        <Icon name="speedometer-outline" size={13} color={theme.colors.textTertiary} />
                         <Text style={[styles.recommendedMetaText, { color: theme.colors.textTertiary }]}>
                           {course.level || 'All Levels'}
                         </Text>
@@ -1144,6 +1667,104 @@ const StudentDashboard = () => {
             </ScrollView>
           </Animated.View>
         )}
+
+        {/* ── REMINDERS / TODO WIDGET ── */}
+        <Animated.View entering={FadeInDown.duration(400).delay(500)} style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Reminders</Text>
+              <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
+                Your pending learning tasks
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.viewAllButton, { backgroundColor: theme.colors.primary }]}
+              onPress={() => navigation.navigate('Todo')}
+            >
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
+          </View>
+
+          <AppCard style={[styles.todoWidget, { borderColor: theme.colors.border }]}>
+            {/* Quick add row */}
+            <View style={[styles.todoAddRow, { borderBottomColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)' }]}>
+              <TextInput
+                style={[styles.todoAddInput, { color: theme.colors.textPrimary }]}
+                placeholder="Add a quick reminder..."
+                placeholderTextColor={theme.colors.textTertiary}
+                value={todoInput}
+                onChangeText={setTodoInput}
+                onSubmitEditing={async () => {
+                  if (!todoInput.trim()) return;
+                  await addTodo({ text: todoInput.trim(), type: 'general' });
+                  setTodoInput('');
+                }}
+                returnKeyType="done"
+              />
+              <TouchableOpacity
+                style={[styles.todoAddBtn, { backgroundColor: ORANGE, opacity: todoInput.trim() ? 1 : 0.45 }]}
+                onPress={async () => {
+                  if (!todoInput.trim()) return;
+                  await addTodo({ text: todoInput.trim(), type: 'general' });
+                  setTodoInput('');
+                }}
+              >
+                <Icon name="add" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Pending todos list — show top 4 */}
+            {todos.filter(t => !t.completed).slice(0, 4).length > 0 ? (
+              todos.filter(t => !t.completed).slice(0, 4).map((todo, i) => (
+                <View
+                  key={todo.id}
+                  style={[
+                    styles.todoRow,
+                    i < Math.min(todos.filter(t => !t.completed).length, 4) - 1 && {
+                      borderBottomWidth: 1,
+                      borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                    },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={[styles.todoCheck, { borderColor: ORANGE }]}
+                    onPress={() => toggleTodo(todo.id)}
+                  >
+                    <Icon name="ellipse-outline" size={18} color={ORANGE} />
+                  </TouchableOpacity>
+                  <Text style={[styles.todoRowText, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                    {todo.text}
+                  </Text>
+                  <TouchableOpacity onPress={() => deleteTodo(todo.id)} style={styles.todoDeleteBtn}>
+                    <Icon name="close" size={14} color={theme.colors.textTertiary} />
+                  </TouchableOpacity>
+                </View>
+              ))
+            ) : (
+              <View style={styles.todoEmptyRow}>
+                <Icon name="checkmark-circle-outline" size={20} color="#10B981" />
+                <Text style={[styles.todoEmptyText, { color: theme.colors.textSecondary }]}>
+                  {todos.filter(t => t.completed).length > 0
+                    ? 'All caught up! Great work.'
+                    : 'No reminders yet — add one above.'}
+                </Text>
+              </View>
+            )}
+
+            {/* Completed count footer */}
+            {todos.length > 0 && (
+              <View style={[styles.todoFooter, { borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}>
+                <Icon name="checkmark-done-outline" size={13} color="#10B981" />
+                <Text style={[styles.todoFooterText, { color: theme.colors.textSecondary }]}>
+                  {todos.filter(t => t.completed).length} of {todos.length} completed
+                </Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Todo')}>
+                  <Text style={[styles.todoFooterLink, { color: ORANGE }]}>Manage →</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </AppCard>
+        </Animated.View>
 
       </ScrollView>
 
@@ -1176,42 +1797,45 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       marginBottom: 16,
     },
     sectionTitle: {
-      fontSize: 18,
-      fontWeight: '600',
+      fontSize: isMobile ? 16 : 18,
+      fontWeight: '800',
       fontFamily: theme.typography.fontFamily.semiBold,
+      letterSpacing: -0.3,
     },
     sectionSubtitle: {
       fontSize: 13,
-      marginTop: 4,
+      marginTop: 3,
+      fontWeight: '500',
     },
     viewAllButton: {
       paddingHorizontal: 16,
       paddingVertical: 8,
-      borderRadius: 8,
+      borderRadius: 20,
     },
     viewAllText: {
       color: '#FFFFFF',
-      fontSize: 13,
-      fontWeight: '600',
+      fontSize: 12,
+      fontWeight: '700',
     },
 
-    // Stats Section
+    // ── Stats ──
     statsSection: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       paddingHorizontal: isMobile ? 16 : 24,
-      gap: isMobile ? 12 : 16,
+      gap: isMobile ? 10 : 14,
       marginBottom: 24,
     },
     statCard: {
       flex: 1,
-      minWidth: isMobile ? '47%' : isLargeScreen ? 220 : isTablet ? 180 : 160,
-      maxWidth: isLargeScreen ? 300 : undefined,
+      minWidth: isMobile ? '47%' : isLargeScreen ? 200 : isTablet ? 170 : 150,
+      maxWidth: isLargeScreen ? 280 : undefined,
     },
 
-    // Charts Section
+    // ── Charts ──
     chartsSection: {
       flexDirection: isLargeScreen ? 'row' : 'column',
+      alignItems: isLargeScreen ? 'stretch' : undefined,
       paddingHorizontal: isMobile ? 16 : 24,
       gap: 16,
       marginBottom: 24,
@@ -1220,8 +1844,42 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       flex: 1,
       minWidth: isLargeScreen ? 400 : undefined,
     },
+    // Enrollment chart — warm orange EduView style
+    enrollmentChartCard: {
+      padding: isMobile ? 16 : 20,
+      backgroundColor: '#F5A53A',
+      flex: isLargeScreen ? 1 : undefined,
+    },
+    enrollmentChartTitle: {
+      fontSize: 17,
+      fontWeight: '900',
+      color: '#FFFFFF',
+      letterSpacing: -0.2,
+    },
+    enrollmentChartSubtitle: {
+      fontSize: 12,
+      color: 'rgba(255,255,255,0.82)',
+      marginTop: 3,
+      fontWeight: '500',
+    },
+    enrollmentIconBox: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      backgroundColor: '#1A1A2E',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    // Completion chart — theme-aware
     chartCardInner: {
       padding: isMobile ? 16 : 20,
+    },
+    completionIconBox: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     chartHeader: {
       flexDirection: 'row',
@@ -1231,36 +1889,44 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     },
     chartTitle: {
       fontSize: 16,
-      fontWeight: '600',
+      fontWeight: '800',
+      letterSpacing: -0.2,
     },
     chartSubtitle: {
-      fontSize: 13,
-      marginTop: 4,
+      fontSize: 12,
+      marginTop: 3,
+      fontWeight: '500',
     },
 
-    // Table Styles
+    // ── Table ──
     tableCard: {
       padding: 0,
       overflow: 'hidden',
     },
     tableHeader: {
       flexDirection: 'row',
-      paddingVertical: 12,
+      paddingVertical: 11,
       paddingHorizontal: isMobile ? 12 : 16,
       borderBottomWidth: 1,
-      backgroundColor: isDark ? theme.colors.backgroundSecondary : theme.colors.backgroundSecondary,
     },
     tableHeaderCell: {
-      fontSize: 12,
-      fontWeight: '600',
+      fontSize: 11,
+      fontWeight: '700',
       textTransform: 'uppercase',
-      letterSpacing: 0.5,
+      letterSpacing: 0.8,
+    },
+    tableRowsWrapper: {
+      paddingHorizontal: 8,
+      paddingVertical: 8,
+      gap: 6,
     },
     tableRow: {
       flexDirection: 'row',
-      paddingVertical: 14,
-      paddingHorizontal: isMobile ? 12 : 16,
+      paddingVertical: 12,
+      paddingHorizontal: isMobile ? 10 : 14,
       alignItems: 'center',
+      borderRadius: 12,
+      borderWidth: 1.5,
     },
     tableCell: {
       fontSize: 14,
@@ -1270,14 +1936,14 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       paddingRight: 12,
     },
     courseImage: {
-      width: isMobile ? 40 : 48,
-      height: isMobile ? 40 : 48,
-      borderRadius: 8,
+      width: isMobile ? 38 : 46,
+      height: isMobile ? 38 : 46,
+      borderRadius: 10,
     },
     courseImagePlaceholder: {
-      width: isMobile ? 40 : 48,
-      height: isMobile ? 40 : 48,
-      borderRadius: 8,
+      width: isMobile ? 38 : 46,
+      height: isMobile ? 38 : 46,
+      borderRadius: 10,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -1310,104 +1976,116 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     },
     progressText: {
       fontSize: 12,
-      fontWeight: '500',
+      fontWeight: '600',
       width: 35,
       textAlign: 'right',
     },
     statusColumn: {
       flex: 1,
-      paddingRight: 12,
+      paddingRight: 8,
     },
     statusBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 10,
-      paddingVertical: 6,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
       borderRadius: 20,
-      gap: 6,
+      gap: 5,
+      alignSelf: 'flex-start',
     },
     statusDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
+      width: 6,
+      height: 6,
+      borderRadius: 3,
     },
     statusText: {
-      fontSize: 12,
-      fontWeight: '600',
+      fontSize: 11,
+      fontWeight: '700',
     },
     actionColumn: {
       width: isMobile ? 80 : 100,
       alignItems: 'flex-end',
     },
     courseName: {
-      fontWeight: '500',
+      fontWeight: '700',
+      fontSize: 13,
     },
     viewDetailsButton: {
       paddingHorizontal: isMobile ? 8 : 12,
       paddingVertical: 6,
-      borderRadius: 6,
-      borderWidth: 1,
+      borderRadius: 8,
+      borderWidth: 1.5,
     },
     viewDetailsText: {
       fontSize: 12,
-      fontWeight: '600',
+      fontWeight: '700',
     },
     emptyState: {
       alignItems: 'center',
       justifyContent: 'center',
       padding: 40,
     },
+    emptyIconBox: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
     emptyText: {
-      marginTop: 12,
       marginBottom: 16,
       fontSize: 14,
       textAlign: 'center',
+      fontWeight: '500',
+      lineHeight: 20,
     },
     emptyButton: {
-      paddingHorizontal: 20,
-      paddingVertical: 10,
-      borderRadius: 8,
+      paddingHorizontal: 24,
+      paddingVertical: 11,
+      borderRadius: 20,
     },
     emptyButtonText: {
       color: '#FFFFFF',
       fontSize: 14,
-      fontWeight: '600',
+      fontWeight: '700',
     },
 
-    // Quick Actions
+    // ── Quick Actions ──
     quickActionsGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 12,
+      gap: 10,
     },
     quickAction: {
       flex: 1,
-      minWidth: isMobile ? '30%' : 100,
-      maxWidth: isMobile ? '32%' : 140,
-      padding: 16,
-      borderRadius: 12,
+      minWidth: isMobile ? '30%' : 110,
+      maxWidth: isMobile ? '32%' : 150,
+      paddingVertical: 18,
+      paddingHorizontal: 12,
+      borderRadius: 16,
       alignItems: 'center',
-      borderWidth: 1,
+      borderWidth: 1.5,
       ...theme.shadows.sm,
     },
     quickActionIcon: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      width: 50,
+      height: 50,
+      borderRadius: 25,
       justifyContent: 'center',
       alignItems: 'center',
-      marginBottom: 8,
+      marginBottom: 10,
       position: 'relative',
     },
     quickActionText: {
-      fontSize: 12,
-      fontWeight: '600',
+      fontSize: 11,
+      fontWeight: '700',
       textAlign: 'center',
     },
     notificationBadge: {
       position: 'absolute',
-      top: -4,
-      right: -4,
+      top: -3,
+      right: -3,
       backgroundColor: '#EF4444',
       width: 18,
       height: 18,
@@ -1421,16 +2099,17 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       fontWeight: '700',
     },
 
-    // Recommended Courses
+    // ── Recommended Courses ──
     horizontalScrollContent: {
       paddingRight: 24,
-      gap: 16,
+      gap: 14,
     },
     recommendedCard: {
-      width: 280,
-      borderRadius: 12,
-      borderWidth: 1,
+      width: 268,
+      borderRadius: 16,
+      borderWidth: 1.5,
       overflow: 'hidden',
+      ...theme.shadows.sm,
     },
     recommendedImage: {
       width: '100%',
@@ -1445,22 +2124,28 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     recommendedContent: {
       padding: 14,
     },
+    recommendedCategoryPill: {
+      alignSelf: 'flex-start',
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 20,
+      marginBottom: 8,
+    },
     recommendedCategory: {
-      fontSize: 11,
-      fontWeight: '600',
+      fontSize: 10,
+      fontWeight: '800',
       textTransform: 'uppercase',
-      letterSpacing: 0.5,
-      marginBottom: 6,
+      letterSpacing: 0.6,
     },
     recommendedTitle: {
-      fontSize: 15,
-      fontWeight: '600',
+      fontSize: 14,
+      fontWeight: '800',
       marginBottom: 10,
-      lineHeight: 20,
+      lineHeight: 19,
     },
     recommendedMeta: {
       flexDirection: 'row',
-      gap: 16,
+      gap: 14,
     },
     recommendedMetaItem: {
       flexDirection: 'row',
@@ -1468,7 +2153,291 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       gap: 4,
     },
     recommendedMetaText: {
+      fontSize: 11,
+      fontWeight: '500',
+    },
+
+    // ── Todo Widget ──
+    todoWidget: {
+      borderRadius: 16,
+      borderWidth: 1,
+      overflow: 'hidden',
+    },
+    todoAddRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+    },
+    todoAddInput: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: '500',
+      paddingVertical: 4,
+    },
+    todoAddBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    todoRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 10,
+    },
+    todoCheck: {
+      width: 24,
+      height: 24,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    todoRowText: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    todoDeleteBtn: {
+      padding: 4,
+    },
+    todoEmptyRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 16,
+    },
+    todoEmptyText: {
+      fontSize: 13,
+    },
+    todoFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderTopWidth: 1,
+    },
+    todoFooterText: {
+      flex: 1,
       fontSize: 12,
+    },
+    todoFooterLink: {
+      fontSize: 12,
+      fontWeight: '700',
+    },
+
+    // ── Page Banner ──
+    pageBanner: {
+      flexDirection: isTablet ? 'row' : 'column',
+      justifyContent: 'space-between',
+      alignItems: isTablet ? 'center' : 'flex-start',
+      paddingHorizontal: isMobile ? 16 : 24,
+      paddingVertical: 20,
+      marginBottom: 8,
+      gap: 12,
+    },
+    pageBannerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      flex: isTablet ? 1 : undefined,
+    },
+    pageBannerIconCircle: {
+      width: 48,
+      height: 48,
+      borderRadius: 14,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    pageBannerTitle: {
+      fontSize: isMobile ? 20 : 26,
+      fontWeight: '800',
+    },
+    pageBannerSubtitle: {
+      fontSize: 13,
+      marginTop: 2,
+    },
+    browseCourseBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      borderRadius: 10,
+      backgroundColor: '#FF8C42',
+    },
+    browseCourseBtnText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+
+    // ── Welcome Banner ──
+    bannerSection: {
+      paddingHorizontal: isMobile ? 16 : 24,
+      marginBottom: 24,
+    },
+    bannerCard: {
+      backgroundColor: '#7C6FCD',
+      borderRadius: 22,
+      padding: isMobile ? 20 : 24,
+      overflow: 'hidden',
+      position: 'relative',
+      minHeight: isMobile ? 148 : 160,
+    },
+    bannerCircle1: {
+      position: 'absolute',
+      top: -50,
+      right: -50,
+      width: 180,
+      height: 180,
+      borderRadius: 90,
+      backgroundColor: 'rgba(255,255,255,0.07)',
+    },
+    bannerCircle2: {
+      position: 'absolute',
+      bottom: -35,
+      right: 50,
+      width: 110,
+      height: 110,
+      borderRadius: 55,
+      backgroundColor: 'rgba(255,255,255,0.05)',
+    },
+    bannerTrophyWrapper: {
+      position: 'absolute',
+      top: 12,
+      right: 18,
+    },
+    bannerEyebrow: {
+      color: 'rgba(255,255,255,0.72)',
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+      marginBottom: 8,
+    },
+    bannerTitle: {
+      color: '#FFFFFF',
+      fontSize: isMobile ? 22 : 27,
+      fontWeight: '900',
+      lineHeight: isMobile ? 27 : 33,
+      marginBottom: 10,
+      maxWidth: '62%',
+    },
+    bannerBody: {
+      color: 'rgba(255,255,255,0.8)',
+      fontSize: 12,
+      lineHeight: 18,
+      maxWidth: '68%',
+      fontWeight: '500',
+      marginBottom: 18,
+    },
+    bannerBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: '#1A1A2E',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+
+    // ── Featured Course Card ──
+    featuredCard: {
+      borderRadius: 20,
+      padding: isMobile ? 18 : 22,
+      overflow: 'hidden',
+      position: 'relative',
+    },
+    featuredArc: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      opacity: 0.08,
+      backgroundColor: 'transparent',
+    },
+    featuredTop: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    featuredIconBadge: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      backgroundColor: 'rgba(255,255,255,0.12)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    featuredArrowBtn: {
+      width: 28,
+      height: 28,
+      borderRadius: 8,
+      backgroundColor: 'rgba(255,255,255,0.1)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    featuredMid: {
+      marginBottom: 18,
+    },
+    featuredBadgeLabel: {
+      color: '#FF8C42',
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      marginBottom: 7,
+    },
+    featuredCourseTitle: {
+      color: '#FFFFFF',
+      fontWeight: '800',
+      fontSize: isMobile ? 14 : 16,
+      lineHeight: isMobile ? 19 : 22,
+    },
+    featuredFoot: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+    },
+    featuredProgressRow: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    featuredProgressBg: {
+      flex: 1,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: 'rgba(255,255,255,0.18)',
+      overflow: 'hidden',
+    },
+    featuredProgressFill: {
+      height: '100%',
+      borderRadius: 3,
+      backgroundColor: '#FF8C42',
+    },
+    featuredProgressPct: {
+      color: 'rgba(255,255,255,0.78)',
+      fontSize: 12,
+      fontWeight: '700',
+      minWidth: 32,
+    },
+    featuredContinueBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: '#FFFFFF',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
   });
 

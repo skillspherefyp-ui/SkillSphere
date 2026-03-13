@@ -1,7 +1,7 @@
 const { AIChatSession, AIChatMessage } = require('../models');
 const openaiService = require('../services/openaiService');
 
-const WELCOME_MESSAGE = "Hello! I'm SkillSphere AI, your academic assistant. I can help with studying, coding, writing, research, course questions, and general learning support. Ask me anything you want to work through.";
+const WELCOME_MESSAGE = "Hello! I'm SkillSphere AI, your academic assistant. I can help with studying, coding, writing, research, course questions, and general learning support. I can also format comparisons and settings in tables when useful.";
 
 exports.createSession = async (req, res) => {
   try {

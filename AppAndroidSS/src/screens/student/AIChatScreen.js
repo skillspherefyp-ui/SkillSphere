@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,19 +13,30 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import MaterialIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import MainLayout from '../../components/ui/MainLayout';
 import MarkdownText from '../../components/ui/MarkdownText';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { aiChatAPI } from '../../services/apiClient';
 
 const AIChatScreen = () => {
   const { theme, isDark } = useTheme();
+  const { user, logout } = useAuth();
   const navigation = useNavigation();
   const { width, height } = useWindowDimensions();
+
+  const sidebarItems = [
+    { label: 'Dashboard', icon: 'grid-outline', iconActive: 'grid', route: 'Dashboard' },
+    { label: 'Browse Courses', icon: 'library-outline', iconActive: 'library', route: 'Courses' },
+    { label: 'My Learning', icon: 'school-outline', iconActive: 'school', route: 'EnrolledCourses' },
+    { label: 'AI Assistant', icon: 'sparkles-outline', iconActive: 'sparkles', route: 'AITutor' },
+    { label: 'Certificates', icon: 'ribbon-outline', iconActive: 'ribbon', route: 'Certificates' },
+    { label: 'Reminders', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle', route: 'Todo' },
+  ];
+  const handleNavigate = (route) => navigation.navigate(route);
 
   // Chat state
   const [sessions, setSessions] = useState([]);
@@ -41,11 +52,6 @@ const AIChatScreen = () => {
   const flatListRef = useRef(null);
   const recognitionRef = useRef(null);
   const isWeb = Platform.OS === 'web';
-  const assistantSubtitle = isTyping
-    ? 'Thinking through your question'
-    : sendingMessage
-      ? 'Sending your message'
-      : 'General academic help, study support, and course guidance';
 
   // Responsive breakpoints
   const isPhone = width < 768;
@@ -55,12 +61,6 @@ const AIChatScreen = () => {
   // Fetch chat sessions on mount
   useEffect(() => {
     fetchSessions();
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      recognitionRef.current?.stop?.();
-    };
   }, []);
 
   const fetchSessions = async () => {
@@ -76,15 +76,13 @@ const AIChatScreen = () => {
           // Create a new session if none exist
           handleNewChat();
         }
-      } else {
-        throw new Error(response.error || 'Failed to load chat sessions');
       }
     } catch (error) {
       console.error('Error fetching sessions:', error);
       // If error, show default welcome message
       setMessages([{
         id: '1',
-        content: "Hello! I'm SkillSphere AI, your academic assistant. I can help with studying, coding, writing, research, course questions, and general learning support. Ask me anything you want to work through.",
+        content: "Hello! I'm SkillSphere AI, your academic assistant. I can help with studying, coding, writing, research, course questions, and general learning support. I can also format comparisons and settings in tables when useful.",
         sender: 'ai',
         timestamp: new Date(),
       }]);
@@ -96,17 +94,15 @@ const AIChatScreen = () => {
   const loadSession = async (sessionId) => {
     try {
       const response = await aiChatAPI.getSession(sessionId);
-      if (!response.success || !response.session) {
-        throw new Error(response.error || 'Failed to load chat session');
+      if (response.success && response.session) {
+        setCurrentSession(response.session);
+        const formattedMessages = (response.session.messages || []).map(msg => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp || msg.createdAt),
+        }));
+        setMessages(formattedMessages);
+        setShowChatSidebar(false);
       }
-
-      setCurrentSession(response.session);
-      const formattedMessages = (response.session.messages || []).map(msg => ({
-        ...msg,
-        timestamp: new Date(msg.timestamp || msg.createdAt),
-      }));
-      setMessages(formattedMessages);
-      setShowChatSidebar(false);
     } catch (error) {
       console.error('Error loading session:', error);
       Toast.show({
@@ -120,24 +116,23 @@ const AIChatScreen = () => {
   const handleNewChat = async () => {
     try {
       const response = await aiChatAPI.createSession({ title: 'New Chat' });
-      if (!response.success || !response.session) {
-        throw new Error(response.error || 'Failed to create a new chat');
+      if (response.success && response.session) {
+        setCurrentSession(response.session);
+        const formattedMessages = (response.session.messages || []).map(msg => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp || msg.createdAt),
+        }));
+        setMessages(formattedMessages);
+        // Add the new session to the list
+        setSessions(prev => [response.session, ...prev]);
+        setShowChatSidebar(false);
       }
-
-      setCurrentSession(response.session);
-      const formattedMessages = (response.session.messages || []).map(msg => ({
-        ...msg,
-        timestamp: new Date(msg.timestamp || msg.createdAt),
-      }));
-      setMessages(formattedMessages);
-      setSessions(prev => [response.session, ...prev]);
-      setShowChatSidebar(false);
     } catch (error) {
       console.error('Error creating session:', error);
       // Fallback to local message
       setMessages([{
         id: '1',
-        content: "Hello! I'm SkillSphere AI, your academic assistant. I can help with studying, coding, writing, research, course questions, and general learning support. Ask me anything you want to work through.",
+        content: "Hello! I'm SkillSphere AI, your academic assistant. I can help with studying, coding, writing, research, course questions, and general learning support. I can also format comparisons and settings in tables when useful.",
         sender: 'ai',
         timestamp: new Date(),
       }]);
@@ -194,30 +189,30 @@ const AIChatScreen = () => {
     try {
       if (currentSession?.id) {
         const response = await aiChatAPI.sendMessage(currentSession.id, userMessageText);
-        if (!response.success || !response.userMessage || !response.aiMessage) {
-          throw new Error(response.error || 'Failed to send message');
+        if (response.success) {
+          // Replace temp message with real one and add AI response
+          setMessages(prev => {
+            const filtered = prev.filter(m => m.id !== tempUserMessage.id);
+            return [
+              ...filtered,
+              { ...response.userMessage, timestamp: new Date(response.userMessage.timestamp || response.userMessage.createdAt) },
+              { ...response.aiMessage, timestamp: new Date(response.aiMessage.timestamp || response.aiMessage.createdAt) },
+            ];
+          });
+
+          // Update session in list with new title if changed
+          setSessions(prev => prev.map(s =>
+            s.id === currentSession.id
+              ? { ...s, lastMessageAt: new Date(), title: userMessageText.substring(0, 50) + (userMessageText.length > 50 ? '...' : '') }
+              : s
+          ));
         }
-
-        setMessages(prev => {
-          const filtered = prev.filter(m => m.id !== tempUserMessage.id);
-          return [
-            ...filtered,
-            { ...response.userMessage, timestamp: new Date(response.userMessage.timestamp || response.userMessage.createdAt) },
-            { ...response.aiMessage, timestamp: new Date(response.aiMessage.timestamp || response.aiMessage.createdAt) },
-          ];
-        });
-
-        setSessions(prev => prev.map(s =>
-          s.id === currentSession.id
-            ? { ...s, lastMessageAt: new Date(), title: userMessageText.substring(0, 50) + (userMessageText.length > 50 ? '...' : '') }
-            : s
-        ));
       } else {
         // Fallback for local mode
         setTimeout(() => {
           const aiMessage = {
             id: (Date.now() + 1).toString(),
-            content: "I couldn't reach the live assistant just now, so this fallback response was shown instead. Please try again in a moment for a full AI answer.",
+            content: "Thank you for your question! I'm here to help you learn better. This is a simulated response - in the full implementation, I would provide detailed answers based on your enrolled courses and learning materials.\n\nIs there anything specific you'd like to know more about?",
             sender: 'ai',
             timestamp: new Date(),
           };
@@ -500,7 +495,10 @@ const AIChatScreen = () => {
   if (loading) {
     return (
       <MainLayout
-        showSidebar={false}
+        showSidebar={true}
+        sidebarItems={sidebarItems}
+        activeRoute="AITutor"
+        onNavigate={handleNavigate}
         showHeader={true}
       >
         <View style={styles.loadingContainer}>
@@ -515,12 +513,16 @@ const AIChatScreen = () => {
 
   return (
     <MainLayout
-      showSidebar={false}
+      showSidebar={true}
+      sidebarItems={sidebarItems}
+      activeRoute="AITutor"
+      onNavigate={handleNavigate}
       showHeader={true}
       customSidebar={renderChatSidebar()}
       customSidebarVisible={showChatSidebar}
       onCustomSidebarToggle={setShowChatSidebar}
       customMenuIcon="chatbubbles-outline"
+      hideHeaderToggle={true}
     >
       <View style={[styles.mainContainer, { backgroundColor: isDark ? theme.colors.background : theme.colors.background }]}>
         {/* Chat Area */}
@@ -533,10 +535,23 @@ const AIChatScreen = () => {
             {/* Chat Header */}
             <View style={[styles.chatHeader, { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderBottomColor: theme.colors.border }]}>
               <TouchableOpacity
-                style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : theme.colors.backgroundSecondary }]}
-                onPress={() => navigation.goBack()}
+                style={[
+                  styles.backButton,
+                  {
+                    backgroundColor: showChatSidebar
+                      ? 'rgba(255,140,66,0.25)'
+                      : (isDark ? 'rgba(255,255,255,0.1)' : theme.colors.backgroundSecondary),
+                    borderWidth: 1,
+                    borderColor: showChatSidebar ? 'rgba(255,140,66,0.5)' : 'transparent',
+                  },
+                ]}
+                onPress={() => setShowChatSidebar(!showChatSidebar)}
               >
-                <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+                <Icon
+                  name={showChatSidebar ? 'close' : 'chatbubbles-outline'}
+                  size={20}
+                  color={showChatSidebar ? '#FF8C42' : theme.colors.textPrimary}
+                />
               </TouchableOpacity>
               <View style={[styles.chatHeaderIcon, { backgroundColor: theme.colors.primary + '15' }]}>
                 <Icon name="sparkles" size={isPhone ? 20 : 24} color={theme.colors.primary} />
@@ -546,13 +561,10 @@ const AIChatScreen = () => {
                   {currentSession?.title || 'AI Learning Assistant'}
                 </Text>
                 <Text style={[styles.chatHeaderSubtitle, { color: theme.colors.textSecondary }]}>
-                  {assistantSubtitle}
+                  Ask about courses, coding, research, or study help
                 </Text>
               </View>
-              <View style={[styles.statusPill, { backgroundColor: isTyping ? `${theme.colors.primary}18` : `${theme.colors.success}18` }]}>
-                <View style={[styles.onlineIndicator, { backgroundColor: isTyping ? theme.colors.primary : theme.colors.success }]} />
-                <Text style={[styles.statusPillText, { color: isTyping ? theme.colors.primary : theme.colors.success }]}>{isTyping ? 'Thinking' : 'Ready'}</Text>
-              </View>
+              <View style={[styles.onlineIndicator, { backgroundColor: theme.colors.success }]} />
             </View>
 
             {/* Chat Messages */}
@@ -565,13 +577,6 @@ const AIChatScreen = () => {
               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
               showsVerticalScrollIndicator={false}
               ListFooterComponent={renderTypingIndicator}
-              ListEmptyComponent={(
-                <View style={styles.emptyChatState}>
-                  <MaterialIcon name="book-open-page-variant-outline" size={26} color={theme.colors.primary} />
-                  <Text style={[styles.emptyChatTitle, { color: theme.colors.textPrimary }]}>Start a focused conversation</Text>
-                  <Text style={[styles.emptyChatText, { color: theme.colors.textSecondary }]}>Ask for study help, explanations, summaries, or coding support.</Text>
-                </View>
-              )}
             />
 
             {/* Input Area */}
@@ -605,7 +610,7 @@ const AIChatScreen = () => {
                   style={[styles.input, { color: theme.colors.textPrimary }]}
                   value={inputText}
                   onChangeText={setInputText}
-                  placeholder={isRecording ? "Listening..." : "Ask me anything..."}
+                  placeholder={isRecording ? "Listening..." : "Ask anything, or request a table/compare view..."}
                   placeholderTextColor={isRecording ? theme.colors.error : theme.colors.textTertiary}
                   multiline
                   maxLength={1000}
@@ -784,42 +789,14 @@ const getStyles = (theme, isDark, isWeb, isPhone, isLargeScreen, width, height) 
       fontSize: isPhone ? 11 : 13,
       marginTop: 2,
     },
-    statusPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 999,
-    },
     onlineIndicator: {
       width: isPhone ? 8 : 10,
       height: isPhone ? 8 : 10,
       borderRadius: isPhone ? 4 : 5,
     },
-    statusPillText: {
-      fontSize: 11,
-      fontWeight: '700',
-    },
     messagesList: {
       padding: isPhone ? 12 : 20,
       paddingBottom: 8,
-    },
-    emptyChatState: {
-      alignItems: 'center',
-      paddingVertical: 32,
-      paddingHorizontal: 20,
-    },
-    emptyChatTitle: {
-      fontSize: 15,
-      fontWeight: '700',
-      marginTop: 10,
-      marginBottom: 6,
-    },
-    emptyChatText: {
-      fontSize: 13,
-      textAlign: 'center',
-      lineHeight: 20,
     },
     messageContainer: {
       flexDirection: 'row',

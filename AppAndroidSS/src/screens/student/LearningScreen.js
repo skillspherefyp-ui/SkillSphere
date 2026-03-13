@@ -1,16 +1,20 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  ActivityIndicator,
-  Modal,
-  Platform,
-  Animated as RNAnimated,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
   View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Platform,
   useWindowDimensions,
+  ActivityIndicator,
+  TextInput,
+  Image,
+  Linking,
+  Animated as RNAnimated,
+  PanResponder,
+  Modal,
+  FlatList,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -18,689 +22,295 @@ import MaterialIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MainLayout from '../../components/ui/MainLayout';
 import EmptyState from '../../components/ui/EmptyState';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import AppButton from '../../components/ui/AppButton';
+import MarkdownText from '../../components/ui/MarkdownText';
 import { useData } from '../../context/DataContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { aiTutorAPI, API_BASE } from '../../services/apiClient';
-
-const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+import { lectureChatAPI } from '../../services/apiClient';
+import { resolveFileUrl } from '../../utils/urlHelpers';
+import AILearningScreen from './AILearningScreen';
 
 const LearningScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { theme, isDark } = useTheme();
-  const { width } = useWindowDimensions();
-  const { courseId, topicId } = route.params || {};
-  const { courses, checkEnrollment, fetchCourses } = useData();
-  const course = courses.find((item) => item.id === courseId);
-  const topic = course?.topics?.find((item) => item.id === topicId);
+  const { user } = useAuth();
 
-  const [loading, setLoading] = useState(true);
-  const [isEnrolled, setIsEnrolled] = useState(false);
-  const [lecture, setLecture] = useState(null);
-  const [session, setSession] = useState(null);
-  const [currentChunk, setCurrentChunk] = useState(null);
-  const [chatMessages, setChatMessages] = useState([]);
-  const [question, setQuestion] = useState('');
-  const [showQuestionPanel, setShowQuestionPanel] = useState(false);
-  const [showFlashcardsModal, setShowFlashcardsModal] = useState(false);
-  const [showNotesModal, setShowNotesModal] = useState(false);
+  const sidebarItems = [
+    { label: 'Dashboard', icon: 'grid-outline', iconActive: 'grid', route: 'Dashboard' },
+    { label: 'Browse Courses', icon: 'library-outline', iconActive: 'library', route: 'Courses' },
+    { label: 'My Learning', icon: 'school-outline', iconActive: 'school', route: 'EnrolledCourses' },
+    { label: 'AI Assistant', icon: 'sparkles-outline', iconActive: 'sparkles', route: 'AITutor' },
+    { label: 'Certificates', icon: 'ribbon-outline', iconActive: 'ribbon', route: 'Certificates' },
+    { label: 'Reminders', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle', route: 'Todo' },
+  ];
+  const handleNavigate = (routeName) => navigation.navigate(routeName);
+  const { width: windowWidth } = useWindowDimensions();
+  const { courseId, topicId } = route.params;
+  const { courses, checkEnrollment, fetchCourses, enrollments, fetchMyEnrollments, updateTopicProgress } = useData();
+  const course = courses.find(c => c.id === courseId);
+  const topic = course?.topics?.find(t => t.id === topicId);
+
+  const isManualMode = course?.creationMode === 'manual';
+  const topicMaterials = topic?.materials || [];
+
   const [isPlaying, setIsPlaying] = useState(true);
-  const [voiceMode, setVoiceMode] = useState(Platform.OS === 'web');
-  const [isRecording, setIsRecording] = useState(false);
-  const [submittingQuestion, setSubmittingQuestion] = useState(false);
-  const [lectureCompleted, setLectureCompleted] = useState(false);
+  const [selectedMaterial, setSelectedMaterial] = useState(null);
+  const [showChatModal, setShowChatModal] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatSending, setChatSending] = useState(false);
+  const chatListRef = useRef(null);
+
+  // Draggable chat popup position
+  const chatPosition = useRef(new RNAnimated.ValueXY({ x: 0, y: 0 })).current;
+  const chatPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        chatPosition.setOffset({ x: chatPosition.x._value, y: chatPosition.y._value });
+        chatPosition.setValue({ x: 0, y: 0 });
+      },
+      onPanResponderMove: RNAnimated.event(
+        [null, { dx: chatPosition.x, dy: chatPosition.y }],
+        { useNativeDriver: false }
+      ),
+      onPanResponderRelease: () => {
+        chatPosition.flattenOffset();
+      },
+    })
+  ).current;
+
+  const [isEnrolled, setIsEnrolled] = useState(false);
+  const [enrollmentLoading, setEnrollmentLoading] = useState(true);
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
   const [showTopicsSidebar, setShowTopicsSidebar] = useState(false);
-  const [revealedFlashcards, setRevealedFlashcards] = useState({});
-  const [teachingProgress, setTeachingProgress] = useState(0);
+  const [aiSpeaking, setAiSpeaking] = useState(true);
+  const [currentSubtitle, setCurrentSubtitle] = useState("Welcome to today's lesson on Machine Learning fundamentals.");
+  // Real enrollment progress
+  const enrollmentProgress = (() => {
+    const e = enrollments.find(en => String(en.courseId) === String(courseId) || String(en.course?.id) === String(courseId));
+    return Math.round(e?.progress ?? 0);
+  })();
 
-  const recognitionRef = useRef(null);
-  const playbackRef = useRef(null);
-  const audioRef = useRef(null);
   const pulseAnim = useRef(new RNAnimated.Value(1)).current;
-  const baseHost = API_BASE.replace(/\/api$/, '');
-  const isMobile = width < 768;
+  const autoNavDone = useRef(false);
 
-  const orderedChunks = useMemo(() => {
-    return (lecture?.sections || []).slice().sort((a, b) => {
-      if (a.sectionIndex === b.sectionIndex) {
-        return a.chunkIndex - b.chunkIndex;
-      }
-      return a.sectionIndex - b.sectionIndex;
-    });
-  }, [lecture]);
+  const isWeb = Platform.OS === 'web';
+  const isLargeScreen = windowWidth >= 1024;
+  const isMobile = windowWidth < 768;
 
-  const currentIndex = useMemo(() => {
-    if (!currentChunk) return 0;
-    const index = orderedChunks.findIndex((item) => item.id === currentChunk.id);
-    return index >= 0 ? index : 0;
-  }, [orderedChunks, currentChunk]);
-
-  const progress = orderedChunks.length ? Math.min(100, Math.round(((currentIndex + (lectureCompleted ? 1 : 0)) / orderedChunks.length) * 100)) : 0;
-  const currentVisual = (lecture?.visualSuggestions || []).find((item) => item.sectionIndex === currentChunk?.sectionIndex);
-  const currentSlides = (lecture?.slideOutlines || []).filter((slide) => slide.slideIndex === currentChunk?.sectionIndex);
-  const totalChunks = orderedChunks.length || 1;
-  const currentSlide = currentSlides[0];
-  const currentDelivery = currentChunk?.delivery || null;
-  const panelContent = currentDelivery?.panel_content || {};
-  const teachingPlan = currentDelivery?.teaching_plan || currentChunk?.teachingPlan || {};
-  const classroomMode = currentDelivery?.classroom_mode || 'narration_only';
-  const classroomModeLabel = currentDelivery?.classroom_mode_label || 'Narration only';
-  const boardContent = currentDelivery?.board_content || panelContent.boardContent || null;
-  const supportPanel = currentDelivery?.support_panel || panelContent.supportPanel || null;
-  const narrationSegments = currentDelivery?.narration_segments || [];
-  const currentNarration = currentDelivery?.narration_text || currentChunk?.spokenExplanation || currentChunk?.text || '';
-  const transitionText = currentDelivery?.transition_text || panelContent.transitionIn || '';
-  const checkpointText = currentDelivery?.checkpoint_text || panelContent.checkpointQuestion || currentChunk?.checkpointQuestion || '';
-  const reinforcementPoints = panelContent.reinforcementPoints || teachingPlan.reinforcement_points || [];
-  const confusionPoints = panelContent.likelyConfusionPoints || teachingPlan.likely_confusion_points || [];
-  const teachingStyleLabel = currentDelivery?.teaching_style_label || panelContent.teachingStyleLabel || 'Brief explanation';
-  const conceptTypeLabel = teachingPlan?.concept_type ? teachingPlan.concept_type.replace(/-/g, ' ') : 'conceptual';
-  const recommendedDurationMs = ((currentDelivery?.recommended_duration_seconds || currentChunk?.estimatedDurationSeconds || 0) > 0
-    ? (currentDelivery?.recommended_duration_seconds || currentChunk?.estimatedDurationSeconds) * 1000
-    : 0);
-  const currentModeLabel = currentDelivery?.current_mode_label || (showQuestionPanel ? 'Answering your question' : voiceMode ? 'Explaining' : 'Teaching in text mode');
-  const formatLectureDuration = (minutes) => {
-    const value = Number(minutes);
-    if (!Number.isFinite(value) || value <= 0) return '';
-    if (value < 60) return `${value} min lecture`;
-
-    const hours = Math.floor(value / 60);
-    const remainingMinutes = value % 60;
-    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m lecture` : `${hours}h lecture`;
-  };
-  const lectureDurationLabel = formatLectureDuration(lecture?.estimatedDurationMinutes);
-  const tutorStatus = lectureCompleted
-    ? { label: 'Lecture complete', detail: 'Open the stored quiz when you are ready to continue.', tone: '#10b981' }
-    : showQuestionPanel
-      ? { label: 'Paused for your question', detail: submittingQuestion ? 'AI Tutor is preparing a contextual answer.' : 'Ask for clarification, then resume from this exact chunk.', tone: '#f59e0b' }
-      : isPlaying
-        ? { label: currentModeLabel, detail: transitionText || (currentDelivery?.next_action ? `Sequence: ${(currentDelivery.teaching_sequence || []).join(' -> ')}.` : (voiceMode ? 'Voice delivery is active for this section.' : 'Stored lecture chunks are advancing in text mode.')), tone: '#3b82f6' }
-        : { label: 'Ready to resume', detail: 'Resume when you are ready for the next chunk.', tone: '#6366f1' };
+  // Pulse animation for AI avatar
+  useEffect(() => {
+    if (aiSpeaking) {
+      const pulse = RNAnimated.loop(
+        RNAnimated.sequence([
+          RNAnimated.timing(pulseAnim, {
+            toValue: 1.1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          RNAnimated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulse.start();
+      return () => pulse.stop();
+    }
+  }, [aiSpeaking]);
 
   useEffect(() => {
-    const pulse = RNAnimated.loop(
-      RNAnimated.sequence([
-        RNAnimated.timing(pulseAnim, { toValue: 1.08, duration: 900, useNativeDriver: USE_NATIVE_DRIVER }),
-        RNAnimated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: USE_NATIVE_DRIVER }),
-      ])
-    );
-    if (voiceMode) pulse.start();
-    return () => pulse.stop();
-  }, [pulseAnim, voiceMode]);
+    checkEnrollmentStatus();
+    fetchCourses(); // refresh so topic completion state is current
+  }, [courseId]);
+
+  // Auto-navigate to first non-completed topic — skip if user is revisiting a completed one
+  useEffect(() => {
+    if (autoNavDone.current || !course?.topics?.length) return;
+    autoNavDone.current = true;
+    const currentTopic = course.topics.find(t => String(t.id) === String(topicId));
+    // User intentionally opened a completed topic — don't redirect
+    if (currentTopic?.completed) return;
+    const sorted = [...course.topics].sort((a, b) => a.order - b.order);
+    const firstNonCompleted = sorted.find(t => !t.completed) || sorted[0];
+    if (String(firstNonCompleted.id) !== String(topicId)) {
+      navigation.replace('Learning', { courseId, topicId: firstNonCompleted.id, topics: course.topics });
+    }
+  }, [course?.topics]);
 
   useEffect(() => {
-    loadLecture();
-    return () => {
-      stopPlayback();
-      stopRecognition();
-    };
-  }, [topicId, voiceMode]);
-
-  useEffect(() => {
-    setRevealedFlashcards({});
-  }, [lecture?.id]);
-
-  useEffect(() => {
-    if (session && currentChunk && isPlaying && !showQuestionPanel && !lectureCompleted) {
-      playChunk();
+    if (isManualMode && topicMaterials.length > 0) {
+      setSelectedMaterial(topicMaterials[0]);
     } else {
-      stopPlayback();
+      setSelectedMaterial(null);
     }
+  }, [topicId, isManualMode]);
 
-    return () => stopPlayback();
-  }, [session?.id, currentChunk?.id, isPlaying, showQuestionPanel, lectureCompleted, voiceMode]);
-
-  useEffect(() => {
-    setTeachingProgress(0);
-  }, [currentChunk?.id]);
-
-  useEffect(() => {
-    if (!currentChunk || !isPlaying || showQuestionPanel || lectureCompleted) {
-      return undefined;
-    }
-
-    const duration = recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28));
-    const startedAt = Date.now();
-    const timer = setInterval(() => {
-      const nextProgress = Math.min(1, (Date.now() - startedAt) / duration);
-      setTeachingProgress(nextProgress);
-      if (nextProgress >= 1) {
-        clearInterval(timer);
-      }
-    }, 180);
-
-    return () => clearInterval(timer);
-  }, [currentChunk?.id, isPlaying, showQuestionPanel, lectureCompleted, recommendedDurationMs, currentNarration]);
-
-  const stopPlayback = () => {
-    if (playbackRef.current) {
-      clearTimeout(playbackRef.current);
-      playbackRef.current = null;
-    }
-    if (audioRef.current) {
-      audioRef.current.pause?.();
-      audioRef.current = null;
-    }
-    if (Platform.OS === 'web' && window?.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-  };
-
-  const stopRecognition = () => {
-    recognitionRef.current?.stop?.();
-    recognitionRef.current = null;
-    setIsRecording(false);
-  };
-
-  const loadLecture = async () => {
-    setLoading(true);
-    stopPlayback();
-    stopRecognition();
-
-    try {
-      const enrollment = await checkEnrollment(courseId);
-      if (!enrollment.success || !enrollment.enrolled) {
-        setIsEnrolled(false);
-        navigation.navigate('CourseDetail', { courseId });
-        return;
-      }
-
-      setIsEnrolled(true);
-      const response = await aiTutorAPI.startSession(topicId, { voiceModeEnabled: voiceMode });
-      if (!response.success) {
-        throw new Error(response.error || 'Unable to start tutor session');
-      }
-
-      let nextLecture = response.lecture;
-      if (response.lecture?.id && !(response.lecture.flashcards || []).length) {
-        try {
-          const flashcardResponse = await aiTutorAPI.getFlashcards(response.lecture.id);
-          if (flashcardResponse.success) {
-            nextLecture = {
-              ...response.lecture,
-              flashcards: flashcardResponse.flashcards || [],
-            };
-          }
-        } catch (_) {
-        }
-      }
-
-      setLecture(nextLecture);
-      setSession(response.session);
-      setCurrentChunk(response.chunk);
-      setLectureCompleted(response.session?.status === 'lecture_completed');
-      setChatMessages((response.session?.messages || []).map((message) => ({
-        type: message.sender === 'user' ? 'user' : 'ai',
-        text: message.content,
-      })));
-    } catch (error) {
-      setLecture(null);
-      setSession(null);
-      setCurrentChunk(null);
-      Toast.show({
-        type: 'error',
-        text1: 'Lecture Unavailable',
-        text2: error.message || 'Unable to load this AI lecture package.',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const scheduleNext = (delay) => {
-    if (!session?.id) {
-      return;
-    }
-
-    stopPlayback();
-    playbackRef.current = setTimeout(async () => {
-      try {
-        const response = await aiTutorAPI.getNextChunk(session.id);
-        if (response.lectureCompleted || !response.chunk) {
-          setLectureCompleted(true);
-          setIsPlaying(false);
-          setShowCompleteDialog(true);
-          await fetchCourses();
-          return;
-        }
-
-        setSession(response.session);
-        setCurrentChunk(response.chunk);
-      } catch (error) {
-        setIsPlaying(false);
+  const checkEnrollmentStatus = async () => {
+    setEnrollmentLoading(true);
+    const result = await checkEnrollment(courseId);
+    if (result.success) {
+      setIsEnrolled(result.enrolled);
+      if (!result.enrolled) {
         Toast.show({
           type: 'error',
-          text1: 'Playback Paused',
-          text2: error.message || 'Unable to continue the lecture.',
+          text1: 'Not Enrolled',
+          text2: 'You need to enroll in this course first!',
         });
-      }
-    }, delay);
-  };
-
-  const playChunk = async () => {
-    if (!currentNarration) return;
-
-    if (!voiceMode) {
-      const fallbackDelay = Math.min(12000, Math.max(3600, currentNarration.length * 28));
-      scheduleNext(recommendedDurationMs || fallbackDelay);
-      return;
-    }
-
-    if (Platform.OS === 'web') {
-      try {
-        const audioResponse = await aiTutorAPI.speakText({
-          lectureId: lecture?.id,
-          sessionId: session?.id,
-          assetType: 'lecture_chunk',
-          text: currentNarration,
-        });
-
-        if (audioResponse?.asset?.urlPath) {
-          const audio = new Audio(`${baseHost}${audioResponse.asset.urlPath}`);
-          audioRef.current = audio;
-          audio.onended = () => scheduleNext(600);
-          audio.onerror = () => scheduleNext(4000);
-          await audio.play();
-          return;
-        }
-      } catch (_) {
-      }
-
-      if (window?.speechSynthesis) {
-        const utterance = new SpeechSynthesisUtterance(currentNarration);
-        utterance.onend = () => scheduleNext(600);
-        utterance.onerror = () => scheduleNext(4000);
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(utterance);
-        return;
+        navigation.navigate('CourseDetail', { courseId });
       }
     }
-
-    scheduleNext(recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)));
+    setEnrollmentLoading(false);
   };
 
-  const togglePause = async () => {
-    if (!session) return;
+  // Topic item for course progress sidebar
+  const TopicItem = ({ item, index }) => {
+    const isCompleted = item.completed;
+    const isCurrent = String(item.id) === String(topicId);
+    const isLocked = item.status === 'locked' && !item.completed;
+    const topicProgress = isCurrent ? enrollmentProgress : 0;
 
-    try {
-      if (isPlaying) {
-        const response = await aiTutorAPI.pauseSession(session.id);
-        if (!response.success) {
-          throw new Error(response.error || 'Unable to pause tutor session');
-        }
-        stopPlayback();
-        setShowQuestionPanel(true);
-        setIsPlaying(false);
-      } else {
-        const response = await aiTutorAPI.resumeSession(session.id);
-        if (!response.success) {
-          throw new Error(response.error || 'Unable to resume tutor session');
-        }
-        setSession(response.session);
-        setCurrentChunk(response.chunk);
-        setShowQuestionPanel(false);
-        setIsPlaying(true);
-      }
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Session Error',
-        text2: error.message || 'Unable to update tutor state.',
-      });
-    }
+    return (
+      <TouchableOpacity
+        style={[
+          styles.topicItem,
+          isCurrent && styles.topicItemCurrent,
+          { backgroundColor: isCurrent ? 'rgba(79, 70, 229, 0.1)' : 'transparent' }
+        ]}
+        onPress={() => {
+          if (!isLocked) {
+            setShowTopicsSidebar(false);
+            navigation.replace('Learning', { courseId, topicId: item.id });
+          }
+        }}
+        disabled={isLocked}
+      >
+        <View style={styles.topicIcon}>
+          {isCompleted ? (
+            <View style={[styles.topicStatusIcon, { backgroundColor: '#10B981' }]}>
+              <Icon name="checkmark" size={14} color="#fff" />
+            </View>
+          ) : isCurrent ? (
+            <View style={[styles.topicStatusIcon, { backgroundColor: theme.colors.primary }]}>
+              <Icon name="play" size={12} color="#fff" />
+            </View>
+          ) : (
+            <View style={[styles.topicStatusIcon, { backgroundColor: '#6B7280' }]}>
+              <Icon name="lock-closed" size={12} color="#fff" />
+            </View>
+          )}
+        </View>
+        <View style={styles.topicInfo}>
+          <Text style={[styles.topicTitle, { color: isLocked ? theme.colors.textTertiary : theme.colors.textPrimary }]}>
+            {item.title}
+          </Text>
+          <View style={styles.topicMeta}>
+            <Text style={[styles.topicDuration, { color: theme.colors.textTertiary }]}>
+              {item.duration || '15 min'}
+            </Text>
+            {isCompleted && (
+              <Text style={[styles.topicStatus, { color: '#10B981' }]}>Completed</Text>
+            )}
+            {isCurrent && (
+              <Text style={[styles.topicStatus, { color: theme.colors.primary }]}>{topicProgress}%</Text>
+            )}
+            {isLocked && (
+              <Text style={[styles.topicStatus, { color: theme.colors.textTertiary }]}>Locked</Text>
+            )}
+          </View>
+          {isCurrent && (
+            <View style={styles.topicProgressBar}>
+              <View style={[styles.topicProgressFill, { width: `${topicProgress}%`, backgroundColor: theme.colors.primary }]} />
+            </View>
+          )}
+        </View>
+        <Icon name="chevron-forward" size={20} color={theme.colors.textTertiary} />
+      </TouchableOpacity>
+    );
   };
 
-  const askQuestion = async () => {
-    if (!question.trim() || !session) return;
-    const prompt = question.trim();
-    setQuestion('');
-    setSubmittingQuestion(true);
-    setChatMessages((prev) => [...prev, { type: 'user', text: prompt }]);
+  // Topics Sidebar Content
+  const renderTopicsSidebar = () => (
+    <View style={styles.topicsSidebarContent}>
+      <View style={styles.sidebarHeader}>
+        <View style={styles.sidebarHeaderIcon}>
+          <MaterialIcon name="book-open-variant" size={20} color={theme.colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.sidebarTitle, { color: theme.colors.textPrimary }]}>Course Progress</Text>
+          <Text style={[styles.sidebarSubtitle, { color: theme.colors.textSecondary }]} numberOfLines={1}>{course?.name}</Text>
+        </View>
+        {!isLargeScreen && (
+          <TouchableOpacity onPress={() => setShowTopicsSidebar(false)} style={styles.closeSidebar}>
+            <Icon name="close" size={24} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
+        )}
+      </View>
 
-    try {
-      const response = await aiTutorAPI.askQuestion(session.id, prompt);
-      if (!response.success || !response.aiMessage?.content) {
-        throw new Error(response.error || 'I could not answer that question right now.');
-      }
-      setChatMessages((prev) => [...prev, { type: 'ai', text: response.aiMessage.content }]);
-    } catch (error) {
-      setChatMessages((prev) => [...prev, { type: 'ai', text: error.message || 'I could not answer that question right now.' }]);
-    } finally {
-      setSubmittingQuestion(false);
-    }
-  };
+      <View style={styles.sidebarProgress}>
+        <Text style={[styles.sidebarProgressText, { color: theme.colors.textSecondary }]}>
+          {course?.topics?.filter(t => t.completed).length || 0} of {course?.topics?.length || 0} topics
+        </Text>
+        <Text style={[styles.sidebarProgressPercent, { color: theme.colors.primary }]}>
+          {Math.round(((course?.topics?.filter(t => t.completed).length || 0) / (course?.topics?.length || 1)) * 100)}%
+        </Text>
+      </View>
+      <View style={[styles.sidebarProgressBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : theme.colors.border }]}>
+        <View
+          style={[
+            styles.sidebarProgressFill,
+            {
+              width: `${((course?.topics?.filter(t => t.completed).length || 0) / (course?.topics?.length || 1)) * 100}%`,
+              backgroundColor: theme.colors.primary
+            }
+          ]}
+        />
+      </View>
 
-  const startVoiceInput = async () => {
-    if (session && isPlaying) {
-      await openQuestionPanel();
-    } else {
-      setShowQuestionPanel(true);
-    }
-
-    if (Platform.OS !== 'web') {
-      Toast.show({
-        type: 'info',
-        text1: 'Voice Input',
-        text2: 'Voice input currently requires the web speech API.',
-      });
-      return;
-    }
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      Toast.show({
-        type: 'error',
-        text1: 'Not Supported',
-        text2: 'Voice input is not supported in this browser.',
-      });
-      return;
-    }
-
-    if (isRecording) {
-      stopRecognition();
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognitionRef.current = recognition;
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = 'en-US';
-    recognition.onstart = () => setIsRecording(true);
-    recognition.onresult = (event) => {
-      const transcript = event.results?.[0]?.[0]?.transcript || '';
-      setQuestion((prev) => `${prev}${prev ? ' ' : ''}${transcript}`.trim());
-      setShowQuestionPanel(true);
-      setIsRecording(false);
-    };
-    recognition.onend = () => setIsRecording(false);
-    recognition.onerror = () => setIsRecording(false);
-    recognition.start();
-  };
-
-  const exportFlashcards = () => {
-    const cards = lecture?.flashcards || [];
-    if (!cards.length || Platform.OS !== 'web') {
-      Toast.show({
-        type: 'info',
-        text1: 'Export Unavailable',
-        text2: cards.length ? 'Flashcard export is available on web.' : 'No flashcards available for this lecture.',
-      });
-      return;
-    }
-
-    const blob = new Blob([JSON.stringify(cards.map((card) => ({
-      front: card.frontText,
-      back: card.backText,
-    })), null, 2)], { type: 'application/json' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${lecture.title.replace(/\s+/g, '-').toLowerCase()}-flashcards.json`;
-    link.click();
-    window.URL.revokeObjectURL(url);
-  };
-
-  const goToNextChunk = async () => {
-    if (!session?.id || lectureCompleted) return;
-
-    stopPlayback();
-    setIsPlaying(false);
-
-    try {
-      const response = await aiTutorAPI.getNextChunk(session.id);
-      if (response.lectureCompleted || !response.chunk) {
-        setLectureCompleted(true);
-        setShowCompleteDialog(true);
-        await fetchCourses();
-        return;
-      }
-
-      setSession(response.session);
-      setCurrentChunk(response.chunk);
-      setShowQuestionPanel(false);
-      setIsPlaying(true);
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Next Chunk Unavailable',
-        text2: error.message || 'Unable to advance to the next lecture chunk.',
-      });
-    }
-  };
-
-  const openQuestionPanel = async () => {
-    if (!session || !isPlaying) {
-      setShowQuestionPanel(true);
-      return;
-    }
-
-    await togglePause();
-  };
-
-  const toggleFlashcardReveal = (cardId) => {
-    setRevealedFlashcards((prev) => ({
-      ...prev,
-      [cardId]: !prev[cardId],
-    }));
-  };
-
-  const openQuiz = () => {
-    if (!lecture?.id) {
-      Toast.show({
-        type: 'error',
-        text1: 'Quiz Unavailable',
-        text2: 'This lecture package is missing its quiz reference.',
-      });
-      return;
-    }
-
-    if (!lectureCompleted) {
-      Toast.show({
-        type: 'info',
-        text1: 'Finish the Lecture',
-        text2: 'Complete the lecture before opening the quiz.',
-      });
-      return;
-    }
-
-    navigation.navigate('Quiz', { courseId, topicId, lectureId: lecture.id });
-  };
-
-  const restartLecture = async () => {
-    if (!session?.id) {
-      return;
-    }
-
-    try {
-      stopPlayback();
-      stopRecognition();
-      setShowCompleteDialog(false);
-      const response = await aiTutorAPI.restartSession(session.id);
-      if (!response.success) {
-        throw new Error(response.error || 'Unable to restart this lecture');
-      }
-
-      setSession(response.session);
-      setLecture(response.lecture || lecture);
-      setCurrentChunk(response.chunk);
-      setLectureCompleted(false);
-      setShowQuestionPanel(false);
-      setIsPlaying(true);
-      setTeachingProgress(0);
-      Toast.show({
-        type: 'success',
-        text1: 'Lecture Restarted',
-        text2: 'Starting again from the first chunk.',
-      });
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Restart Failed',
-        text2: error.message || 'Unable to restart this lecture right now.',
-      });
-    }
-  };
-
-  const renderSidebar = () => (
-    <View style={styles.sidebar}>
-      <Text style={[styles.sidebarTitle, { color: theme.colors.textPrimary }]}>Course Progress</Text>
-      <ScrollView>
-        {(course?.topics || []).map((item) => {
-          const isCurrent = item.id === topicId;
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={[styles.sidebarItem, isCurrent && { borderLeftColor: theme.colors.primary, backgroundColor: theme.colors.primary + '10' }]}
-              disabled={item.status === 'locked'}
-              onPress={() => navigation.replace('Learning', { courseId, topicId: item.id })}
-            >
-              <Text style={[styles.sidebarItemText, { color: item.status === 'locked' ? theme.colors.textTertiary : theme.colors.textPrimary }]}>
-                {item.title}
-              </Text>
-              {isCurrent && !!lectureDurationLabel && (
-                <Text style={[styles.sidebarItemDuration, { color: theme.colors.textSecondary }]}>{lectureDurationLabel}</Text>
-              )}
-              <Text style={[styles.sidebarItemStatus, { color: item.completed ? '#10B981' : isCurrent ? theme.colors.primary : theme.colors.textTertiary }]}>
-                {item.completed ? 'Done' : item.status === 'locked' ? 'Locked' : isCurrent ? `${progress}%` : 'Ready'}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+      <ScrollView style={styles.topicsList} showsVerticalScrollIndicator={false}>
+        {course?.topics?.map((item, index) => (
+          <TopicItem key={item.id} item={item} index={index} />
+        ))}
       </ScrollView>
     </View>
   );
 
-  const getProgressiveItems = (items, minimum = 1) => {
-    const list = Array.isArray(items) ? items.filter(Boolean) : [];
-    if (!list.length) return [];
-    return list.slice(0, Math.min(list.length, Math.max(minimum, Math.ceil(list.length * Math.max(teachingProgress, 0.18)))));
-  };
-
-  const getVisibleNarration = () => {
-    if (!currentNarration) return '';
-    const words = currentNarration.split(/\s+/).filter(Boolean);
-    const visibleWordCount = Math.min(words.length, Math.max(1, Math.ceil(words.length * Math.max(teachingProgress, isPlaying ? 0.08 : 1))));
-    return words.slice(0, visibleWordCount).join(' ');
-  };
-
-  const liveNarration = getVisibleNarration();
-
-  const renderBoardSurface = () => {
-    if (!boardContent) {
-      return <Text style={[styles.boardBodyText, { color: '#cbd5e1' }]}>{currentChunk.learningObjective || currentChunk.summary}</Text>;
-    }
-
-    if (boardContent.type === 'flowchart') {
-      return getProgressiveItems(boardContent.steps).map((step, index) => (
-        <View key={step.id || index} style={styles.flowStep}>
-          <View style={[styles.flowStepBadge, { backgroundColor: theme.colors.primary }]}>
-            <Text style={styles.flowStepBadgeText}>{index + 1}</Text>
-          </View>
-          <Text style={styles.flowStepText}>{step.label}</Text>
-        </View>
-      ));
-    }
-
-    if (boardContent.type === 'comparison_table') {
-      return (
-        <View style={[styles.boardTable, { borderColor: theme.colors.border }]}>
-          {getProgressiveItems(boardContent.rows).map((row, index) => (
-            <View key={`${row.left}-${index}`} style={[styles.boardTableRow, { borderBottomColor: theme.colors.border }]}>
-              <Text style={styles.boardTableTitle}>{row.left}</Text>
-              <Text style={[styles.boardTableBody, { color: '#cbd5e1' }]}>{row.right}</Text>
-            </View>
-          ))}
-        </View>
-      );
-    }
-
-    if (boardContent.type === 'diagram') {
-      return (
-        <View style={styles.nodeWrap}>
-          {getProgressiveItems(boardContent.nodes).map((node, index) => (
-            <View key={node.id || index} style={[styles.liveNodeCard, { borderColor: 'rgba(255,255,255,0.12)' }]}>
-              <Text style={styles.liveNodeText}>{node.label}</Text>
-            </View>
-          ))}
-        </View>
-      );
-    }
-
-    if (boardContent.type === 'code') {
-      const lines = `${boardContent.snippet || ''}`.split(/\r?\n/).filter(Boolean);
-      const visibleLines = getProgressiveItems(lines, Math.min(2, lines.length || 1));
-      return (
-        <View style={[styles.codePanel, { borderColor: 'rgba(255,255,255,0.12)' }]}>
-          <Text style={styles.codeLanguage}>{(boardContent.snippetLanguage || 'text').toUpperCase()}</Text>
-          <Text style={styles.codeText}>{visibleLines.join('\n')}</Text>
-          {!!boardContent.snippetExplanation && <Text style={styles.codeHint}>{boardContent.snippetExplanation}</Text>}
-        </View>
-      );
-    }
-
-    if (boardContent.type === 'checkpoint') {
-      return <Text style={styles.boardQuestion}>{boardContent.question}</Text>;
-    }
-
-    if (boardContent.type === 'slide_summary' || boardContent.type === 'recap') {
-      return getProgressiveItems(boardContent.bullets).map((bullet, index) => (
-        <Text key={`${bullet}-${index}`} style={styles.boardBullet}>- {bullet}</Text>
-      ));
-    }
-
-    if (boardContent.type === 'whiteboard_notes' || boardContent.type === 'narration') {
-      return (
-        <View>
-          {getProgressiveItems(boardContent.notes).map((note, index) => (
-            <Text key={`${note}-${index}`} style={styles.boardBullet}>- {note}</Text>
-          ))}
-          {!!boardContent.emphasis && <Text style={styles.boardEmphasis}>{boardContent.emphasis}</Text>}
-        </View>
-      );
-    }
-
-    return <Text style={styles.boardBodyText}>{currentChunk.learningObjective || currentChunk.summary}</Text>;
-  };
-
-  const renderSupportPanel = () => {
-    if (!supportPanel) {
-      return null;
-    }
-
-    const accent = supportPanel.type === 'checkpoint'
-      ? '#f59e0b'
-      : supportPanel.type === 'watch_for_this'
-        ? '#ef4444'
-        : '#06b6d4';
-
-    return (
-      <View style={[styles.supportCard, { backgroundColor: isDark ? '#101827' : '#ffffff', borderColor: `${accent}55` }]}>
-        <Text style={[styles.supportLabel, { color: accent }]}>{supportPanel.title}</Text>
-        <Text style={[styles.supportText, { color: theme.colors.textPrimary }]}>{supportPanel.text}</Text>
-      </View>
-    );
-  };
-
   if (!course || !topic) {
     return (
-      <MainLayout showSidebar={false} showHeader={true} showBack={true}>
-        <View style={styles.centered}>
-          <EmptyState icon="alert-circle-outline" title="Topic not found" subtitle="The topic you're looking for doesn't exist." />
+      <MainLayout
+        showSidebar={false}
+        showHeader={true}
+        showBack={true}
+      >
+        <View style={styles.emptyContainer}>
+          <EmptyState
+            icon="alert-circle-outline"
+            title="Topic not found"
+            subtitle="The topic you're looking for doesn't exist"
+          />
         </View>
       </MainLayout>
     );
   }
 
-  if (loading) {
+  if (enrollmentLoading) {
     return (
-      <MainLayout showSidebar={false} showHeader={true} showBack={true}>
-        <View style={styles.centered}>
+      <MainLayout
+        showSidebar={false}
+        showHeader={true}
+        showBack={true}
+      >
+        <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Loading AI lecture package...</Text>
+          <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
+            Checking enrollment...
+          </Text>
         </View>
       </MainLayout>
     );
@@ -708,464 +318,1622 @@ const LearningScreen = () => {
 
   if (!isEnrolled) {
     return (
-      <MainLayout showSidebar={false} showHeader={true} showBack={true}>
-        <View style={styles.centered}>
-          <EmptyState icon="lock-closed-outline" title="Not Enrolled" subtitle="You need to enroll in this course to access lectures." />
+      <MainLayout
+        showSidebar={false}
+        showHeader={true}
+        showBack={true}
+      >
+        <View style={styles.emptyContainer}>
+          <EmptyState
+            icon="lock-closed-outline"
+            title="Not Enrolled"
+            subtitle="You need to enroll in this course to access lectures"
+          />
         </View>
       </MainLayout>
     );
   }
 
-  if (!lecture || !currentChunk) {
-    return (
-      <MainLayout showSidebar={false} showHeader={true} showBack={true}>
-        <View style={styles.centered}>
-          <EmptyState icon="sparkles-outline" title="Lecture Not Ready" subtitle="This topic does not have a generated lecture package yet." />
+  const openChat = async () => {
+    setShowChatModal(true);
+    if (chatMessages.length === 0) {
+      setChatLoading(true);
+      try {
+        const res = await lectureChatAPI.getHistory(courseId, topicId);
+        if (res.success) {
+          setChatMessages(res.messages || []);
+        }
+      } catch (e) {
+        // start fresh if history load fails
+      } finally {
+        setChatLoading(false);
+      }
+    }
+  };
+
+  const handleSendChatMessage = async () => {
+    if (!chatInput.trim() || chatSending) return;
+    const text = chatInput.trim();
+    setChatInput('');
+    setChatSending(true);
+
+    // Optimistic user message
+    const tempId = `temp-${Date.now()}`;
+    setChatMessages(prev => [...prev, { id: tempId, sender: 'user', content: text, createdAt: new Date().toISOString() }]);
+
+    try {
+      const res = await lectureChatAPI.sendMessage(courseId, topicId, text);
+      if (res.success) {
+        setChatMessages(prev => [
+          ...prev.filter(m => m.id !== tempId),
+          res.userMessage,
+          res.aiMessage,
+        ]);
+      }
+    } catch (e) {
+      setChatMessages(prev => prev.filter(m => m.id !== tempId));
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to send message' });
+    } finally {
+      setChatSending(false);
+      setTimeout(() => chatListRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  };
+
+  const handlePauseAsk = () => {
+    setIsPlaying(!isPlaying);
+    if (isPlaying) {
+      setAiSpeaking(false);
+      openChat();
+    } else {
+      setAiSpeaking(true);
+    }
+  };
+
+  const handleCompleteTopic = () => {
+    setShowCompleteDialog(true);
+  };
+
+  const confirmCompleteTopic = async () => {
+    setShowCompleteDialog(false);
+    const result = await updateTopicProgress({
+      courseId,
+      topicId,
+      completed: true,
+    });
+
+    if (!result.success) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: result.error || 'Failed to update topic progress',
+      });
+      return;
+    }
+
+    await Promise.all([fetchCourses(), fetchMyEnrollments()]);
+
+    Toast.show({
+      type: 'success',
+      text1: 'Success',
+      text2: 'Topic completed!',
+    });
+
+    setTimeout(() => navigation.goBack(), 1200);
+  };
+
+  // ─── Manual-mode helpers ──────────────────────────────────────────────────
+
+  const getYouTubeEmbedUrl = (url) => {
+    const watchMatch = url.match(/[?&]v=([^&]+)/);
+    if (watchMatch) return `https://www.youtube.com/embed/${watchMatch[1]}?autoplay=0&rel=0`;
+    const shortMatch = url.match(/youtu\.be\/([^?]+)/);
+    if (shortMatch) return `https://www.youtube.com/embed/${shortMatch[1]}?autoplay=0&rel=0`;
+    return url;
+  };
+
+  const isYouTubeUrl = (url = '') =>
+    url.includes('youtube.com') || url.includes('youtu.be');
+
+  const isGoogleUrl = (url = '') =>
+    url.includes('drive.google.com') || url.includes('docs.google.com');
+
+  const getGoogleEmbedUrl = (url) => {
+    // drive.google.com/file/d/ID/view → .../preview
+    const fileMatch = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/);
+    if (fileMatch) return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
+    // docs/sheets/slides: replace /edit or /view with /preview
+    if (url.includes('docs.google.com')) {
+      return url.replace(/\/(edit|view|pub)(\?.*)?$/, '/preview');
+    }
+    return url;
+  };
+
+  const getLinkMeta = (url = '') => {
+    if (isYouTubeUrl(url))                           return { label: 'YouTube',      icon: 'logo-youtube',  color: '#FF0000' };
+    if (url.includes('drive.google.com'))             return { label: 'Google Drive', icon: 'logo-google',   color: '#4285F4' };
+    if (url.includes('docs.google.com/spreadsheets')) return { label: 'Google Sheets',icon: 'logo-google',   color: '#0F9D58' };
+    if (url.includes('docs.google.com/presentation'))return { label: 'Google Slides',icon: 'logo-google',   color: '#F4B400' };
+    if (url.includes('docs.google.com'))              return { label: 'Google Docs',  icon: 'logo-google',   color: '#4285F4' };
+    if (url.includes('vimeo.com'))                    return { label: 'Vimeo',         icon: 'videocam',      color: '#1AB7EA' };
+    if (url.includes('github.com'))                   return { label: 'GitHub',        icon: 'logo-github',   color: '#24292e' };
+    if (url.includes('figma.com'))                    return { label: 'Figma',         icon: 'color-palette', color: '#F24E1E' };
+    return { label: 'Link', icon: 'link', color: '#6366f1' };
+  };
+
+  const getEmbedUrl = (url) => {
+    if (isYouTubeUrl(url)) return getYouTubeEmbedUrl(url);
+    if (isGoogleUrl(url))  return getGoogleEmbedUrl(url);
+    return url;
+  };
+
+  const openMaterial = (material) => {
+    const url = resolveFileUrl(material.uri);
+    if (Platform.OS === 'web') {
+      window.open(url, '_blank');
+    } else {
+      Linking.openURL(url).catch(() => {});
+    }
+  };
+
+  const getMaterialIcon = (type) => {
+    if (type === 'pdf') return 'document-text';
+    if (type === 'image') return 'image';
+    if (type === 'link') return 'link';
+    return 'document';
+  };
+
+  const getMaterialColor = (type) =>
+    type === 'link' ? '#6366f1' : theme.colors.primary;
+
+  const renderMaterialViewer = (material) => {
+    if (!material) {
+      return (
+        <View style={styles.viewerEmpty}>
+          <Icon name="folder-open-outline" size={48} color="rgba(255,255,255,0.3)" />
+          <Text style={styles.viewerEmptyText}>No materials added to this topic yet</Text>
         </View>
-      </MainLayout>
+      );
+    }
+
+    const resolvedUri = resolveFileUrl(material.uri);
+    const isYT = material.isYoutube || isYouTubeUrl(material.uri);
+
+    if (material.type === 'link') {
+      const meta = getLinkMeta(material.uri);
+      const embedUrl = getEmbedUrl(material.uri);
+
+      if (Platform.OS === 'web') {
+        return (
+          <View style={styles.embeddedLinkWrapper}>
+            <View style={styles.iframeWrapper}>
+              <iframe
+                src={embedUrl}
+                title={material.title || meta.label}
+                style={{ width: '100%', height: '100%', border: 'none', borderRadius: 8 }}
+                allowFullScreen
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              />
+            </View>
+            <TouchableOpacity
+              style={[styles.openExternalBtn, { borderColor: meta.color + '50' }]}
+              onPress={() => openMaterial(material)}
+              activeOpacity={0.75}
+            >
+              <Icon name={meta.icon} size={15} color={meta.color} />
+              <Text style={[styles.openExternalText, { color: meta.color }]}>
+                Open in {meta.label}
+              </Text>
+              <Icon name="open-outline" size={14} color={meta.color} />
+            </TouchableOpacity>
+          </View>
+        );
+      }
+
+      // Mobile fallback
+      return (
+        <View style={styles.videoFallback}>
+          <Icon name={meta.icon} size={72} color={meta.color} />
+          <Text style={styles.videoFallbackTitle}>{material.title || meta.label}</Text>
+          <TouchableOpacity
+            style={[styles.linkViewerBtn, { backgroundColor: meta.color }]}
+            onPress={() => openMaterial(material)}
+          >
+            <Icon name="open-outline" size={20} color="#fff" />
+            <Text style={styles.linkViewerBtnText}>Open in {meta.label}</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (material.type === 'pdf') {
+      return Platform.OS === 'web' ? (
+        <View style={styles.iframeWrapper}>
+          <iframe
+            src={resolvedUri}
+            title={material.title || 'PDF'}
+            style={{ width: '100%', height: '100%', border: 'none', borderRadius: 8 }}
+          />
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.videoFallback} onPress={() => openMaterial(material)}>
+          <Icon name="document-text" size={72} color="#e74c3c" />
+          <Text style={styles.videoFallbackTitle}>{material.title || material.fileName || 'PDF Document'}</Text>
+          <Text style={styles.videoFallbackSub}>Tap to open PDF</Text>
+        </TouchableOpacity>
+      );
+    }
+
+    if (material.type === 'image') {
+      return (
+        <Image
+          source={{ uri: resolvedUri }}
+          style={styles.materialImage}
+          resizeMode="contain"
+        />
+      );
+    }
+
+    // Fallback for any other type
+    return (
+      <TouchableOpacity style={styles.videoFallback} onPress={() => openMaterial(material)}>
+        <Icon name="document" size={72} color={theme.colors.primary} />
+        <Text style={styles.videoFallbackTitle}>{material.title || material.fileName || 'Open Material'}</Text>
+        <Text style={styles.videoFallbackSub}>Tap to open</Text>
+      </TouchableOpacity>
     );
+  };
+
+  // ─── AI-mode data ─────────────────────────────────────────────────────────
+
+  // Key concepts data
+  const keyConcepts = [
+    'Neurons process info',
+    'Connection weights',
+    'Activation functions'
+  ];
+
+  if (!isManualMode) {
+    return <AILearningScreen />;
   }
 
   return (
     <MainLayout
-      showSidebar={false}
+      showSidebar={true}
+      sidebarItems={sidebarItems}
+      activeRoute="EnrolledCourses"
+      onNavigate={handleNavigate}
       showHeader={true}
-      customSidebar={renderSidebar()}
+      customSidebar={renderTopicsSidebar()}
       customSidebarVisible={showTopicsSidebar}
       onCustomSidebarToggle={setShowTopicsSidebar}
       customMenuIcon="book-open-variant"
+      hideHeaderToggle={true}
     >
-      <View style={[styles.container, { backgroundColor: isDark ? '#0f0f1a' : theme.colors.background }]}>
-          <View style={styles.progressRow}>
-          <TouchableOpacity style={[styles.iconButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : theme.colors.surface }]} onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
-          </TouchableOpacity>
-          <View style={styles.progressBarWrap}>
-            <Text style={[styles.progressLabel, { color: theme.colors.textSecondary }]}>Chunk {Math.min(currentIndex + 1, totalChunks)} of {totalChunks}</Text>
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: theme.colors.primary }]} />
-            </View>
-          </View>
-          <Text style={[styles.progressValue, { color: theme.colors.primary }]}>{progress}%</Text>
-        </View>
-
-        {!!lectureDurationLabel && (
-          <View style={[styles.lectureTimeBanner, { backgroundColor: isDark ? '#111827' : '#eff6ff', borderColor: isDark ? '#1f2937' : '#bfdbfe' }]}>
-            <Icon name="time-outline" size={16} color={theme.colors.primary} />
-            <Text style={[styles.lectureTimeBannerText, { color: theme.colors.textPrimary }]}>{lectureDurationLabel}</Text>
-          </View>
-        )}
-
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={[styles.statusCard, { backgroundColor: isDark ? '#121a2b' : '#eef4ff', borderColor: `${tutorStatus.tone}33` }]}>
-            <View style={styles.statusHeader}>
-              <View style={styles.statusTitleWrap}>
-                <View style={[styles.statusDot, { backgroundColor: tutorStatus.tone }]} />
-                <Text style={[styles.statusTitle, { color: theme.colors.textPrimary }]}>{tutorStatus.label}</Text>
-              </View>
-              <Text style={[styles.statusMeta, { color: tutorStatus.tone }]}>{voiceMode ? 'Voice' : 'Text'}</Text>
-            </View>
-            <Text style={[styles.statusText, { color: theme.colors.textSecondary }]}>{tutorStatus.detail}</Text>
-            <View style={styles.metaPills}>
-              <View style={[styles.metaPill, { backgroundColor: isDark ? '#1f2937' : '#ede9fe' }]}>
-                <Text style={[styles.metaPillText, { color: theme.colors.textPrimary }]}>{classroomModeLabel}</Text>
-              </View>
-              <View style={[styles.metaPill, { backgroundColor: isDark ? '#1f2937' : '#dbeafe' }]}>
-                <Text style={[styles.metaPillText, { color: theme.colors.textPrimary }]}>{teachingStyleLabel}</Text>
-              </View>
-              <View style={[styles.metaPill, { backgroundColor: isDark ? '#1f2937' : '#dcfce7' }]}>
-                <Text style={[styles.metaPillText, { color: theme.colors.textPrimary }]}>{conceptTypeLabel}</Text>
-              </View>
-            </View>
-          </View>
-
-          {!!transitionText && (
-            <View style={[styles.transitionCard, { backgroundColor: isDark ? '#14213d' : '#fff7ed', borderColor: isDark ? '#2b3f67' : '#fdba74' }]}>
-              <Text style={[styles.transitionLabel, { color: isDark ? '#93c5fd' : '#c2410c' }]}>Teacher transition</Text>
-              <Text style={[styles.transitionText, { color: theme.colors.textPrimary }]}>{transitionText}</Text>
-            </View>
-          )}
-
-          <View style={[styles.topRow, isMobile && styles.topRowStack]}>
-            <View style={[styles.whiteboard, styles.liveBoard, { backgroundColor: isDark ? '#1a1a2e' : '#1e293b' }]}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardHeaderText}>Live Classroom Board</Text>
-                <TouchableOpacity onPress={() => setShowNotesModal(true)}>
-                  <Icon name="document-text-outline" size={18} color="#9ca3af" />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.boardHeaderRow}>
-                <View style={[styles.boardModeBadge, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
-                  <Text style={styles.boardModeText}>{classroomModeLabel}</Text>
-                </View>
-                <Text style={styles.boardObjective}>{panelContent.learningObjective || currentChunk.learningObjective || currentChunk.summary}</Text>
-              </View>
-              <Text style={styles.whiteboardTitle}>{boardContent?.title || currentChunk.title}</Text>
-              <View style={styles.boardSurface}>
-                {renderBoardSurface()}
-              </View>
-            </View>
-
-            {!isMobile && (
-              <View style={styles.sideStack}>
-                <View style={[styles.tutorPanel, { backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }]}>
-                  <Text style={[styles.tutorLabel, { color: theme.colors.textPrimary }]}>AI Tutor</Text>
-                  <RNAnimated.View style={[styles.avatarRing, { transform: [{ scale: pulseAnim }] }]}>
-                    <View style={styles.avatarInner}>
-                      <Text style={styles.avatarText}>AI</Text>
-                    </View>
-                  </RNAnimated.View>
-                  <Text style={[styles.tutorMeta, { color: theme.colors.textSecondary }]}>{lecture.title}</Text>
-                  <Text style={[styles.tutorMeta, { color: theme.colors.textSecondary }]}>Section {currentChunk.sectionIndex + 1} | Chunk {currentChunk.chunkIndex + 1}</Text>
-                  <Text style={[styles.tutorMeta, { color: theme.colors.primary }]}>{classroomModeLabel}</Text>
-                </View>
-                {renderSupportPanel()}
-              </View>
-            )}
-          </View>
-
-          {isMobile && renderSupportPanel()}
-
-          <View style={[styles.subtitlesCard, { backgroundColor: isDark ? '#1a1a2e' : '#f1f5f9' }]}>
-            <View style={styles.subtitlesHeader}>
-              <Text style={[styles.subtitlesTitle, { color: theme.colors.textPrimary }]}>Live Teaching Text</Text>
-              <Text style={styles.modeBadge}>{classroomModeLabel.toUpperCase()}</Text>
-            </View>
-            <Text style={[styles.subtitlesText, { color: theme.colors.textPrimary }]}>{liveNarration}</Text>
-            {!!narrationSegments.length && (
-              <View style={styles.segmentRow}>
-                {narrationSegments.slice(0, 4).map((segment, index) => (
-                  <View key={`${segment}-${index}`} style={[styles.segmentPill, { backgroundColor: index === 0 ? `${theme.colors.primary}22` : isDark ? '#111827' : '#e2e8f0' }]}>
-                    <Text style={[styles.segmentText, { color: theme.colors.textSecondary }]} numberOfLines={1}>{segment}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-
-          {showQuestionPanel && (
-            <View style={[styles.qaCard, { backgroundColor: isDark ? '#1a1a2e' : '#fff' }]}>
-              <View style={styles.qaHeader}>
-                <Text style={[styles.qaTitle, { color: theme.colors.textPrimary }]}>Ask Your Question</Text>
-                <TouchableOpacity onPress={() => setShowQuestionPanel(false)}>
-                  <Icon name="close" size={20} color={theme.colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatScrollContent}>
-                {!chatMessages.length && !submittingQuestion && (
-                  <View style={[styles.chatEmptyState, { borderColor: theme.colors.border }]}>
-                    <MaterialIcon name="chat-processing-outline" size={20} color={theme.colors.primary} />
-                    <Text style={[styles.chatEmptyTitle, { color: theme.colors.textPrimary }]}>Ask about this lecture point</Text>
-                    <Text style={[styles.chatEmptyText, { color: theme.colors.textSecondary }]}>The AI Tutor will answer from the current lecture context and then you can resume from this chunk.</Text>
-                  </View>
-                )}
-                {chatMessages.map((message, index) => (
-                  <View key={`${message.type}-${index}`} style={[styles.chatBubble, message.type === 'user' ? styles.chatBubbleUser : [styles.chatBubbleAi, { borderColor: theme.colors.border }]]}>
-                    <Text style={[styles.chatRole, { color: message.type === 'user' ? 'rgba(255,255,255,0.75)' : theme.colors.primary }]}>{message.type === 'user' ? 'You' : 'AI Tutor'}</Text>
-                    <Text style={{ color: message.type === 'user' ? '#fff' : theme.colors.textPrimary, lineHeight: 21 }}>{message.text}</Text>
-                  </View>
-                ))}
-                {submittingQuestion && (
-                  <View style={[styles.chatBubble, styles.chatBubbleAi, { borderColor: theme.colors.border }]}>
-                    <Text style={[styles.chatRole, { color: theme.colors.primary }]}>AI Tutor</Text>
-                    <Text style={{ color: theme.colors.textSecondary }}>Preparing a contextual explanation...</Text>
-                  </View>
-                )}
-              </ScrollView>
-              <View style={[styles.inputRow, { borderColor: theme.colors.border, backgroundColor: isDark ? '#111827' : '#f8fafc' }]}>
-                <TouchableOpacity style={[styles.iconButton, { backgroundColor: isRecording ? theme.colors.error : theme.colors.primary }]} onPress={startVoiceInput}>
-                  <Icon name={isRecording ? 'stop' : 'mic'} size={18} color="#fff" />
-                </TouchableOpacity>
-                <TextInput
-                  style={[styles.input, {
-                    color: theme.colors.textPrimary,
-                    backgroundColor: isDark ? '#2d2d44' : '#f1f5f9',
-                    borderColor: isDark ? '#3d3d5c' : '#e2e8f0',
-                  }]}
-                  value={question}
-                  onChangeText={setQuestion}
-                  onSubmitEditing={askQuestion}
-                  placeholder={isRecording ? 'Listening...' : 'Type your question...'}
-                  placeholderTextColor={theme.colors.textTertiary}
-                  multiline
-                />
-                <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.primary }]} onPress={askQuestion} disabled={submittingQuestion}>
-                  {submittingQuestion ? <ActivityIndicator size="small" color="#fff" /> : <Icon name="send" size={18} color="#fff" />}
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
-          {!showQuestionPanel && (
-            <View style={styles.actions}>
-              {lectureCompleted && (
-                <TouchableOpacity style={[styles.action, { backgroundColor: '#0f766e' }]} onPress={restartLecture}>
-                  <Icon name="refresh" size={20} color="#fff" />
-                  <Text style={styles.actionText}>Take Again</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={[styles.action, { backgroundColor: '#3b82f6' }]} onPress={() => setShowNotesModal(true)}>
-                <Icon name="document-text" size={20} color="#fff" />
-                <Text style={styles.actionText}>Notes</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.action, { backgroundColor: '#a855f7' }]} onPress={() => setShowFlashcardsModal(true)}>
-                <MaterialIcon name="cards" size={20} color="#fff" />
-                <Text style={styles.actionText}>Flashcards</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.action, { backgroundColor: '#10b981' }]} onPress={openQuiz}>
-                <MaterialIcon name="help-circle" size={20} color="#fff" />
-                <Text style={styles.actionText}>Quiz</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.action, { backgroundColor: '#f97316' }]} onPress={exportFlashcards}>
-                <Icon name="download" size={20} color="#fff" />
-                <Text style={styles.actionText}>Materials</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </ScrollView>
-
-        <View style={styles.footer}>
-          <TouchableOpacity style={[styles.pauseButton, { backgroundColor: isPlaying ? '#10b981' : '#4f46e5' }]} onPress={togglePause}>
-            <Icon name={isPlaying ? 'pause' : 'play'} size={18} color="#fff" />
-            <Text style={styles.pauseText}>{isPlaying ? 'Pause' : 'Resume'}</Text>
-          </TouchableOpacity>
-          <View style={styles.footerControls}>
-            <TouchableOpacity style={[styles.iconButton, styles.footerIcon, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]} onPress={goToNextChunk} disabled={lectureCompleted}>
-              <Icon name="play-skip-forward" size={18} color={lectureCompleted ? theme.colors.textTertiary : theme.colors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.iconButton, styles.footerIcon, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]} onPress={() => setVoiceMode((prev) => !prev)}>
-              <MaterialIcon name={voiceMode ? 'volume-high' : 'volume-off'} size={18} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
+      <View style={[styles.mainContent, { backgroundColor: isDark ? '#0f0f1a' : theme.colors.background }]}>
+        {/* Main Learning Area */}
+        <View style={styles.learningArea}>
+          {/* Progress Bar with Sidebar Toggle */}
+          <View style={styles.progressSection}>
             <TouchableOpacity
-              style={[styles.iconButton, styles.footerIcon, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]}
-              onPress={openQuestionPanel}
+              style={[
+                styles.backButton,
+                {
+                  backgroundColor: showTopicsSidebar
+                    ? 'rgba(255,140,66,0.25)'
+                    : (isDark ? 'rgba(255,255,255,0.1)' : theme.colors.surface),
+                  borderWidth: 1,
+                  borderColor: showTopicsSidebar ? 'rgba(255,140,66,0.5)' : 'transparent',
+                },
+              ]}
+              onPress={() => setShowTopicsSidebar(!showTopicsSidebar)}
             >
-              <Icon name="chatbubble-outline" size={18} color={theme.colors.textSecondary} />
+              <Icon
+                name={showTopicsSidebar ? 'close' : 'book-open-outline'}
+                size={20}
+                color={showTopicsSidebar ? '#FF8C42' : theme.colors.textPrimary}
+              />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.iconButton, styles.footerIcon, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]} onPress={startVoiceInput}>
-              <Icon name={isRecording ? 'stop' : 'mic'} size={18} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
+            <View style={styles.progressLabel}>
+              <Icon name="trending-up" size={16} color={theme.colors.primary} />
+              <Text style={[styles.progressText, { color: theme.colors.textSecondary }]}>Progress</Text>
+            </View>
+            <View style={styles.progressBarContainer}>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFillGreen, { width: `${enrollmentProgress * 0.7}%` }]} />
+                <View style={[styles.progressFillPurple, { width: `${enrollmentProgress * 0.3}%`, left: `${enrollmentProgress * 0.7}%` }]} />
+              </View>
+            </View>
+            <Text style={[styles.progressPercent, { color: theme.colors.primary }]}>{enrollmentProgress}%</Text>
+          </View>
+
+          {isManualMode ? (
+            /* ── Manual Mode: fills all available height, no ScrollView ─── */
+            <View style={styles.manualFlexArea}>
+              {/* Material viewer card */}
+              <View style={[styles.manualContentArea, { flex: 1 }]}>
+                {/* Header bar */}
+                <View style={[styles.manualHeader, { backgroundColor: isDark ? '#1a1a2e' : '#1e293b' }]}>
+                  <Icon name={getMaterialIcon(selectedMaterial?.type)} size={16}
+                    color={getMaterialColor(selectedMaterial?.type)} />
+                  <Text style={styles.manualHeaderTitle} numberOfLines={1}>
+                    {selectedMaterial?.title || selectedMaterial?.fileName || topic?.title || 'Topic Materials'}
+                  </Text>
+                  {selectedMaterial?.type === 'link' && (
+                    <TouchableOpacity style={styles.manualOpenBtn} onPress={() => openMaterial(selectedMaterial)}>
+                      <Icon name="open-outline" size={14} color="#fff" />
+                      <Text style={styles.manualOpenBtnText}>Open</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Material tabs (shown when >1 material) */}
+                {topicMaterials.length > 1 && (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={[styles.materialTabsBar, { backgroundColor: isDark ? '#12122a' : '#0f172a' }]}
+                    contentContainerStyle={styles.materialTabsContent}
+                  >
+                    {topicMaterials.map((mat, idx) => {
+                      const isActive = selectedMaterial?.id === mat.id
+                        || (!selectedMaterial && idx === 0);
+                      return (
+                        <TouchableOpacity
+                          key={mat.id || idx}
+                          style={[
+                            styles.materialTab,
+                            isActive && { backgroundColor: theme.colors.primary },
+                          ]}
+                          onPress={() => setSelectedMaterial(mat)}
+                        >
+                          <Icon
+                            name={getMaterialIcon(mat.type)}
+                            size={13}
+                            color={isActive ? '#fff' : '#9ca3af'}
+                          />
+                          <Text style={[styles.materialTabText, { color: isActive ? '#fff' : '#9ca3af' }]}
+                            numberOfLines={1}>
+                            {mat.title || mat.fileName || `Material ${idx + 1}`}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+
+                {/* Viewer — flex:1 so it fills all remaining height */}
+                <View style={[styles.materialViewerBox, { backgroundColor: isDark ? '#1a1a2e' : '#1e293b', flex: 1 }]}>
+                  {topicMaterials.length === 0 ? (
+                    <View style={styles.viewerEmpty}>
+                      <Icon name="folder-open-outline" size={48} color="rgba(255,255,255,0.25)" />
+                      <Text style={styles.viewerEmptyText}>No materials added to this topic yet</Text>
+                    </View>
+                  ) : (
+                    renderMaterialViewer(selectedMaterial || topicMaterials[0])
+                  )}
+                </View>
+              </View>
+
+            </View>
+          ) : (
+            /* ── AI Mode: whiteboard fills area like manual mode ─────── */
+            <View style={styles.aiFlexArea}>
+              <View style={[styles.manualContentArea, { flex: 1, backgroundColor: isDark ? '#1a1a2e' : '#1e293b' }]}>
+
+                {/* Whiteboard header — mirrors manualHeader style */}
+                <View style={[styles.manualHeader, { backgroundColor: isDark ? '#12122a' : '#0f172a' }]}>
+                  <MaterialIcon name="presentation" size={16} color="#fff" />
+                  <Text style={[styles.manualHeaderTitle, { flex: 1 }]}>Virtual Whiteboard</Text>
+                  {aiSpeaking && (
+                    <View style={styles.liveBadge}>
+                      <Text style={styles.liveBadgeText}>Live</Text>
+                    </View>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.manualOpenBtn, { marginLeft: 8 }]}
+                    onPress={() => { setIsPlaying(p => !p); setAiSpeaking(s => !s); }}
+                  >
+                    <Icon name={isPlaying ? 'pause' : 'play'} size={13} color="#fff" />
+                    <Text style={styles.manualOpenBtnText}>{isPlaying ? 'Pause' : 'Resume'}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Scrollable whiteboard + subtitles content inside card */}
+                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
+
+                  {/* AI Tutor status bar — full width, above diagram */}
+                  <View style={styles.aiStatusBar}>
+                    <RNAnimated.View style={[styles.aiStatusAvatar, { transform: [{ scale: pulseAnim }], opacity: aiSpeaking ? 1 : 0.5 }]}>
+                      <MaterialIcon name="robot" size={20} color="#fff" />
+                    </RNAnimated.View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.aiStatusName}>AI Tutor</Text>
+                      <Text style={styles.aiStatusSub} numberOfLines={1}>{currentSubtitle}</Text>
+                    </View>
+                    {aiSpeaking ? (
+                      <View style={styles.soundWaveRow}>
+                        {[6, 12, 18, 24, 16, 20, 12, 7].map((h, i) => (
+                          <View key={i} style={[styles.soundBar, { height: h }]} />
+                        ))}
+                      </View>
+                    ) : (
+                      <View style={[styles.liveBadge, { backgroundColor: '#374151' }]}>
+                        <Icon name="pause" size={10} color="#9ca3af" />
+                        <Text style={[styles.liveBadgeText, { color: '#9ca3af' }]}>Paused</Text>
+                      </View>
+                    )}
+                    {aiSpeaking && (
+                      <View style={styles.liveBadge}>
+                        <View style={styles.liveDot} />
+                        <Text style={styles.liveBadgeText}>Live</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Whiteboard diagram */}
+                  <View style={styles.whiteboardContent}>
+                    <Text style={styles.diagramTitle}>Neural Network Architecture</Text>
+                    <View style={styles.neuralNetwork}>
+                      <View style={styles.nnLayer}>
+                        {['I1', 'I2', 'I3', 'I4'].map((node) => (
+                          <View key={node} style={[styles.nnNode, styles.nnNodeInput]}>
+                            <Text style={styles.nnNodeText}>{node}</Text>
+                          </View>
+                        ))}
+                        <Text style={styles.nnLayerLabel}>Input</Text>
+                      </View>
+                      <View style={styles.nnLayer}>
+                        {['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].map((node) => (
+                          <View key={node} style={[styles.nnNode, styles.nnNodeHidden]}>
+                            <Text style={styles.nnNodeText}>{node}</Text>
+                          </View>
+                        ))}
+                        <Text style={styles.nnLayerLabel}>Hidden</Text>
+                      </View>
+                      <View style={styles.nnLayer}>
+                        {['O1', 'O2', 'O3'].map((node) => (
+                          <View key={node} style={[styles.nnNode, styles.nnNodeOutput]}>
+                            <Text style={styles.nnNodeText}>{node}</Text>
+                          </View>
+                        ))}
+                        <Text style={styles.nnLayerLabel}>Output</Text>
+                      </View>
+                    </View>
+                    <View style={styles.keyConcepts}>
+                      <Text style={styles.keyConceptsTitle}>Key Concepts:</Text>
+                      <View style={styles.keyConceptsList}>
+                        {keyConcepts.map((concept, i) => (
+                          <View key={i} style={styles.keyConceptItem}>
+                            <View style={[styles.keyConceptDot, { backgroundColor: i === 0 ? '#3b82f6' : i === 1 ? '#8b5cf6' : '#10b981' }]} />
+                            <Text style={styles.keyConceptText}>{concept}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Live Subtitles */}
+                  <View style={[styles.subtitlesSection, { backgroundColor: 'rgba(0,0,0,0.25)', margin: 12, marginTop: 8 }]}>
+                    <View style={styles.subtitlesHeader}>
+                      <MaterialIcon name="subtitles" size={14} color="#9ca3af" />
+                      <Text style={[styles.subtitlesTitle, { color: '#cbd5e1', fontSize: 12 }]}>Subtitles</Text>
+                      <View style={[styles.languageBadge, { marginLeft: 'auto' }]}>
+                        <Text style={styles.languageBadgeText}>EN</Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.subtitlesText, { color: '#e2e8f0', fontSize: 14 }]}>
+                      {currentSubtitle}
+                    </Text>
+                  </View>
+
+                </ScrollView>
+              </View>
+            </View>
+          )}
+
+          {/* Bottom Control Bar */}
+          <View style={styles.bottomBar}>
+            {isManualMode ? (
+              /* Manual mode: Quiz + Chat */
+              <>
+                <TouchableOpacity
+                  style={[styles.pauseAskButton, { backgroundColor: '#10b981', flex: 1 }]}
+                  onPress={() => navigation.navigate('Quiz', { courseId, topicId, topics: course?.topics || [] })}
+                >
+                  <MaterialIcon name="help-circle" size={20} color="#fff" />
+                  <Text style={styles.pauseAskText}>Take Quiz</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.bottomControlButton, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]}
+                  onPress={openChat}
+                >
+                  <Icon name="chatbubble-ellipses-outline" size={22} color={theme.colors.primary} />
+                </TouchableOpacity>
+              </>
+            ) : (
+              /* AI mode: Quiz | Flashcards | Chat */
+              <>
+                <TouchableOpacity
+                  style={[styles.pauseAskButton, { backgroundColor: '#10b981', flex: 1 }]}
+                  onPress={() => navigation.navigate('Quiz', { courseId, topicId, topics: course?.topics || [] })}
+                >
+                  <MaterialIcon name="help-circle" size={20} color="#fff" />
+                  <Text style={styles.pauseAskText}>Take Quiz</Text>
+                </TouchableOpacity>
+
+                <View style={styles.bottomControls}>
+                  <TouchableOpacity
+                    style={[styles.bottomControlButton, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]}
+                    onPress={() => navigation.navigate('Flashcards', { courseId, topicId })}
+                  >
+                    <MaterialIcon name="cards-outline" size={22} color={theme.colors.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.bottomControlButton, { backgroundColor: isDark ? '#2d2d44' : '#e2e8f0' }]}
+                    onPress={openChat}
+                  >
+                    <Icon name="chatbubble-ellipses-outline" size={22} color={theme.colors.primary} />
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </View>
 
+      {/* ── AI Lecture Chat Floating Popup ─────────────────────────────── */}
+      <Modal
+        visible={showChatModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowChatModal(false)}
+      >
+        {/* Backdrop — tap anywhere outside popup to close */}
+        <TouchableOpacity
+          style={chatStyles.backdrop}
+          activeOpacity={1}
+          onPress={() => setShowChatModal(false)}
+        />
+
+        {/* Centering wrapper — passes touches through to backdrop */}
+        <View style={chatStyles.centerWrapper} pointerEvents="box-none">
+          <RNAnimated.View
+            style={[
+              chatStyles.popup,
+              {
+                backgroundColor: isDark ? '#1e1e2e' : '#ffffff',
+                borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+              },
+              { transform: chatPosition.getTranslateTransform() },
+            ]}
+          >
+            {/* Drag handle bar */}
+            <View
+              {...chatPanResponder.panHandlers}
+              style={[chatStyles.dragHandle, { borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : '#f0f0f5' }]}
+            >
+              <View style={[chatStyles.dragBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)' }]} />
+              <View style={chatStyles.headerRow}>
+                <View style={[chatStyles.headerIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+                  <Icon name="sparkles" size={16} color={theme.colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[chatStyles.headerTitle, { color: theme.colors.textPrimary }]}>AI Tutor</Text>
+                  <Text style={[chatStyles.headerSub, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                    {topic?.title || 'Current Topic'}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setShowChatModal(false)} style={chatStyles.closeBtn}>
+                  <Icon name="close" size={18} color={theme.colors.textTertiary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Messages */}
+            {chatLoading ? (
+              <View style={chatStyles.loadingContainer}>
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+                <Text style={[chatStyles.loadingText, { color: theme.colors.textTertiary }]}>Loading history...</Text>
+              </View>
+            ) : (
+              <FlatList
+                ref={chatListRef}
+                data={chatMessages}
+                keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+                contentContainerStyle={chatStyles.messagesList}
+                onContentSizeChange={() => chatListRef.current?.scrollToEnd({ animated: true })}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={
+                  <View style={chatStyles.emptyChat}>
+                    <View style={[chatStyles.emptyIconWrap, { backgroundColor: theme.colors.primary + '12' }]}>
+                      <Icon name="sparkles-outline" size={28} color={theme.colors.primary} />
+                    </View>
+                    <Text style={[chatStyles.emptyTitle, { color: theme.colors.textPrimary }]}>Ask your AI Tutor</Text>
+                    <Text style={[chatStyles.emptySub, { color: theme.colors.textTertiary }]}>
+                      Questions about this topic answered instantly
+                    </Text>
+                  </View>
+                }
+                renderItem={({ item }) => (
+                  <View style={[
+                    chatStyles.messageBubble,
+                    item.sender === 'user' ? chatStyles.userBubble : chatStyles.aiBubble,
+                  ]}>
+                    {item.sender === 'ai' && (
+                      <View style={[chatStyles.aiAvatar, { backgroundColor: theme.colors.primary + '18' }]}>
+                        <Icon name="sparkles" size={12} color={theme.colors.primary} />
+                      </View>
+                    )}
+                    <View style={[
+                      chatStyles.bubbleContent,
+                      item.sender === 'user'
+                        ? { backgroundColor: theme.colors.primary }
+                        : { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f4f4f8', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#e8e8f0' },
+                    ]}>
+                      {item.sender === 'user' ? (
+                        <Text style={chatStyles.userText}>{item.content}</Text>
+                      ) : (
+                        <MarkdownText textColor={theme.colors.textPrimary}>
+                          {item.content}
+                        </MarkdownText>
+                      )}
+                    </View>
+                  </View>
+                )}
+                ListFooterComponent={chatSending ? (
+                  <View style={[chatStyles.messageBubble, chatStyles.aiBubble]}>
+                    <View style={[chatStyles.aiAvatar, { backgroundColor: theme.colors.primary + '18' }]}>
+                      <Icon name="sparkles" size={12} color={theme.colors.primary} />
+                    </View>
+                    <View style={[chatStyles.bubbleContent, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#f4f4f8', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#e8e8f0', paddingVertical: 12 }]}>
+                      <View style={chatStyles.typingDots}>
+                        <View style={[chatStyles.dot, { backgroundColor: theme.colors.primary }]} />
+                        <View style={[chatStyles.dot, { backgroundColor: theme.colors.primary, opacity: 0.55 }]} />
+                        <View style={[chatStyles.dot, { backgroundColor: theme.colors.primary, opacity: 0.25 }]} />
+                      </View>
+                    </View>
+                  </View>
+                ) : null}
+              />
+            )}
+
+            {/* Input */}
+            <View style={[chatStyles.inputRow, { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : '#f0f0f5', backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : '#fafafa' }]}>
+              <TextInput
+                style={[chatStyles.input, {
+                  color: theme.colors.textPrimary,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#fff',
+                  borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#e2e2ec',
+                }]}
+                value={chatInput}
+                onChangeText={setChatInput}
+                placeholder="Ask about this topic..."
+                placeholderTextColor={theme.colors.textTertiary}
+                multiline
+                maxLength={500}
+                onSubmitEditing={handleSendChatMessage}
+              />
+              <TouchableOpacity
+                style={[chatStyles.sendBtn, {
+                  backgroundColor: chatInput.trim() && !chatSending ? theme.colors.primary : (isDark ? 'rgba(255,255,255,0.08)' : '#e2e2ec'),
+                }]}
+                onPress={handleSendChatMessage}
+                disabled={!chatInput.trim() || chatSending}
+              >
+                {chatSending
+                  ? <ActivityIndicator size="small" color={chatInput.trim() ? '#fff' : theme.colors.textTertiary} />
+                  : <Icon name="send" size={16} color={chatInput.trim() ? '#fff' : theme.colors.textTertiary} />
+                }
+              </TouchableOpacity>
+            </View>
+          </RNAnimated.View>
+        </View>
+      </Modal>
+
       <ConfirmDialog
         visible={showCompleteDialog}
-        title="Lecture Complete"
-        message="The lecture is finished. Open the quiz to unlock the next topic, or take the lecture again from the beginning."
-        confirmText="Open Quiz"
+        title="Complete Topic"
+        message="Have you finished this topic?"
+        confirmText="Complete"
         confirmVariant="primary"
-        onConfirm={() => {
-          setShowCompleteDialog(false);
-          openQuiz();
-        }}
+        onConfirm={confirmCompleteTopic}
         onCancel={() => setShowCompleteDialog(false)}
       />
-
-      <Modal visible={showFlashcardsModal} transparent animationType="slide" onRequestClose={() => setShowFlashcardsModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: isDark ? theme.colors.card : '#fff' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>Flashcards</Text>
-              <TouchableOpacity onPress={() => setShowFlashcardsModal(false)}>
-                <Icon name="close" size={20} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView>
-              {(lecture.flashcards || []).map((card, index) => {
-                const cardId = card.id || index;
-                const revealed = Boolean(revealedFlashcards[cardId]);
-                return (
-                  <TouchableOpacity key={cardId} activeOpacity={0.92} onPress={() => toggleFlashcardReveal(cardId)} style={[styles.flashcard, { borderColor: theme.colors.border, backgroundColor: isDark ? '#101827' : '#f8fafc' }]}>
-                    <View style={styles.flashcardHeader}>
-                      <Text style={[styles.flashcardLabel, { color: theme.colors.primary }]}>{revealed ? 'Answer' : 'Prompt'}</Text>
-                      <Text style={[styles.flashcardHint, { color: theme.colors.textTertiary }]}>{revealed ? 'Tap to hide' : 'Tap to reveal'}</Text>
-                    </View>
-                    <Text style={[styles.flashcardFront, { color: theme.colors.textPrimary }]}>{revealed ? card.backText : card.frontText}</Text>
-                    <View style={[styles.flashcardDivider, { backgroundColor: theme.colors.border }]} />
-                    <Text style={[styles.flashcardMeta, { color: theme.colors.textSecondary }]}>{revealed ? 'Use this answer to confirm your recall.' : 'Try answering from memory before revealing the back.'}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <AppButton title="Export Flashcards" onPress={exportFlashcards} variant="outline" />
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={showNotesModal} transparent animationType="slide" onRequestClose={() => setShowNotesModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: isDark ? theme.colors.card : '#fff' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>Lecture Notes</Text>
-              <TouchableOpacity onPress={() => setShowNotesModal(false)}>
-                <Icon name="close" size={20} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView>
-              <Text style={[styles.notesTitle, { color: theme.colors.textPrimary }]}>{lecture.title}</Text>
-              <Text style={[styles.notesBody, { color: theme.colors.textSecondary }]}>{lecture.summary}</Text>
-              {(currentSlides.length ? currentSlides : lecture.slideOutlines || []).map((slide, index) => (
-                <View key={slide.id || index} style={styles.noteSection}>
-                  <Text style={[styles.noteSectionTitle, { color: theme.colors.primary }]}>{slide.title}</Text>
-                  {(slide.bullets || []).map((bullet, bulletIndex) => (
-                    <Text key={`${slide.id || index}-${bulletIndex}`} style={[styles.notesBody, { color: theme.colors.textPrimary }]}>- {bullet}</Text>
-                  ))}
-                  {!!slide.notes && <Text style={[styles.notesBody, { color: theme.colors.textSecondary }]}>{slide.notes}</Text>}
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </MainLayout>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  loadingText: { marginTop: 16, fontSize: 16 },
-  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  progressBarWrap: { flex: 1 },
-  progressLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6 },
-  progressBar: { height: 8, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.12)', overflow: 'hidden' },
-  progressFill: { height: '100%' },
-  progressValue: { fontSize: 13, fontWeight: '700' },
-  lectureTimeBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16, alignSelf: 'flex-start' },
-  lectureTimeBannerText: { fontSize: 13, fontWeight: '700' },
-  statusCard: { borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1 },
-  statusHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 12 },
-  statusTitleWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  statusDot: { width: 10, height: 10, borderRadius: 5 },
-  statusTitle: { fontSize: 15, fontWeight: '700' },
-  statusMeta: { fontSize: 12, fontWeight: '700' },
-  statusText: { fontSize: 13, lineHeight: 20 },
-  metaPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  metaPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  metaPillText: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
-  transitionCard: { borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1 },
-  transitionLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
-  transitionText: { fontSize: 14, lineHeight: 21, fontWeight: '600' },
-  topRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
-  topRowStack: { flexDirection: 'column' },
-  whiteboard: { flex: 1, borderRadius: 16, padding: 18 },
-  liveBoard: { minHeight: 360 },
-  sideStack: { width: 220, gap: 12 },
-  tutorPanel: { width: 190, borderRadius: 16, padding: 16, alignItems: 'center' },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  cardHeaderText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  boardHeaderRow: { marginBottom: 14, gap: 10 },
-  boardModeBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  boardModeText: { color: '#fff', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
-  boardObjective: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },
-  whiteboardTitle: { color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: 8 },
-  whiteboardSummary: { color: '#cbd5e1', fontSize: 14, lineHeight: 22, marginBottom: 12 },
-  boardSurface: { flex: 1, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.04)', padding: 16, gap: 10, justifyContent: 'center' },
-  boardBodyText: { color: '#e2e8f0', fontSize: 15, lineHeight: 24 },
-  boardBullet: { color: '#e2e8f0', fontSize: 15, lineHeight: 24, marginBottom: 8 },
-  boardEmphasis: { color: '#93c5fd', fontSize: 14, lineHeight: 22, marginTop: 12, fontStyle: 'italic' },
-  boardQuestion: { color: '#fef3c7', fontSize: 22, lineHeight: 30, fontWeight: '700' },
-  sectionLabel: { color: '#fff', fontSize: 13, fontWeight: '700', marginTop: 10, marginBottom: 4 },
-  sectionText: { color: '#cbd5e1', fontSize: 13, lineHeight: 21 },
-  tutorLabel: { fontSize: 14, fontWeight: '700', marginBottom: 16 },
-  avatarRing: { width: 120, height: 120, borderRadius: 60, borderWidth: 3, borderColor: 'rgba(79,70,229,0.3)', justifyContent: 'center', alignItems: 'center' },
-  avatarInner: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#a855f7', justifyContent: 'center', alignItems: 'center' },
-  avatarText: { color: '#fff', fontSize: 32, fontWeight: '700' },
-  tutorMeta: { fontSize: 11, textAlign: 'center', marginTop: 8 },
-  visualRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
-  visualCard: { flex: 1, borderRadius: 16, padding: 16, borderWidth: 1 },
-  visualHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  visualEyebrow: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
-  visualTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
-  visualBody: { fontSize: 13, lineHeight: 21 },
-  visualHint: { borderRadius: 12, padding: 12, marginTop: 12 },
-  visualHintLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginBottom: 4 },
-  visualHintText: { fontSize: 13, lineHeight: 20 },
-  diagramRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1 },
-  diagramIndex: { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  diagramIndexText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  diagramText: { flex: 1, fontSize: 13, lineHeight: 20 },
-  flowStep: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
-  flowStepBadge: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  flowStepBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  flowStepText: { flex: 1, color: '#e2e8f0', fontSize: 14, lineHeight: 21 },
-  boardTable: { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
-  boardTableRow: { padding: 12, borderBottomWidth: 1 },
-  boardTableTitle: { color: '#fff', fontSize: 13, fontWeight: '700', marginBottom: 4 },
-  boardTableBody: { fontSize: 12, lineHeight: 18 },
-  comparisonTable: { borderWidth: 1, borderRadius: 14, overflow: 'hidden' },
-  comparisonRow: { padding: 12, borderBottomWidth: 1 },
-  comparisonCellTitle: { fontSize: 13, fontWeight: '700', marginBottom: 4 },
-  comparisonCellBody: { fontSize: 12, lineHeight: 18 },
-  nodeWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  nodeCard: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
-  nodeLabel: { fontSize: 12, fontWeight: '600' },
-  liveNodeCard: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.06)' },
-  liveNodeText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  codePanel: { borderWidth: 1, borderRadius: 14, padding: 14, backgroundColor: 'rgba(15,23,42,0.92)' },
-  codeLanguage: { color: '#93c5fd', fontSize: 11, fontWeight: '700', marginBottom: 10, letterSpacing: 1 },
-  codeText: { color: '#e5e7eb', fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier', fontSize: 13, lineHeight: 20 },
-  codeHint: { color: '#cbd5e1', fontSize: 12, lineHeight: 18, marginTop: 12 },
-  teacherCardsRow: { flexDirection: 'row', gap: 12, marginBottom: 16, flexWrap: 'wrap' },
-  teacherCard: { flex: 1, minWidth: 210, borderRadius: 16, padding: 14, borderWidth: 1 },
-  teacherCardLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
-  teacherCardText: { fontSize: 13, lineHeight: 20 },
-  supportCard: { borderWidth: 1, borderRadius: 16, padding: 14 },
-  supportLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
-  supportText: { fontSize: 13, lineHeight: 20 },
-  subtitlesCard: { borderRadius: 16, padding: 16, marginBottom: 16 },
-  subtitlesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  subtitlesTitle: { fontSize: 14, fontWeight: '700' },
-  modeBadge: { color: '#fff', backgroundColor: '#3b82f6', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, fontSize: 10, fontWeight: '700' },
-  subtitlesText: { fontSize: 15, lineHeight: 24 },
-  segmentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  segmentPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, maxWidth: '100%' },
-  segmentText: { fontSize: 11, fontWeight: '600' },
-  qaCard: { borderRadius: 16, padding: 16, marginBottom: 16, maxHeight: 340 },
-  qaHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  qaTitle: { fontSize: 15, fontWeight: '700' },
-  chatScroll: { maxHeight: 180, marginBottom: 12 },
-  chatScrollContent: { paddingBottom: 4 },
-  chatEmptyState: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 14, padding: 14, alignItems: 'center', marginBottom: 10 },
-  chatEmptyTitle: { fontSize: 14, fontWeight: '700', marginTop: 8, marginBottom: 6 },
-  chatEmptyText: { fontSize: 12, lineHeight: 18, textAlign: 'center' },
-  chatBubble: { padding: 12, borderRadius: 14, marginBottom: 8, maxWidth: '92%', borderWidth: 1 },
-  chatBubbleUser: { backgroundColor: '#4F46E5', alignSelf: 'flex-end', borderColor: '#4F46E5' },
-  chatBubbleAi: { backgroundColor: 'rgba(79,70,229,0.1)', alignSelf: 'flex-start' },
-  chatRole: { fontSize: 11, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.6 },
-  inputRow: { flexDirection: 'row', gap: 8, borderWidth: 1, borderRadius: 18, padding: 10, alignItems: 'flex-end' },
-  input: { flex: 1, minHeight: 44, maxHeight: 92, borderWidth: 1, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 10 },
-  actions: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  action: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', gap: 6 },
-  actionText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' },
-  pauseButton: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingVertical: 14, borderRadius: 24 },
-  pauseText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  footerControls: { flexDirection: 'row', gap: 8 },
-  iconButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  footerIcon: { borderRadius: 12 },
-  sidebar: { flex: 1, paddingTop: 8, paddingHorizontal: 8 },
-  sidebarTitle: { fontSize: 14, fontWeight: '700', padding: 16 },
-  sidebarItem: { borderLeftWidth: 3, borderLeftColor: 'transparent', padding: 12, marginHorizontal: 8, marginBottom: 4, borderRadius: 10 },
-  sidebarItemText: { fontSize: 13, fontWeight: '600', marginBottom: 4 },
-  sidebarItemDuration: { fontSize: 11, marginBottom: 4 },
-  sidebarItemStatus: { fontSize: 11 },
-  modalOverlay: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(15,23,42,0.72)', padding: 20 },
-  modalCard: { borderRadius: 16, padding: 20, maxHeight: '85%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalTitle: { fontSize: 18, fontWeight: '700' },
-  flashcard: { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 12 },
-  flashcardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12 },
-  flashcardLabel: { fontSize: 12, fontWeight: '700' },
-  flashcardHint: { fontSize: 11, fontWeight: '600' },
-  flashcardFront: { fontSize: 16, lineHeight: 24, marginBottom: 12, fontWeight: '600' },
-  flashcardDivider: { height: 1, marginBottom: 12 },
-  flashcardMeta: { fontSize: 12, lineHeight: 18 },
-  notesTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
-  notesBody: { fontSize: 14, lineHeight: 22, marginBottom: 6 },
-  noteSection: { marginBottom: 14 },
-  noteSectionTitle: { fontSize: 14, fontWeight: '700', marginBottom: 6 },
+  container: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  mainContent: {
+    flex: 1,
+  },
+
+  // Topics Sidebar Content
+  topicsSidebarContent: {
+    flex: 1,
+    paddingTop: 8,
+  },
+  sidebarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+  },
+  sidebarHeaderIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sidebarTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  sidebarSubtitle: {
+    fontSize: 12,
+  },
+  closeSidebar: {
+    marginLeft: 'auto',
+    padding: 4,
+  },
+  sidebarProgress: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  sidebarProgressText: {
+    fontSize: 12,
+  },
+  sidebarProgressPercent: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sidebarProgressBar: {
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginHorizontal: 16,
+    borderRadius: 2,
+    marginBottom: 16,
+  },
+  sidebarProgressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  topicsList: {
+    flex: 1,
+  },
+  topicItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    paddingHorizontal: 16,
+    gap: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: 'transparent',
+  },
+  topicItemCurrent: {
+    borderLeftColor: '#4F46E5',
+  },
+  topicIcon: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  topicStatusIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  topicInfo: {
+    flex: 1,
+  },
+  topicTitle: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  topicMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  topicDuration: {
+    fontSize: 11,
+  },
+  topicStatus: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  topicProgressBar: {
+    height: 3,
+    backgroundColor: 'rgba(79, 70, 229, 0.2)',
+    borderRadius: 2,
+    marginTop: 6,
+  },
+  topicProgressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+
+  // Learning Area
+  learningArea: {
+    flex: 1,
+    padding: 16,
+  },
+  learningScrollView: {
+    flex: 1,
+  },
+
+  // Progress Section with Back Button
+  progressSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 12,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  progressLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  progressText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  progressBarContainer: {
+    flex: 1,
+  },
+  progressBar: {
+    height: 6,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 3,
+    overflow: 'hidden',
+    flexDirection: 'row',
+  },
+  progressFillGreen: {
+    height: '100%',
+    backgroundColor: '#10b981',
+  },
+  progressFillPurple: {
+    height: '100%',
+    backgroundColor: '#a855f7',
+    position: 'absolute',
+  },
+  progressPercent: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Content Row
+  contentRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 16,
+  },
+
+  // Whiteboard
+  whiteboardContainer: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  whiteboardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  whiteboardTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  whiteboardTitleText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  whiteboardEdit: {
+    padding: 4,
+  },
+  whiteboardContent: {
+    padding: 20,
+    minHeight: 280,
+  },
+  diagramTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+
+  // Neural Network
+  neuralNetwork: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  nnLayer: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  nnNode: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  nnNodeInput: {
+    backgroundColor: '#3b82f6',
+  },
+  nnNodeHidden: {
+    backgroundColor: '#a855f7',
+  },
+  nnNodeOutput: {
+    backgroundColor: '#10b981',
+  },
+  nnNodeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  nnLayerLabel: {
+    color: '#9ca3af',
+    fontSize: 11,
+    marginTop: 8,
+  },
+
+  // Key Concepts
+  keyConcepts: {
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 8,
+    padding: 16,
+    marginTop: 20,
+  },
+  keyConceptsTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  keyConceptsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 20,
+  },
+  keyConceptItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  keyConceptDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  keyConceptText: {
+    color: '#d1d5db',
+    fontSize: 13,
+  },
+
+  // AI Tutor Status Bar
+  aiStatusBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 12,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.2)',
+  },
+  aiStatusAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#7c3aed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  aiStatusName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#e2e8f0',
+  },
+  aiStatusSub: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginTop: 1,
+  },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: '#10b981',
+  },
+  liveDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#d1fae5',
+  },
+  liveBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  soundWaveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    height: 28,
+  },
+  soundBar: {
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: '#10b981',
+  },
+
+  // Subtitles
+  subtitlesSection: {
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+  },
+  subtitlesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  subtitlesTitle: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  languageBadge: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 'auto',
+  },
+  languageBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  subtitlesText: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+
+  // Question Panel
+  questionPanel: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    maxHeight: 300,
+  },
+  questionPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  questionPanelTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  chatMessages: {
+    maxHeight: 150,
+    marginBottom: 12,
+  },
+  chatMessage: {
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    maxWidth: '80%',
+  },
+  chatMessageUser: {
+    backgroundColor: '#4F46E5',
+    alignSelf: 'flex-end',
+    borderBottomRightRadius: 4,
+  },
+  chatMessageAi: {
+    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+    alignSelf: 'flex-start',
+    borderBottomLeftRadius: 4,
+  },
+  chatMessageText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  questionInputContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  questionInput: {
+    flex: 1,
+    height: 44,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    fontSize: 14,
+    borderWidth: 1,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Action Buttons
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  actionButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    gap: 6,
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // Bottom Bar
+  bottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  pauseAskButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 25,
+  },
+  pauseAskText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  bottomControls: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  bottomControlButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+
+  // ── AI Mode ────────────────────────────────────────────────────────────────
+  aiFlexArea: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+
+  // ── Manual Mode ────────────────────────────────────────────────────────────
+  manualFlexArea: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  manualContentArea: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  manualHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  manualHeaderTitle: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  manualOpenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  manualOpenBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  materialTabsBar: {
+    maxHeight: 40,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  materialTabsContent: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  materialTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    maxWidth: 160,
+  },
+  materialTabText: {
+    fontSize: 12,
+    fontWeight: '500',
+    flexShrink: 1,
+  },
+  materialViewerBox: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'stretch',
+  },
+  iframeWrapper: {
+    flex: 1,
+  },
+  embeddedLinkWrapper: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  openExternalBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  openExternalText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  viewerEmpty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    gap: 12,
+  },
+  viewerEmptyText: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  videoFallback: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 20,
+    padding: 40,
+    minHeight: 260,
+  },
+  ytPlayButton: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoFallbackTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    maxWidth: '80%',
+  },
+  videoFallbackSub: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 15,
+    textAlign: 'center',
+  },
+  linkViewer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 20,
+    padding: 40,
+    minHeight: 260,
+  },
+  linkViewerTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    maxWidth: '80%',
+  },
+  linkViewerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 28,
+  },
+  linkViewerBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  materialImage: {
+    flex: 1,
+    width: '100%',
+    minHeight: 200,
+  },
+});
+
+// ── Lecture Chat Floating Popup Styles ────────────────────────────────────
+const chatStyles = StyleSheet.create({
+  // Full-screen glassmorphic backdrop
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Platform.OS === 'web' ? 'rgba(10,10,30,0.4)' : 'rgba(0,0,0,0.55)',
+    ...(Platform.OS === 'web' ? {
+      backdropFilter: 'blur(14px)',
+      WebkitBackdropFilter: 'blur(14px)',
+    } : {}),
+  },
+  // Transparent centering wrapper — passes touches through to backdrop
+  centerWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // The floating popup card
+  popup: {
+    width: 360,
+    height: 520,
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: 'hidden',
+    ...Platform.select({
+      web: { boxShadow: '0 8px 40px rgba(0,0,0,0.28)' },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.28,
+        shadowRadius: 20,
+        elevation: 20,
+      },
+    }),
+  },
+  // Drag handle section at top (user grabs this to move popup)
+  dragHandle: {
+    paddingTop: 10,
+    paddingBottom: 0,
+    borderBottomWidth: 1,
+    cursor: 'grab',
+  },
+  dragBar: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 10,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    gap: 10,
+  },
+  headerIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  headerSub: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  closeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Loading state inside popup
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+  },
+  loadingText: {
+    fontSize: 12,
+  },
+  // Message list
+  messagesList: {
+    padding: 12,
+    paddingBottom: 4,
+    flexGrow: 1,
+  },
+  // Empty state
+  emptyChat: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 10,
+  },
+  emptyIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptySub: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 17,
+    maxWidth: 220,
+  },
+  // Message bubbles
+  messageBubble: {
+    flexDirection: 'row',
+    marginBottom: 10,
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  userBubble: {
+    justifyContent: 'flex-end',
+  },
+  aiBubble: {
+    justifyContent: 'flex-start',
+  },
+  aiAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  bubbleContent: {
+    maxWidth: '82%',
+    borderRadius: 14,
+    padding: 10,
+  },
+  userText: {
+    color: '#fff',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  typingDots: {
+    flexDirection: 'row',
+    gap: 5,
+    alignItems: 'center',
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  // Input bar at bottom
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    padding: 10,
+    borderTopWidth: 1,
+    gap: 8,
+  },
+  input: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 7,
+    fontSize: 13,
+    maxHeight: 80,
+    lineHeight: 18,
+  },
+  sendBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
 });
 
 export default LearningScreen;

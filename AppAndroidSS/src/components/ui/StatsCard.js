@@ -21,20 +21,25 @@ const StatsCard = ({
   const getBackgroundStyle = () => {
     if (variant === 'outlined') {
       return {
-        backgroundColor: 'transparent',
+        backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(26,26,46,0.02)',
         borderWidth: 1,
-        borderColor: theme.colors.border,
+        borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.10)',
       };
     }
     if (variant === 'gradient') {
       return {
-        backgroundColor: isDark
-          ? 'rgba(79, 70, 229, 0.15)'
-          : 'rgba(79, 70, 229, 0.08)',
+        backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)',
+        borderWidth: 1,
+        borderColor: isDark ? 'rgba(99,102,241,0.25)' : 'rgba(99,102,241,0.15)',
       };
     }
+    // default
     return {
-      backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.90)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(26,26,46,0.08)',
+      ...(isWeb ? { backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' } : {}),
+      ...(isWeb && !isDark ? { boxShadow: '0 4px 20px rgba(0,0,0,0.08)' } : {}),
     };
   };
 
@@ -45,6 +50,8 @@ const StatsCard = ({
       : theme.colors.backgroundSecondary;
 
   const iconDisplayColor = iconColor || theme.colors.primary;
+
+  const changeColor = change?.type === 'increase' ? theme.colors.success : theme.colors.error;
 
   return (
     <View
@@ -88,17 +95,22 @@ const StatsCard = ({
 
       {/* Change indicator */}
       {change && (
-        <View style={styles.changeContainer}>
+        <View
+          style={[
+            styles.changeContainer,
+            { backgroundColor: `${changeColor}18` },
+          ]}
+        >
           <Icon
-            name={change.type === 'increase' ? 'trending-up' : 'trending-down'}
-            size={14}
-            color={change.type === 'increase' ? theme.colors.success : theme.colors.error}
+            name={change.type === 'increase' ? 'arrow-up' : 'arrow-down'}
+            size={12}
+            color={changeColor}
           />
           <Text
             style={[
               styles.changeText,
               {
-                color: change.type === 'increase' ? theme.colors.success : theme.colors.error,
+                color: changeColor,
                 fontFamily: theme.typography.fontFamily.medium,
               },
             ]}
@@ -153,6 +165,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
     gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
   },
   changeText: {
     fontSize: 12,

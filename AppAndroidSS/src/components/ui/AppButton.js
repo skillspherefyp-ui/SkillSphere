@@ -66,9 +66,21 @@ const AppButton = ({
       return [
         ...baseStyle,
         {
-          backgroundColor: theme.colors.surface,
+          backgroundColor: isDark ? theme.colors.backgroundTertiary : theme.colors.backgroundSecondary,
           borderWidth: 1,
           borderColor: theme.colors.border,
+        },
+      ];
+    }
+
+    if (variant === 'glass') {
+      return [
+        ...baseStyle,
+        {
+          backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.06)',
+          borderWidth: 1,
+          borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(26,26,46,0.12)',
+          ...(isWeb ? { backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' } : {}),
         },
       ];
     }
@@ -85,6 +97,9 @@ const AppButton = ({
     }
     if (variant === 'danger') {
       return '#FFFFFF';
+    }
+    if (variant === 'glass') {
+      return isDark ? '#FFFFFF' : '#1A1A2E';
     }
     return theme.colors.textInverse;
   };
@@ -104,6 +119,14 @@ const AppButton = ({
 
   const getGlowStyle = () => {
     if (!glow || disabled) return {};
+
+    const gradientColors = getGradientColors();
+
+    if (isWeb) {
+      return {
+        boxShadow: `0 4px 16px ${gradientColors[0]}40`,
+      };
+    }
 
     if (isDark) {
       return theme.shadows.glow;
@@ -169,6 +192,7 @@ const AppButton = ({
     const webGradientStyle = {
       background: `linear-gradient(135deg, ${gradientColors[0]} 0%, ${gradientColors[1]} 100%)`,
       backgroundColor: gradientColors[0],
+      ...(isWeb && glow && !disabled ? { boxShadow: `0 4px 16px ${gradientColors[0]}40` } : {}),
     };
 
     return (
@@ -176,7 +200,7 @@ const AppButton = ({
         onPress={onPress}
         disabled={disabled || loading}
         activeOpacity={0.85}
-        style={[getButtonStyles(), getGlowStyle(), getWebHoverStyles(), style]}
+        style={[getButtonStyles(), !isWeb ? getGlowStyle() : {}, getWebHoverStyles(), style]}
       >
         {isWeb ? (
           <View style={[styles.gradient, webGradientStyle, { borderRadius: theme.borderRadius.lg }]}>
@@ -196,13 +220,13 @@ const AppButton = ({
     );
   }
 
-  // For non-gradient buttons (outline, ghost, secondary)
+  // For non-gradient buttons (outline, ghost, secondary, glass)
   return (
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled || loading}
       activeOpacity={0.7}
-      style={[getButtonStyles(), getWebHoverStyles(), style]}
+      style={[getButtonStyles(), getGlowStyle(), getWebHoverStyles(), style]}
     >
       {renderContent()}
     </TouchableOpacity>

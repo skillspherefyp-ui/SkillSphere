@@ -20,6 +20,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
+const ORANGE = '#FF8C42';
+
 const StudentDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -99,6 +101,12 @@ const StudentDetailScreen = () => {
     );
   }
 
+  // Vibrant avatar color based on name
+  const avatarPalette = ['#6366F1', '#22D3EE', '#10B981', ORANGE, '#8B5CF6', '#EC4899', '#F59E0B', '#3B82F6'];
+  const avatarColor = student.isActive
+    ? avatarPalette[student.name.charCodeAt(0) % avatarPalette.length]
+    : '#EF4444';
+
   return (
     <MainLayout
       showSidebar={true}
@@ -114,23 +122,37 @@ const StudentDetailScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Section */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerTextContainer}>
-            <View style={styles.titleRow}>
-              <TouchableOpacity
-                style={[styles.backButton, { backgroundColor: theme.colors.surface }]}
-                onPress={() => navigation.goBack()}
-              >
-                <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
+        {/* Page Header Banner */}
+        <View
+          style={[
+            styles.pageHeaderBanner,
+            {
+              backgroundColor: isDark ? 'rgba(34,211,238,0.06)' : 'rgba(34,211,238,0.05)',
+              borderColor: 'rgba(34,211,238,0.15)',
+            },
+          ]}
+        >
+          <View style={styles.bannerLeft}>
+            <TouchableOpacity
+              style={[
+                styles.backButton,
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)' },
+              ]}
+              onPress={() => navigation.goBack()}
+            >
+              <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={styles.bannerIconCircle}>
+              <Icon name="school" size={22} color="#22D3EE" />
+            </View>
+            <View style={styles.bannerTextGroup}>
               <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>
                 Student Details
               </Text>
+              <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
+                View and manage student information
+              </Text>
             </View>
-            <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
-              View and manage student information
-            </Text>
           </View>
         </View>
 
@@ -141,9 +163,20 @@ const StudentDetailScreen = () => {
             {/* Profile Hero Card */}
             <AppCard style={styles.heroCard}>
               <View style={styles.profileHeader}>
-                <View style={[styles.avatar, { backgroundColor: !student.isActive ? theme.colors.error : theme.colors.primary }]}>
+                {/* Large Avatar */}
+                <View
+                  style={[
+                    styles.avatar,
+                    {
+                      backgroundColor: avatarColor,
+                      shadowColor: avatarColor,
+                      ...(Platform.OS === 'web' && { boxShadow: `0 4px 20px ${avatarColor}55` }),
+                    },
+                  ]}
+                >
                   <Text style={styles.avatarText}>{student.name.charAt(0).toUpperCase()}</Text>
                 </View>
+
                 <View style={styles.profileInfo}>
                   <Text style={[styles.studentName, { color: theme.colors.textPrimary }]}>
                     {student.name}
@@ -151,10 +184,15 @@ const StudentDetailScreen = () => {
                   <Text style={[styles.studentEmail, { color: theme.colors.textSecondary }]}>
                     {student.email}
                   </Text>
+                  {/* Prominent Status Badge */}
                   <View
                     style={[
                       styles.statusBadge,
-                      { backgroundColor: student.isActive ? '#10B98120' : '#EF444420' },
+                      {
+                        backgroundColor: student.isActive ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                        borderWidth: 1,
+                        borderColor: student.isActive ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)',
+                      },
                     ]}
                   >
                     <View
@@ -169,7 +207,7 @@ const StudentDetailScreen = () => {
                         { color: student.isActive ? '#10B981' : '#EF4444' },
                       ]}
                     >
-                      {student.isActive ? 'Active' : 'Inactive'}
+                      {student.isActive ? 'Active Account' : 'Inactive Account'}
                     </Text>
                   </View>
                 </View>
@@ -178,9 +216,14 @@ const StudentDetailScreen = () => {
 
             {/* Student Info Card */}
             <AppCard style={styles.card}>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                Student Information
-              </Text>
+              <View style={styles.cardTitleRow}>
+                <View style={[styles.cardTitleIcon, { backgroundColor: 'rgba(99,102,241,0.12)' }]}>
+                  <Icon name="person" size={16} color="#6366F1" />
+                </View>
+                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
+                  Student Information
+                </Text>
+              </View>
 
               <View style={styles.infoGrid}>
                 <View style={styles.infoGridItem}>
@@ -227,9 +270,14 @@ const StudentDetailScreen = () => {
 
             {/* Progress Card */}
             <AppCard style={styles.card}>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                Overall Progress
-              </Text>
+              <View style={styles.cardTitleRow}>
+                <View style={[styles.cardTitleIcon, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+                  <Icon name="trending-up" size={16} color="#10B981" />
+                </View>
+                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
+                  Overall Progress
+                </Text>
+              </View>
 
               <View style={styles.progressSection}>
                 <View style={styles.progressHeader}>
@@ -279,15 +327,31 @@ const StudentDetailScreen = () => {
 
           {/* Side Column */}
           <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.sideColumn}>
-            {/* Quick Stats Card */}
-            <AppCard style={styles.card}>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                Account Info
-              </Text>
+            {/* Account Info Card */}
+            <AppCard style={[styles.card, styles.sideCard]}>
+              <View style={styles.cardTitleRow}>
+                <View style={[styles.cardTitleIcon, { backgroundColor: 'rgba(255,140,66,0.12)' }]}>
+                  <Icon name="time" size={16} color={ORANGE} />
+                </View>
+                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
+                  Account Info
+                </Text>
+              </View>
 
               <View style={styles.accountInfoList}>
-                <View style={styles.accountInfoItem}>
-                  <Icon name="time-outline" size={18} color={theme.colors.textTertiary} />
+                <View
+                  style={[
+                    styles.accountInfoItem,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(26,26,46,0.03)',
+                      borderRadius: 10,
+                      padding: 12,
+                    },
+                  ]}
+                >
+                  <View style={[styles.accountInfoIconCircle, { backgroundColor: 'rgba(99,102,241,0.12)' }]}>
+                    <Icon name="time-outline" size={16} color="#6366F1" />
+                  </View>
                   <View style={styles.accountInfoContent}>
                     <Text style={[styles.accountInfoLabel, { color: theme.colors.textTertiary }]}>Member Since</Text>
                     <Text style={[styles.accountInfoValue, { color: theme.colors.textPrimary }]}>
@@ -296,8 +360,19 @@ const StudentDetailScreen = () => {
                   </View>
                 </View>
 
-                <View style={styles.accountInfoItem}>
-                  <Icon name="log-in-outline" size={18} color={theme.colors.textTertiary} />
+                <View
+                  style={[
+                    styles.accountInfoItem,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(26,26,46,0.03)',
+                      borderRadius: 10,
+                      padding: 12,
+                    },
+                  ]}
+                >
+                  <View style={[styles.accountInfoIconCircle, { backgroundColor: 'rgba(34,211,238,0.12)' }]}>
+                    <Icon name="log-in-outline" size={16} color="#22D3EE" />
+                  </View>
                   <View style={styles.accountInfoContent}>
                     <Text style={[styles.accountInfoLabel, { color: theme.colors.textTertiary }]}>Last Login</Text>
                     <Text style={[styles.accountInfoValue, { color: theme.colors.textPrimary }]}>
@@ -309,10 +384,15 @@ const StudentDetailScreen = () => {
             </AppCard>
 
             {/* Actions Card */}
-            <AppCard style={styles.card}>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                Actions
-              </Text>
+            <AppCard style={[styles.card, styles.sideCard]}>
+              <View style={styles.cardTitleRow}>
+                <View style={[styles.cardTitleIcon, { backgroundColor: 'rgba(239,68,68,0.10)' }]}>
+                  <Icon name="settings" size={16} color="#EF4444" />
+                </View>
+                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
+                  Actions
+                </Text>
+              </View>
 
               <View style={styles.actionsList}>
                 <AppButton
@@ -332,15 +412,36 @@ const StudentDetailScreen = () => {
               </View>
             </AppCard>
 
-            {/* Info Card */}
-            <AppCard style={[styles.infoCard, { backgroundColor: theme.colors.primary + '10' }]}>
-              <Icon name="information-circle" size={20} color={theme.colors.primary} />
-              <Text style={[styles.infoCardText, { color: theme.colors.primary }]}>
+            {/* Info Notice Card */}
+            <View
+              style={[
+                styles.infoCard,
+                {
+                  backgroundColor: student.isActive
+                    ? (isDark ? 'rgba(16,185,129,0.08)' : 'rgba(16,185,129,0.07)')
+                    : (isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.07)'),
+                  borderColor: student.isActive
+                    ? 'rgba(16,185,129,0.2)'
+                    : 'rgba(239,68,68,0.2)',
+                },
+              ]}
+            >
+              <Icon
+                name="information-circle"
+                size={20}
+                color={student.isActive ? '#10B981' : '#EF4444'}
+              />
+              <Text
+                style={[
+                  styles.infoCardText,
+                  { color: student.isActive ? '#10B981' : '#EF4444' },
+                ]}
+              >
                 {student.isActive
                   ? 'This student account is active and can access all enrolled courses.'
                   : 'This student account is deactivated and cannot access the platform.'}
               </Text>
-            </AppCard>
+            </View>
           </Animated.View>
         </View>
       </ScrollView>
@@ -364,37 +465,49 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       padding: 40,
     },
 
-    // Header Section
-    headerSection: {
-      marginBottom: 24,
-      width: '100%',
+    // Page Header Banner
+    pageHeaderBanner: {
+      flexDirection: isTablet ? 'row' : 'column',
+      justifyContent: 'space-between',
+      alignItems: isTablet ? 'center' : 'flex-start',
+      padding: isMobile ? 16 : 20,
+      marginBottom: 20,
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 12,
     },
-    headerTextContainer: {
-      width: '100%',
-    },
-    titleRow: {
+    bannerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      marginBottom: 4,
-      flexWrap: 'wrap',
+      flex: 1,
     },
     backButton: {
       width: 40,
       height: 40,
-      borderRadius: 12,
+      borderRadius: 20,
       justifyContent: 'center',
       alignItems: 'center',
-      ...theme.shadows.sm,
+    },
+    bannerIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(34,211,238,0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerTextGroup: {
+      flex: 1,
     },
     pageTitle: {
-      fontSize: isMobile ? 20 : 28,
+      fontSize: isMobile ? 18 : 22,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
-      flex: isMobile ? 1 : undefined,
+      marginBottom: 2,
     },
     pageSubtitle: {
-      fontSize: 14,
+      fontSize: 13,
       fontFamily: theme.typography.fontFamily.regular,
     },
 
@@ -421,17 +534,21 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     profileHeader: {
       flexDirection: isMobile ? 'column' : 'row',
       alignItems: isMobile ? 'center' : 'flex-start',
-      gap: 16,
+      gap: 20,
     },
     avatar: {
-      width: isMobile ? 80 : 100,
-      height: isMobile ? 80 : 100,
-      borderRadius: isMobile ? 40 : 50,
+      width: isMobile ? 90 : 100,
+      height: isMobile ? 90 : 100,
+      borderRadius: isMobile ? 45 : 50,
       justifyContent: 'center',
       alignItems: 'center',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 10,
+      elevation: 6,
     },
     avatarText: {
-      fontSize: isMobile ? 32 : 40,
+      fontSize: isMobile ? 36 : 42,
       fontWeight: 'bold',
       color: '#ffffff',
       fontFamily: theme.typography.fontFamily.bold,
@@ -441,7 +558,7 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       alignItems: isMobile ? 'center' : 'flex-start',
     },
     studentName: {
-      fontSize: isMobile ? 20 : 24,
+      fontSize: isMobile ? 22 : 26,
       fontWeight: '700',
       marginBottom: 4,
       fontFamily: theme.typography.fontFamily.bold,
@@ -455,9 +572,9 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     statusBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 12,
+      paddingHorizontal: 14,
       paddingVertical: 6,
-      borderRadius: 16,
+      borderRadius: 20,
       gap: 6,
     },
     statusDot: {
@@ -475,10 +592,26 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     card: {
       padding: isMobile ? 16 : 20,
     },
+    sideCard: {
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(26,26,46,0.06)',
+    },
+    cardTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 16,
+    },
+    cardTitleIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
     cardTitle: {
       fontSize: 16,
       fontWeight: '600',
-      marginBottom: 16,
       fontFamily: theme.typography.fontFamily.semiBold,
     },
 
@@ -574,12 +707,19 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
 
     // Account Info
     accountInfoList: {
-      gap: 16,
+      gap: 10,
     },
     accountInfoItem: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
+    },
+    accountInfoIconCircle: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     accountInfoContent: {
       flex: 1,
@@ -603,11 +743,12 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       width: '100%',
     },
 
-    // Info Card
+    // Info Notice Card
     infoCard: {
       flexDirection: 'row',
       padding: 16,
       borderRadius: 12,
+      borderWidth: 1,
       alignItems: 'flex-start',
       gap: 12,
     },

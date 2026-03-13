@@ -22,6 +22,8 @@ import { useTheme } from '../../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import { resolveFileUrl } from '../../utils/urlHelpers';
 
+const ORANGE = '#FF8C42';
+
 const CourseListScreen = () => {
   const { courses, categories } = useData();
   const { user, logout } = useAuth();
@@ -119,7 +121,10 @@ const CourseListScreen = () => {
       <TouchableOpacity
         style={[
           styles.courseCard,
-          { backgroundColor: isDark ? theme.colors.card : theme.colors.surface },
+          {
+            backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
+            borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.08)',
+          },
         ]}
         activeOpacity={0.7}
         onPress={() => navigation.navigate('CourseDetail', { courseId: course.id })}
@@ -132,8 +137,10 @@ const CourseListScreen = () => {
             resizeMode="cover"
           />
         ) : (
-          <View style={[styles.thumbnailPlaceholder, { backgroundColor: theme.colors.primary + '20' }]}>
-            <Icon name="book-outline" size={32} color={theme.colors.primary} />
+          <View style={[styles.thumbnailPlaceholder, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)' }]}>
+            <View style={styles.thumbnailIconCircle}>
+              <Icon name="book" size={28} color="#6366F1" />
+            </View>
           </View>
         )}
 
@@ -145,7 +152,13 @@ const CourseListScreen = () => {
               style={[
                 styles.statusBadge,
                 {
-                  backgroundColor: course.status === 'published' ? '#10B98120' : '#F5970820',
+                  backgroundColor: course.status === 'published'
+                    ? 'rgba(16,185,129,0.12)'
+                    : 'rgba(245,151,8,0.12)',
+                  borderWidth: 1,
+                  borderColor: course.status === 'published'
+                    ? 'rgba(16,185,129,0.25)'
+                    : 'rgba(245,151,8,0.25)',
                 },
               ]}
             >
@@ -193,17 +206,23 @@ const CourseListScreen = () => {
           {/* Actions */}
           <View style={styles.actionRow}>
             <TouchableOpacity
-              style={[styles.actionBtn, { borderColor: theme.colors.border }]}
+              style={[
+                styles.actionBtn,
+                {
+                  borderColor: theme.colors.primary,
+                  backgroundColor: 'transparent',
+                },
+              ]}
               onPress={() => navigation.navigate('CreateCourse', { courseId: course.id, courseData: course })}
             >
-              <Icon name="create-outline" size={16} color={theme.colors.primary} />
+              <Icon name="create-outline" size={15} color={theme.colors.primary} />
               <Text style={[styles.actionBtnText, { color: theme.colors.primary }]}>Edit</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.actionBtn, styles.viewBtn, { backgroundColor: theme.colors.primary }]}
+              style={[styles.actionBtn, styles.viewBtn, { backgroundColor: ORANGE, borderColor: ORANGE }]}
               onPress={() => navigation.navigate('CourseDetail', { courseId: course.id })}
             >
-              <Icon name="eye-outline" size={16} color="#FFFFFF" />
+              <Icon name="eye-outline" size={15} color="#FFFFFF" />
               <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>View</Text>
             </TouchableOpacity>
           </View>
@@ -227,59 +246,115 @@ const CourseListScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Section */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerTextContainer}>
-            <View style={styles.titleRow}>
-              <TouchableOpacity
-                style={[styles.backButton, { backgroundColor: theme.colors.surface }]}
-                onPress={() => navigation.goBack()}
-              >
-                <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
+        {/* Page Header Banner */}
+        <View
+          style={[
+            styles.pageHeaderBanner,
+            {
+              backgroundColor: isDark ? 'rgba(255,140,66,0.06)' : 'rgba(255,140,66,0.05)',
+              borderColor: 'rgba(255,140,66,0.15)',
+            },
+          ]}
+        >
+          {/* Left Side */}
+          <View style={styles.bannerLeft}>
+            <TouchableOpacity
+              style={[
+                styles.backButton,
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)' },
+              ]}
+              onPress={() => navigation.goBack()}
+            >
+              <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={styles.bannerIconCircle}>
+              <Icon name="book" size={22} color={ORANGE} />
+            </View>
+            <View style={styles.bannerTextGroup}>
               <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>
                 Manage Courses
               </Text>
+              <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
+                Create, edit, and manage your course catalog
+              </Text>
             </View>
-            <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
-              Create, edit, and manage your course catalog
-            </Text>
           </View>
-          <AppButton
-            title="Create New Course"
+
+          {/* Right Side */}
+          <TouchableOpacity
+            style={styles.createCourseBtn}
             onPress={() => navigation.navigate('CreateCourse')}
-            variant="primary"
-            style={styles.addButton}
-            leftIcon="add"
-          />
+            activeOpacity={0.85}
+          >
+            <Icon name="add" size={18} color="#FFFFFF" />
+            <Text style={styles.createCourseBtnText}>Create New Course</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Stats Section */}
         <View style={styles.statsSection}>
-          <AppCard style={styles.statCard}>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Total Courses
-            </Text>
-            <Text style={[styles.statValue, { color: theme.colors.primary }]}>
+          {/* Total Courses */}
+          <View
+            style={[
+              styles.statCardNew,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(99,102,241,0.12)' }]}>
+              <Icon name="book" size={20} color="#6366F1" />
+            </View>
+            <Text style={[styles.statValueNew, { color: '#6366F1' }]}>
               {stats.totalCourses}
             </Text>
-          </AppCard>
-          <AppCard style={styles.statCard}>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Published
+            <Text style={[styles.statLabelNew, { color: theme.colors.textSecondary }]}>
+              Total Courses
             </Text>
-            <Text style={[styles.statValue, { color: '#10B981' }]}>
+          </View>
+
+          {/* Published */}
+          <View
+            style={[
+              styles.statCardNew,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+              <Icon name="checkmark-circle" size={20} color="#10B981" />
+            </View>
+            <Text style={[styles.statValueNew, { color: '#10B981' }]}>
               {stats.publishedCourses}
             </Text>
-          </AppCard>
-          <AppCard style={styles.statCard}>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Drafts
+            <Text style={[styles.statLabelNew, { color: theme.colors.textSecondary }]}>
+              Published
             </Text>
-            <Text style={[styles.statValue, { color: '#F59708' }]}>
+          </View>
+
+          {/* Drafts */}
+          <View
+            style={[
+              styles.statCardNew,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(245,151,8,0.12)' }]}>
+              <Icon name="time" size={20} color="#F59708" />
+            </View>
+            <Text style={[styles.statValueNew, { color: '#F59708' }]}>
               {stats.draftCourses}
             </Text>
-          </AppCard>
+            <Text style={[styles.statLabelNew, { color: theme.colors.textSecondary }]}>
+              Drafts
+            </Text>
+          </View>
         </View>
 
         {/* Search & Filter Section */}
@@ -399,45 +474,69 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       paddingBottom: 40,
     },
 
-    // Header Section
-    headerSection: {
+    // Page Header Banner
+    pageHeaderBanner: {
       flexDirection: isTablet ? 'row' : 'column',
       justifyContent: 'space-between',
       alignItems: isTablet ? 'center' : 'flex-start',
-      marginBottom: 24,
-      gap: 16,
+      padding: isMobile ? 16 : 20,
+      marginBottom: 20,
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 12,
     },
-    headerTextContainer: {
-      flex: isTablet ? 1 : undefined,
-      width: isTablet ? undefined : '100%',
-    },
-    titleRow: {
+    bannerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      marginBottom: 4,
-      flexWrap: 'wrap',
+      flex: isTablet ? 1 : undefined,
     },
     backButton: {
       width: 40,
       height: 40,
-      borderRadius: 12,
+      borderRadius: 20,
       justifyContent: 'center',
       alignItems: 'center',
-      ...theme.shadows.sm,
+    },
+    bannerIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(255,140,66,0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerTextGroup: {
+      flex: 1,
     },
     pageTitle: {
-      fontSize: isMobile ? 20 : 28,
+      fontSize: isMobile ? 18 : 22,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
-      flex: isMobile ? 1 : undefined,
+      marginBottom: 2,
     },
     pageSubtitle: {
-      fontSize: 14,
+      fontSize: 13,
       fontFamily: theme.typography.fontFamily.regular,
     },
-    addButton: {
-      minWidth: isMobile ? '100%' : 180,
+    createCourseBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: ORANGE,
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+      borderRadius: 10,
+      alignSelf: isTablet ? 'auto' : 'flex-start',
+      ...(Platform.OS === 'web' && {
+        boxShadow: '0 2px 12px rgba(255,140,66,0.35)',
+      }),
+    },
+    createCourseBtnText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '600',
+      fontFamily: theme.typography.fontFamily.semiBold,
     },
 
     // Stats Section
@@ -447,22 +546,36 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       gap: isMobile ? 12 : 16,
       marginBottom: 24,
     },
-    statCard: {
-      flex: isMobile ? undefined : 1,
-      width: isMobile ? '100%' : undefined,
-      minWidth: isMobile ? undefined : isTablet ? 150 : 180,
-      maxWidth: isLargeScreen ? 250 : undefined,
-      padding: isMobile ? 16 : 20,
+    statCardNew: {
+      flex: 1,
+      minWidth: 120,
+      padding: 16,
+      borderRadius: 14,
+      borderWidth: 1,
+      alignItems: 'center',
+      gap: 4,
+      ...(Platform.OS === 'web' && {
+        boxShadow: isDark ? 'none' : '0 1px 8px rgba(26,26,46,0.06)',
+      }),
     },
-    statLabel: {
-      fontSize: 13,
-      marginBottom: 8,
-      fontFamily: theme.typography.fontFamily.regular,
+    statIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 4,
     },
-    statValue: {
+    statValueNew: {
       fontSize: isMobile ? 28 : 32,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
+      lineHeight: isMobile ? 34 : 38,
+    },
+    statLabelNew: {
+      fontSize: 13,
+      fontFamily: theme.typography.fontFamily.regular,
+      textAlign: 'center',
     },
 
     // Filter Section
@@ -547,7 +660,6 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     courseCard: {
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.1)' : theme.colors.border,
       overflow: 'hidden',
       ...theme.shadows.sm,
     },
@@ -558,6 +670,14 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     thumbnailPlaceholder: {
       width: '100%',
       height: isMobile ? 160 : 140,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    thumbnailIconCircle: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: 'rgba(99,102,241,0.2)',
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -627,7 +747,7 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       gap: 4,
     },
     viewBtn: {
-      borderWidth: 0,
+      borderWidth: 1,
     },
     actionBtnText: {
       fontSize: 13,

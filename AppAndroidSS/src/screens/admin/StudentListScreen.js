@@ -20,6 +20,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 
+const ORANGE = '#FF8C42';
+
 const StudentListScreen = () => {
   const { students, fetchStudents, toggleUserStatus } = useData();
   const { user, logout } = useAuth();
@@ -106,103 +108,127 @@ const StudentListScreen = () => {
 
   const styles = getStyles(theme, isDark, isLargeScreen, isTablet, isMobile);
 
-  const renderStudentCard = (student, index) => (
-    <Animated.View
-      key={student.id}
-      entering={FadeInDown.duration(400).delay(index * 80)}
-      style={styles.studentCardWrapper}
-    >
-      <TouchableOpacity
-        style={[
-          styles.studentCard,
-          { backgroundColor: isDark ? theme.colors.card : theme.colors.surface },
-        ]}
-        activeOpacity={0.7}
-        onPress={() => navigation.navigate('StudentDetail', { studentId: student.id })}
-      >
-        {/* Avatar & Info */}
-        <View style={styles.studentHeader}>
-          <View style={[styles.avatar, { backgroundColor: !student.isActive ? theme.colors.error : theme.colors.primary }]}>
-            <Text style={styles.avatarText}>{student.name.charAt(0).toUpperCase()}</Text>
-          </View>
-          <View style={styles.studentInfo}>
-            <Text style={[styles.studentName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-              {student.name}
-            </Text>
-            <Text style={[styles.studentEmail, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-              {student.email}
-            </Text>
-          </View>
-        </View>
+  // Vibrant avatar color palette keyed by first character
+  const getAvatarColor = (name, isActive) => {
+    if (!isActive) return '#EF4444';
+    const palette = ['#6366F1', '#22D3EE', '#10B981', ORANGE, '#8B5CF6', '#EC4899', '#F59E0B', '#3B82F6'];
+    const idx = name.charCodeAt(0) % palette.length;
+    return palette[idx];
+  };
 
-        {/* Status Badge */}
-        <View style={styles.statusRow}>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: student.isActive ? '#10B98120' : '#EF444420' },
-            ]}
-          >
+  const renderStudentCard = (student, index) => {
+    const avatarColor = getAvatarColor(student.name, student.isActive);
+    return (
+      <Animated.View
+        key={student.id}
+        entering={FadeInDown.duration(400).delay(index * 80)}
+        style={styles.studentCardWrapper}
+      >
+        <TouchableOpacity
+          style={[
+            styles.studentCard,
+            {
+              backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.08)',
+            },
+          ]}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('StudentDetail', { studentId: student.id })}
+        >
+          {/* Avatar & Info */}
+          <View style={styles.studentHeader}>
+            <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+              <Text style={styles.avatarText}>{student.name.charAt(0).toUpperCase()}</Text>
+            </View>
+            <View style={styles.studentInfo}>
+              <Text style={[styles.studentName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                {student.name}
+              </Text>
+              <Text style={[styles.studentEmail, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                {student.email}
+              </Text>
+            </View>
+          </View>
+
+          {/* Status Badge */}
+          <View style={styles.statusRow}>
             <View
               style={[
-                styles.statusDot,
-                { backgroundColor: student.isActive ? '#10B981' : '#EF4444' },
-              ]}
-            />
-            <Text
-              style={[
-                styles.statusText,
-                { color: student.isActive ? '#10B981' : '#EF4444' },
+                styles.statusBadge,
+                {
+                  backgroundColor: student.isActive ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                  borderWidth: 1,
+                  borderColor: student.isActive ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)',
+                },
               ]}
             >
-              {student.isActive ? 'Active' : 'Inactive'}
-            </Text>
+              <View
+                style={[
+                  styles.statusDot,
+                  { backgroundColor: student.isActive ? '#10B981' : '#EF4444' },
+                ]}
+              />
+              <Text
+                style={[
+                  styles.statusText,
+                  { color: student.isActive ? '#10B981' : '#EF4444' },
+                ]}
+              >
+                {student.isActive ? 'Active' : 'Inactive'}
+              </Text>
+            </View>
           </View>
-        </View>
 
-        {/* Meta Info */}
-        <View style={styles.metaRow}>
-          <View style={styles.metaItem}>
-            <Icon name="call-outline" size={14} color={theme.colors.textTertiary} />
-            <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
-              {student.phone || 'No phone'}
-            </Text>
+          {/* Meta Info */}
+          <View style={styles.metaRow}>
+            <View style={styles.metaItem}>
+              <Icon name="call-outline" size={14} color={theme.colors.textTertiary} />
+              <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
+                {student.phone || 'No phone'}
+              </Text>
+            </View>
+            <View style={styles.metaItem}>
+              <Icon name="school-outline" size={14} color={theme.colors.textTertiary} />
+              <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
+                {student.qualification || 'N/A'}
+              </Text>
+            </View>
           </View>
-          <View style={styles.metaItem}>
-            <Icon name="school-outline" size={14} color={theme.colors.textTertiary} />
-            <Text style={[styles.metaText, { color: theme.colors.textTertiary }]}>
-              {student.qualification || 'N/A'}
-            </Text>
-          </View>
-        </View>
 
-        {/* Actions */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionBtn, { borderColor: theme.colors.border }]}
-            onPress={() => navigation.navigate('StudentDetail', { studentId: student.id })}
-          >
-            <Icon name="eye-outline" size={16} color={theme.colors.primary} />
-            <Text style={[styles.actionBtnText, { color: theme.colors.primary }]}>View</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.actionBtn,
-              styles.toggleBtn,
-              { backgroundColor: student.isActive ? theme.colors.error : '#10B981' },
-            ]}
-            onPress={() => handleStatusToggle(student)}
-            disabled={loading}
-          >
-            <Icon name={student.isActive ? 'close-circle-outline' : 'checkmark-circle-outline'} size={16} color="#FFFFFF" />
-            <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>
-              {student.isActive ? 'Deactivate' : 'Activate'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
-  );
+          {/* Actions */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[
+                styles.actionBtn,
+                {
+                  borderColor: ORANGE,
+                  backgroundColor: 'transparent',
+                },
+              ]}
+              onPress={() => navigation.navigate('StudentDetail', { studentId: student.id })}
+            >
+              <Icon name="eye-outline" size={15} color={ORANGE} />
+              <Text style={[styles.actionBtnText, { color: ORANGE }]}>View</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.actionBtn,
+                styles.toggleBtn,
+                { backgroundColor: student.isActive ? '#EF4444' : '#10B981', borderColor: student.isActive ? '#EF4444' : '#10B981' },
+              ]}
+              onPress={() => handleStatusToggle(student)}
+              disabled={loading}
+            >
+              <Icon name={student.isActive ? 'close-circle-outline' : 'checkmark-circle-outline'} size={15} color="#FFFFFF" />
+              <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>
+                {student.isActive ? 'Deactivate' : 'Activate'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
 
   return (
     <MainLayout
@@ -219,52 +245,105 @@ const StudentListScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Section */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerTextContainer}>
-            <View style={styles.titleRow}>
-              <TouchableOpacity
-                style={[styles.backButton, { backgroundColor: theme.colors.surface }]}
-                onPress={() => navigation.goBack()}
-              >
-                <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
+        {/* Page Header Banner */}
+        <View
+          style={[
+            styles.pageHeaderBanner,
+            {
+              backgroundColor: isDark ? 'rgba(34,211,238,0.06)' : 'rgba(34,211,238,0.05)',
+              borderColor: 'rgba(34,211,238,0.15)',
+            },
+          ]}
+        >
+          {/* Left Side */}
+          <View style={styles.bannerLeft}>
+            <TouchableOpacity
+              style={[
+                styles.backButton,
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)' },
+              ]}
+              onPress={() => navigation.goBack()}
+            >
+              <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={styles.bannerIconCircle}>
+              <Icon name="people" size={22} color="#22D3EE" />
+            </View>
+            <View style={styles.bannerTextGroup}>
               <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>
                 Students
               </Text>
+              <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
+                Manage student accounts and track their progress
+              </Text>
             </View>
-            <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
-              Manage student accounts and track their progress
-            </Text>
           </View>
         </View>
 
         {/* Stats Section */}
         <View style={styles.statsSection}>
-          <AppCard style={styles.statCard}>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Total Students
-            </Text>
-            <Text style={[styles.statValue, { color: theme.colors.primary }]}>
+          {/* Total Students */}
+          <View
+            style={[
+              styles.statCardNew,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(34,211,238,0.12)' }]}>
+              <Icon name="people" size={20} color="#22D3EE" />
+            </View>
+            <Text style={[styles.statValueNew, { color: '#22D3EE' }]}>
               {stats.totalStudents}
             </Text>
-          </AppCard>
-          <AppCard style={styles.statCard}>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Active
+            <Text style={[styles.statLabelNew, { color: theme.colors.textSecondary }]}>
+              Total Students
             </Text>
-            <Text style={[styles.statValue, { color: '#10B981' }]}>
+          </View>
+
+          {/* Active */}
+          <View
+            style={[
+              styles.statCardNew,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+              <Icon name="checkmark-circle" size={20} color="#10B981" />
+            </View>
+            <Text style={[styles.statValueNew, { color: '#10B981' }]}>
               {stats.activeStudents}
             </Text>
-          </AppCard>
-          <AppCard style={styles.statCard}>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Inactive
+            <Text style={[styles.statLabelNew, { color: theme.colors.textSecondary }]}>
+              Active
             </Text>
-            <Text style={[styles.statValue, { color: '#EF4444' }]}>
+          </View>
+
+          {/* Inactive */}
+          <View
+            style={[
+              styles.statCardNew,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(239,68,68,0.12)' }]}>
+              <Icon name="close-circle" size={20} color="#EF4444" />
+            </View>
+            <Text style={[styles.statValueNew, { color: '#EF4444' }]}>
               {stats.inactiveStudents}
             </Text>
-          </AppCard>
+            <Text style={[styles.statLabelNew, { color: theme.colors.textSecondary }]}>
+              Inactive
+            </Text>
+          </View>
         </View>
 
         {/* Search & Filter Section */}
@@ -342,41 +421,49 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       paddingBottom: 40,
     },
 
-    // Header Section
-    headerSection: {
+    // Page Header Banner
+    pageHeaderBanner: {
       flexDirection: isTablet ? 'row' : 'column',
       justifyContent: 'space-between',
       alignItems: isTablet ? 'center' : 'flex-start',
-      marginBottom: 24,
-      gap: 16,
+      padding: isMobile ? 16 : 20,
+      marginBottom: 20,
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 12,
     },
-    headerTextContainer: {
-      flex: isTablet ? 1 : undefined,
-      width: isTablet ? undefined : '100%',
-    },
-    titleRow: {
+    bannerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      marginBottom: 4,
-      flexWrap: 'wrap',
+      flex: isTablet ? 1 : undefined,
     },
     backButton: {
       width: 40,
       height: 40,
-      borderRadius: 12,
+      borderRadius: 20,
       justifyContent: 'center',
       alignItems: 'center',
-      ...theme.shadows.sm,
+    },
+    bannerIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(34,211,238,0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerTextGroup: {
+      flex: 1,
     },
     pageTitle: {
-      fontSize: isMobile ? 20 : 28,
+      fontSize: isMobile ? 18 : 22,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
-      flex: isMobile ? 1 : undefined,
+      marginBottom: 2,
     },
     pageSubtitle: {
-      fontSize: 14,
+      fontSize: 13,
       fontFamily: theme.typography.fontFamily.regular,
     },
 
@@ -387,22 +474,36 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       gap: isMobile ? 12 : 16,
       marginBottom: 24,
     },
-    statCard: {
-      flex: isMobile ? undefined : 1,
-      width: isMobile ? '100%' : undefined,
-      minWidth: isMobile ? undefined : isTablet ? 150 : 180,
-      maxWidth: isLargeScreen ? 250 : undefined,
-      padding: isMobile ? 16 : 20,
+    statCardNew: {
+      flex: 1,
+      minWidth: 120,
+      padding: 16,
+      borderRadius: 14,
+      borderWidth: 1,
+      alignItems: 'center',
+      gap: 4,
+      ...(Platform.OS === 'web' && {
+        boxShadow: isDark ? 'none' : '0 1px 8px rgba(26,26,46,0.06)',
+      }),
     },
-    statLabel: {
-      fontSize: 13,
-      marginBottom: 8,
-      fontFamily: theme.typography.fontFamily.regular,
+    statIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 4,
     },
-    statValue: {
+    statValueNew: {
       fontSize: isMobile ? 28 : 32,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
+      lineHeight: isMobile ? 34 : 38,
+    },
+    statLabelNew: {
+      fontSize: 13,
+      fontFamily: theme.typography.fontFamily.regular,
+      textAlign: 'center',
     },
 
     // Filter Section
@@ -487,7 +588,6 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     studentCard: {
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.1)' : theme.colors.border,
       padding: isMobile ? 14 : 16,
       ...theme.shadows.sm,
     },
@@ -497,15 +597,15 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       marginBottom: 12,
     },
     avatar: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
+      width: 54,
+      height: 54,
+      borderRadius: 27,
       justifyContent: 'center',
       alignItems: 'center',
       marginRight: 12,
     },
     avatarText: {
-      fontSize: 20,
+      fontSize: 22,
       fontWeight: 'bold',
       color: '#ffffff',
       fontFamily: theme.typography.fontFamily.bold,
@@ -575,7 +675,7 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       gap: 4,
     },
     toggleBtn: {
-      borderWidth: 0,
+      borderWidth: 1,
     },
     actionBtnText: {
       fontSize: 13,

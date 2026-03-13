@@ -17,7 +17,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { useTheme } from '../../context/ThemeContext';
 import MainLayout from '../../components/ui/MainLayout';
-import PageTitleRow from '../../components/ui/PageTitleRow';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import Skeleton, { SkeletonDashboardStats, SkeletonTableRow } from '../../components/ui/Skeleton';
@@ -69,7 +68,15 @@ const BarChart = ({ data, theme, isDark, height = 180 }) => {
         ))}
       </View>
       <View style={barChartStyles.chartArea}>
-        <View style={[barChartStyles.barsContainer, { height }]}>
+        <View
+          style={[
+            barChartStyles.barsContainer,
+            {
+              height,
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.1)',
+            },
+          ]}
+        >
           {data.map((item, index) => {
             const barHeight = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
             return (
@@ -110,7 +117,6 @@ const barChartStyles = StyleSheet.create({
     justifyContent: 'space-around',
     borderLeftWidth: 1,
     borderBottomWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 8,
   },
   barWrapper: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: '100%', paddingHorizontal: 4 },
@@ -139,13 +145,24 @@ const LineChart = ({ data, theme, isDark, height = 180 }) => {
         })}
       </View>
       <View style={lineChartStyles.chartArea}>
-        <View style={[lineChartStyles.chartContainer, { height }]}>
+        <View
+          style={[
+            lineChartStyles.chartContainer,
+            {
+              height,
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.1)',
+            },
+          ]}
+        >
           {[0, 1, 2, 3, 4].map((_, i) => (
             <View
               key={i}
               style={[
                 lineChartStyles.gridLine,
-                { top: (i * height) / 4, backgroundColor: 'rgba(255,255,255,0.05)' },
+                {
+                  top: (i * height) / 4,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(26,26,46,0.05)',
+                },
               ]}
             />
           ))}
@@ -212,7 +229,7 @@ const lineChartStyles = StyleSheet.create({
   yAxis: { width: 40, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 8 },
   yLabel: { fontSize: 10 },
   chartArea: { flex: 1 },
-  chartContainer: { position: 'relative', borderLeftWidth: 1, borderBottomWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  chartContainer: { position: 'relative', borderLeftWidth: 1, borderBottomWidth: 1 },
   gridLine: { position: 'absolute', left: 0, right: 0, height: 1 },
   dot: {
     position: 'absolute',
@@ -232,39 +249,89 @@ const lineChartStyles = StyleSheet.create({
 });
 
 // ============================================
-// DASHBOARD STAT CARD COMPONENT
+// REDESIGNED DASHBOARD STAT CARD COMPONENT
 // ============================================
 
 const DashboardStatCard = ({ icon, iconColor, value, label, change, theme, isDark, style }) => {
   const isPositive = change && change.startsWith('+');
 
   return (
-    <View style={[statCardStyles.card, { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderColor: theme.colors.border }, style]}>
-      <View style={statCardStyles.header}>
-        <Text style={[statCardStyles.label, { color: theme.colors.textSecondary }]}>{label}</Text>
-        <View style={[statCardStyles.iconContainer, { backgroundColor: iconColor + '15' }]}>
-          <Icon name={icon} size={20} color={iconColor} />
+    <View
+      style={[
+        dsc.card,
+        {
+          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF',
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+          borderLeftColor: iconColor,
+        },
+        style,
+      ]}
+    >
+      <View style={dsc.top}>
+        <Text style={[dsc.label, { color: theme.colors.textSecondary }]}>{label}</Text>
+        <View style={[dsc.iconCircle, { backgroundColor: iconColor + '18' }]}>
+          <Icon name={icon} size={18} color={iconColor} />
         </View>
       </View>
-      <Text style={[statCardStyles.value, { color: theme.colors.textPrimary }]}>
+      <Text style={[dsc.value, { color: theme.colors.textPrimary }]}>
         {typeof value === 'number' ? value.toLocaleString() : value}
       </Text>
       {change && (
-        <Text style={[statCardStyles.change, { color: isPositive ? '#10B981' : '#EF4444' }]}>
-          {change} from last month
-        </Text>
+        <View style={dsc.changeRow}>
+          <Icon
+            name={isPositive ? 'trending-up-outline' : 'trending-down-outline'}
+            size={13}
+            color={isPositive ? '#10B981' : '#EF4444'}
+          />
+          <Text style={[dsc.change, { color: isPositive ? '#10B981' : '#EF4444' }]}>
+            {change} from last month
+          </Text>
+        </View>
       )}
     </View>
   );
 };
 
-const statCardStyles = StyleSheet.create({
-  card: { padding: 20, borderRadius: 16, borderWidth: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  label: { fontSize: 14, fontWeight: '500' },
-  iconContainer: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  value: { fontSize: 32, fontWeight: '700', marginBottom: 4 },
-  change: { fontSize: 13, fontWeight: '500' },
+const dsc = StyleSheet.create({
+  card: {
+    padding: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderLeftWidth: 4,
+  },
+  top: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
+  },
+  iconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  value: {
+    fontSize: 34,
+    fontWeight: '900',
+    marginBottom: 6,
+    letterSpacing: -0.5,
+  },
+  changeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  change: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
 });
 
 // ============================================
@@ -444,7 +511,20 @@ const SuperAdminDashboard = () => {
         onSettings={() => navigation.navigate('Settings')}
       >
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          <PageTitleRow title="Super Admin Dashboard" subtitle="System-wide management and overview" />
+          {/* Loading banner */}
+          <View style={styles.pageBanner}>
+            <View style={styles.bannerLeft}>
+              <View style={[styles.bannerIconCircle, { backgroundColor: '#8B5CF6' + '20' }]}>
+                <Icon name="shield-checkmark" size={24} color="#8B5CF6" />
+              </View>
+              <View>
+                <Text style={[styles.bannerTitle, { color: theme.colors.textPrimary }]}>Super Admin Dashboard</Text>
+                <Text style={[styles.bannerSubtitle, { color: theme.colors.textSecondary }]}>
+                  System-wide management and overview
+                </Text>
+              </View>
+            </View>
+          </View>
           <View style={styles.section}>
             <SkeletonDashboardStats count={4} />
           </View>
@@ -476,15 +556,27 @@ const SuperAdminDashboard = () => {
           />
         }
       >
-        <PageTitleRow
-          title="Super Admin Dashboard"
-          subtitle="Welcome back! You have full system control."
-          primaryAction={{
-            label: 'Add Admin',
-            icon: 'person-add',
-            onPress: () => navigation.navigate('ManageUsers', { userType: 'admin' }),
-          }}
-        />
+        {/* Page Banner — replaces PageTitleRow */}
+        <View style={styles.pageBanner}>
+          <View style={styles.bannerLeft}>
+            <View style={[styles.bannerIconCircle, { backgroundColor: '#8B5CF6' + '20' }]}>
+              <Icon name="shield-checkmark" size={24} color="#8B5CF6" />
+            </View>
+            <View>
+              <Text style={[styles.bannerTitle, { color: theme.colors.textPrimary }]}>Super Admin Dashboard</Text>
+              <Text style={[styles.bannerSubtitle, { color: theme.colors.textSecondary }]}>
+                Welcome back! You have full system control.
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.createBtn}
+            onPress={() => navigation.navigate('ManageUsers', { userType: 'admin' })}
+          >
+            <Icon name="person-add" size={16} color="#FFFFFF" />
+            <Text style={styles.createBtnText}>Add Admin</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Stats Section */}
         <View style={styles.statsSection}>
@@ -533,15 +625,28 @@ const SuperAdminDashboard = () => {
         {/* Charts Section */}
         <View style={styles.chartsSection}>
           <Animated.View entering={FadeInDown.duration(400).delay(100)} style={styles.chartCard}>
-            <AppCard style={styles.chartCardInner}>
+            <AppCard
+              style={[
+                styles.chartCardInner,
+                {
+                  borderLeftWidth: 3,
+                  borderLeftColor: '#6366F1',
+                },
+              ]}
+            >
               <View style={styles.chartHeader}>
-                <View>
-                  <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
-                    User Growth
-                  </Text>
-                  <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
-                    Total registered users over time
-                  </Text>
+                <View style={styles.chartHeaderLeft}>
+                  <View style={styles.chartIconBadge}>
+                    <Icon name="bar-chart" size={16} color="#6366F1" />
+                  </View>
+                  <View>
+                    <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
+                      User Growth
+                    </Text>
+                    <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
+                      Total registered users over time
+                    </Text>
+                  </View>
                 </View>
                 <Icon name="trending-up" size={20} color="#10B981" />
               </View>
@@ -555,15 +660,28 @@ const SuperAdminDashboard = () => {
           </Animated.View>
 
           <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.chartCard}>
-            <AppCard style={styles.chartCardInner}>
+            <AppCard
+              style={[
+                styles.chartCardInner,
+                {
+                  borderLeftWidth: 3,
+                  borderLeftColor: '#8B5CF6',
+                },
+              ]}
+            >
               <View style={styles.chartHeader}>
-                <View>
-                  <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
-                    Course Growth
-                  </Text>
-                  <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
-                    Total courses on platform
-                  </Text>
+                <View style={styles.chartHeaderLeft}>
+                  <View style={[styles.chartIconBadge, { backgroundColor: '#8B5CF6' + '18' }]}>
+                    <Icon name="trending-up" size={16} color="#8B5CF6" />
+                  </View>
+                  <View>
+                    <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
+                      Course Growth
+                    </Text>
+                    <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
+                      Total courses on platform
+                    </Text>
+                  </View>
                 </View>
                 <Icon name="trending-up" size={20} color="#10B981" />
               </View>
@@ -581,8 +699,8 @@ const SuperAdminDashboard = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
-              <View style={[styles.sectionIcon, { backgroundColor: '#6366F115' }]}>
-                <Icon name="person" size={18} color="#6366F1" />
+              <View style={[styles.sectionIconBadge, { backgroundColor: '#6366F1' + '15' }]}>
+                <Icon name="person" size={16} color="#6366F1" />
               </View>
               <View>
                 <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
@@ -609,6 +727,11 @@ const SuperAdminDashboard = () => {
                   key={admin.id || index}
                   style={[
                     styles.tableRow,
+                    index % 2 === 1 && {
+                      backgroundColor: isDark
+                        ? 'rgba(255,255,255,0.02)'
+                        : 'rgba(99,102,241,0.03)',
+                    },
                     index < Math.min(admins.length, 5) - 1 && {
                       borderBottomColor: theme.colors.border,
                       borderBottomWidth: 1,
@@ -667,8 +790,8 @@ const SuperAdminDashboard = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
-              <View style={[styles.sectionIcon, { backgroundColor: '#8B5CF615' }]}>
-                <Icon name="shield-checkmark" size={18} color="#8B5CF6" />
+              <View style={[styles.sectionIconBadge, { backgroundColor: '#8B5CF6' + '15' }]}>
+                <Icon name="shield-checkmark" size={16} color="#8B5CF6" />
               </View>
               <View>
                 <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
@@ -695,6 +818,11 @@ const SuperAdminDashboard = () => {
                   key={expert.id || index}
                   style={[
                     styles.tableRow,
+                    index % 2 === 1 && {
+                      backgroundColor: isDark
+                        ? 'rgba(255,255,255,0.02)'
+                        : 'rgba(139,92,246,0.03)',
+                    },
                     index < Math.min(experts.length, 5) - 1 && {
                       borderBottomColor: theme.colors.border,
                       borderBottomWidth: 1,
@@ -753,8 +881,8 @@ const SuperAdminDashboard = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
-              <View style={[styles.sectionIcon, { backgroundColor: '#22D3EE15' }]}>
-                <Icon name="school" size={18} color="#22D3EE" />
+              <View style={[styles.sectionIconBadge, { backgroundColor: '#22D3EE' + '15' }]}>
+                <Icon name="school" size={16} color="#22D3EE" />
               </View>
               <View>
                 <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
@@ -781,6 +909,11 @@ const SuperAdminDashboard = () => {
                   key={student.id || index}
                   style={[
                     styles.tableRow,
+                    index % 2 === 1 && {
+                      backgroundColor: isDark
+                        ? 'rgba(255,255,255,0.02)'
+                        : 'rgba(34,211,238,0.03)',
+                    },
                     index < Math.min(students.length, 5) - 1 && {
                       borderBottomColor: theme.colors.border,
                       borderBottomWidth: 1,
@@ -844,15 +977,80 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     scrollView: { flex: 1 },
     scrollContent: { paddingBottom: 40 },
     section: { paddingHorizontal: isMobile ? 16 : 24, marginBottom: 24 },
+
+    // ---- Page Banner ----
+    pageBanner: {
+      flexDirection: isTablet ? 'row' : 'column',
+      justifyContent: 'space-between',
+      alignItems: isTablet ? 'center' : 'flex-start',
+      paddingHorizontal: isMobile ? 16 : 24,
+      paddingVertical: 20,
+      marginBottom: 8,
+      gap: 12,
+    },
+    bannerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      flex: isTablet ? 1 : undefined,
+    },
+    bannerIconCircle: {
+      width: 48,
+      height: 48,
+      borderRadius: 14,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerTitle: {
+      fontSize: isMobile ? 20 : 26,
+      fontWeight: '800',
+    },
+    bannerSubtitle: {
+      fontSize: 13,
+      marginTop: 2,
+    },
+    createBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      borderRadius: 10,
+      backgroundColor: '#FF8C42',
+    },
+    createBtnText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+
+    // ---- Section Header ----
     sectionHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
       marginBottom: 16,
     },
-    sectionTitle: { fontSize: 16, fontWeight: '600', fontFamily: theme.typography?.fontFamily?.semiBold },
+    sectionTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    sectionIconBadge: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      fontFamily: theme.typography?.fontFamily?.semiBold,
+    },
     sectionSubtitle: { fontSize: 12, marginTop: 2 },
 
+    // Stats Section
     statsSection: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -866,6 +1064,7 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       maxWidth: isLargeScreen ? 280 : undefined,
     },
 
+    // Charts Section
     chartsSection: {
       flexDirection: isLargeScreen ? 'row' : 'column',
       paddingHorizontal: isMobile ? 16 : 24,
@@ -880,21 +1079,24 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       alignItems: 'flex-start',
       marginBottom: 16,
     },
-    chartTitle: { fontSize: 16, fontWeight: '600' },
-    chartSubtitle: { fontSize: 13, marginTop: 4 },
-
-    sectionTitleRow: {
+    chartHeaderLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: 10,
+      flex: 1,
     },
-    sectionIcon: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
+    chartIconBadge: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      backgroundColor: '#6366F1' + '18',
       justifyContent: 'center',
       alignItems: 'center',
     },
+    chartTitle: { fontSize: 16, fontWeight: '600' },
+    chartSubtitle: { fontSize: 13, marginTop: 4 },
+
+    // Manage button
     manageButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -909,6 +1111,7 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       fontWeight: '600',
     },
 
+    // Table
     tableCard: { padding: 0, overflow: 'hidden' },
     tableRow: {
       flexDirection: 'row',

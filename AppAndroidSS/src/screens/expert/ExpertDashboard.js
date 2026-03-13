@@ -17,11 +17,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { useTheme } from '../../context/ThemeContext';
 import MainLayout from '../../components/ui/MainLayout';
-import PageTitleRow from '../../components/ui/PageTitleRow';
 import AppCard from '../../components/ui/AppCard';
-import AppButton from '../../components/ui/AppButton';
-import Skeleton, { SkeletonDashboardStats, SkeletonTableRow } from '../../components/ui/Skeleton';
+import Skeleton, { SkeletonDashboardStats } from '../../components/ui/Skeleton';
 import { resolveFileUrl } from '../../utils/urlHelpers';
+
+const ORANGE = '#FF8C42';
 
 // ============================================
 // UTILITY FUNCTIONS
@@ -69,7 +69,15 @@ const BarChart = ({ data, theme, isDark, height = 180 }) => {
         ))}
       </View>
       <View style={barChartStyles.chartArea}>
-        <View style={[barChartStyles.barsContainer, { height }]}>
+        <View
+          style={[
+            barChartStyles.barsContainer,
+            {
+              height,
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.1)',
+            },
+          ]}
+        >
           {data.map((item, index) => {
             const barHeight = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
             return (
@@ -101,8 +109,8 @@ const BarChart = ({ data, theme, isDark, height = 180 }) => {
 
 const barChartStyles = StyleSheet.create({
   container: { flexDirection: 'row', paddingTop: 10 },
-  yAxis: { width: 35, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 8 },
-  yLabel: { fontSize: 10 },
+  yAxis: { width: 40, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 8 },
+  yLabel: { fontSize: 11 },
   chartArea: { flex: 1 },
   barsContainer: {
     flexDirection: 'row',
@@ -110,49 +118,98 @@ const barChartStyles = StyleSheet.create({
     justifyContent: 'space-around',
     borderLeftWidth: 1,
     borderBottomWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 8,
   },
   barWrapper: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: '100%', paddingHorizontal: 4 },
-  bar: { width: '65%', borderTopLeftRadius: 4, borderTopRightRadius: 4, minHeight: 4 },
+  bar: { width: '70%', borderTopLeftRadius: 4, borderTopRightRadius: 4, minHeight: 4 },
   xAxis: { flexDirection: 'row', justifyContent: 'space-around', paddingTop: 8, paddingHorizontal: 8 },
-  xLabel: { fontSize: 10, flex: 1, textAlign: 'center' },
+  xLabel: { fontSize: 11, flex: 1, textAlign: 'center' },
 });
 
 // ============================================
-// DASHBOARD STAT CARD COMPONENT
+// REDESIGNED STAT CARD COMPONENT
 // ============================================
 
 const DashboardStatCard = ({ icon, iconColor, value, label, change, theme, isDark, style }) => {
   const isPositive = change && change.startsWith('+');
 
   return (
-    <View style={[statCardStyles.card, { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderColor: theme.colors.border }, style]}>
-      <View style={statCardStyles.header}>
-        <Text style={[statCardStyles.label, { color: theme.colors.textSecondary }]}>{label}</Text>
-        <View style={[statCardStyles.iconContainer, { backgroundColor: iconColor + '15' }]}>
-          <Icon name={icon} size={20} color={iconColor} />
+    <View
+      style={[
+        dsc.card,
+        {
+          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF',
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+          borderLeftColor: iconColor,
+        },
+        style,
+      ]}
+    >
+      <View style={dsc.top}>
+        <Text style={[dsc.label, { color: theme.colors.textSecondary }]}>{label}</Text>
+        <View style={[dsc.iconCircle, { backgroundColor: iconColor + '18' }]}>
+          <Icon name={icon} size={18} color={iconColor} />
         </View>
       </View>
-      <Text style={[statCardStyles.value, { color: theme.colors.textPrimary }]}>
+      <Text style={[dsc.value, { color: theme.colors.textPrimary }]}>
         {typeof value === 'number' ? value.toLocaleString() : value}
       </Text>
       {change && (
-        <Text style={[statCardStyles.change, { color: isPositive ? '#10B981' : '#EF4444' }]}>
-          {change} from last month
-        </Text>
+        <View style={dsc.changeRow}>
+          <Icon
+            name={isPositive ? 'trending-up-outline' : 'trending-down-outline'}
+            size={13}
+            color={isPositive ? '#10B981' : '#EF4444'}
+          />
+          <Text style={[dsc.change, { color: isPositive ? '#10B981' : '#EF4444' }]}>
+            {change} from last month
+          </Text>
+        </View>
       )}
     </View>
   );
 };
 
-const statCardStyles = StyleSheet.create({
-  card: { padding: 20, borderRadius: 16, borderWidth: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  label: { fontSize: 14, fontWeight: '500' },
-  iconContainer: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  value: { fontSize: 32, fontWeight: '700', marginBottom: 4 },
-  change: { fontSize: 13, fontWeight: '500' },
+const dsc = StyleSheet.create({
+  card: {
+    padding: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderLeftWidth: 4,
+  },
+  top: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
+  },
+  iconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  value: {
+    fontSize: 34,
+    fontWeight: '900',
+    marginBottom: 6,
+    letterSpacing: -0.5,
+  },
+  changeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  change: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
 });
 
 // ============================================
@@ -223,7 +280,6 @@ const ExpertDashboard = () => {
     const pendingReviewCourses = courses.filter(c => c.status === 'pending' || c.status === 'draft');
     const reviewedCourses = courses.filter(c => c.expertReviewed);
 
-    // Calculate courses published this month vs last month
     const coursesThisMonth = publishedCourses.filter(c => {
       const date = new Date(c.createdAt);
       return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
@@ -234,7 +290,6 @@ const ExpertDashboard = () => {
       return date.getMonth() === lastMonth && date.getFullYear() === lastMonthYear;
     }).length;
 
-    // Calculate reviews this month vs last month
     const reviewsThisMonth = reviewedCourses.filter(c => {
       const date = new Date(c.updatedAt);
       return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
@@ -245,7 +300,6 @@ const ExpertDashboard = () => {
       return date.getMonth() === lastMonth && date.getFullYear() === lastMonthYear;
     }).length;
 
-    // Calculate pending this month vs last month
     const pendingThisMonth = pendingReviewCourses.filter(c => {
       const date = new Date(c.createdAt);
       return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
@@ -266,7 +320,7 @@ const ExpertDashboard = () => {
     };
   }, [courses]);
 
-  // Build review activity chart data - dynamic based on actual reviews
+  // Build review activity chart data
   const reviewActivityData = useMemo(() => {
     const last6Months = getLast6Months();
     const colors = ['#10B981', '#10B981', '#34D399', '#34D399', '#6EE7B7', '#6EE7B7'];
@@ -311,7 +365,19 @@ const ExpertDashboard = () => {
         onSettings={() => navigation.navigate('Settings')}
       >
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          <PageTitleRow title="Expert Dashboard" subtitle="Review and provide feedback on courses" />
+          <View style={styles.pageBanner}>
+            <View style={styles.bannerLeft}>
+              <View style={[styles.bannerIconCircle, { backgroundColor: '#10B981' + '20' }]}>
+                <Icon name="grid" size={24} color="#10B981" />
+              </View>
+              <View>
+                <Text style={[styles.bannerTitle, { color: theme.colors.textPrimary }]}>Expert Dashboard</Text>
+                <Text style={[styles.bannerSubtitle, { color: theme.colors.textSecondary }]}>
+                  Review and provide feedback on courses
+                </Text>
+              </View>
+            </View>
+          </View>
           <View style={styles.section}>
             <SkeletonDashboardStats count={3} />
           </View>
@@ -343,15 +409,27 @@ const ExpertDashboard = () => {
           />
         }
       >
-        <PageTitleRow
-          title="Expert Dashboard"
-          subtitle={`Welcome back, ${user?.name || 'Expert'}! Here's your review overview.`}
-          primaryAction={{
-            label: 'Review Courses',
-            icon: 'eye-outline',
-            onPress: () => navigation.navigate('Courses'),
-          }}
-        />
+        {/* Page Banner */}
+        <View style={styles.pageBanner}>
+          <View style={styles.bannerLeft}>
+            <View style={[styles.bannerIconCircle, { backgroundColor: '#10B981' + '20' }]}>
+              <Icon name="grid" size={24} color="#10B981" />
+            </View>
+            <View>
+              <Text style={[styles.bannerTitle, { color: theme.colors.textPrimary }]}>Expert Dashboard</Text>
+              <Text style={[styles.bannerSubtitle, { color: theme.colors.textSecondary }]}>
+                {`Welcome back, ${user?.name || 'Expert'}! Here's your review overview.`}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.createBtn}
+            onPress={() => navigation.navigate('Courses')}
+          >
+            <Icon name="eye-outline" size={16} color="#FFFFFF" />
+            <Text style={styles.createBtnText}>Review Courses</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Stats Section */}
         <View style={styles.statsSection}>
@@ -389,16 +467,30 @@ const ExpertDashboard = () => {
 
         {/* Charts Section */}
         <View style={styles.chartsSection}>
+          {/* Review Activity Chart */}
           <Animated.View entering={FadeInDown.duration(400).delay(100)} style={styles.chartCard}>
-            <AppCard style={styles.chartCardInner}>
+            <AppCard
+              style={[
+                styles.chartCardInner,
+                {
+                  borderLeftWidth: 3,
+                  borderLeftColor: '#10B981',
+                },
+              ]}
+            >
               <View style={styles.chartHeader}>
-                <View>
-                  <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
-                    Review Activity
-                  </Text>
-                  <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
-                    Your monthly review contributions
-                  </Text>
+                <View style={styles.chartHeaderLeft}>
+                  <View style={[styles.chartIconBadge, { backgroundColor: '#10B981' + '18' }]}>
+                    <Icon name="bar-chart" size={16} color="#10B981" />
+                  </View>
+                  <View>
+                    <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
+                      Review Activity
+                    </Text>
+                    <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
+                      Your monthly review contributions
+                    </Text>
+                  </View>
                 </View>
                 <Icon name="trending-up" size={20} color="#10B981" />
               </View>
@@ -413,27 +505,59 @@ const ExpertDashboard = () => {
 
           {/* Quick Actions Card */}
           <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.chartCard}>
-            <AppCard style={styles.chartCardInner}>
-              <Text style={[styles.chartTitle, { color: theme.colors.textPrimary, marginBottom: 16 }]}>
-                Quick Actions
-              </Text>
+            <AppCard
+              style={[
+                styles.chartCardInner,
+                {
+                  borderLeftWidth: 3,
+                  borderLeftColor: ORANGE,
+                },
+              ]}
+            >
+              <View style={styles.chartHeader}>
+                <View style={styles.chartHeaderLeft}>
+                  <View style={[styles.chartIconBadge, { backgroundColor: ORANGE + '18' }]}>
+                    <Icon name="flash" size={16} color={ORANGE} />
+                  </View>
+                  <View>
+                    <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
+                      Quick Actions
+                    </Text>
+                    <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
+                      Jump to common tasks
+                    </Text>
+                  </View>
+                </View>
+              </View>
               <View style={styles.quickActionsGrid}>
                 <TouchableOpacity
-                  style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.backgroundSecondary : theme.colors.surface }]}
+                  style={[
+                    styles.quickAction,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : theme.colors.background,
+                      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)',
+                    },
+                  ]}
                   onPress={() => navigation.navigate('Courses')}
                 >
-                  <View style={[styles.quickActionIcon, { backgroundColor: theme.colors.primary + '15' }]}>
-                    <Icon name="book" size={22} color={theme.colors.primary} />
+                  <View style={[styles.quickActionIcon, { backgroundColor: '#6366F1' + '18' }]}>
+                    <Icon name="book" size={22} color="#6366F1" />
                   </View>
                   <Text style={[styles.quickActionText, { color: theme.colors.textPrimary }]}>
                     Browse Courses
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.backgroundSecondary : theme.colors.surface }]}
+                  style={[
+                    styles.quickAction,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : theme.colors.background,
+                      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)',
+                    },
+                  ]}
                   onPress={() => navigation.navigate('FeedbackForm')}
                 >
-                  <View style={[styles.quickActionIcon, { backgroundColor: '#10B98115' }]}>
+                  <View style={[styles.quickActionIcon, { backgroundColor: '#10B981' + '18' }]}>
                     <Icon name="chatbubbles" size={22} color="#10B981" />
                   </View>
                   <Text style={[styles.quickActionText, { color: theme.colors.textPrimary }]}>
@@ -441,10 +565,16 @@ const ExpertDashboard = () => {
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.quickAction, { backgroundColor: isDark ? theme.colors.backgroundSecondary : theme.colors.surface }]}
+                  style={[
+                    styles.quickAction,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : theme.colors.background,
+                      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)',
+                    },
+                  ]}
                   onPress={() => navigation.navigate('Settings')}
                 >
-                  <View style={[styles.quickActionIcon, { backgroundColor: '#F59E0B15' }]}>
+                  <View style={[styles.quickActionIcon, { backgroundColor: '#F59E0B' + '18' }]}>
                     <Icon name="settings" size={22} color="#F59E0B" />
                   </View>
                   <Text style={[styles.quickActionText, { color: theme.colors.textPrimary }]}>
@@ -459,13 +589,18 @@ const ExpertDashboard = () => {
         {/* Recent Courses Table */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <View>
-              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-                Courses to Review
-              </Text>
-              <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
-                Latest courses requiring expert feedback
-              </Text>
+            <View style={styles.sectionTitleRow}>
+              <View style={styles.sectionIconBadge}>
+                <Icon name="book" size={16} color="#10B981" />
+              </View>
+              <View>
+                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                  Courses to Review
+                </Text>
+                <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
+                  Latest courses requiring expert feedback
+                </Text>
+              </View>
             </View>
             <TouchableOpacity
               style={[styles.viewAllButton, { backgroundColor: theme.colors.primary }]}
@@ -476,6 +611,7 @@ const ExpertDashboard = () => {
           </View>
 
           <AppCard style={styles.tableCard}>
+            {/* Table Header */}
             <View style={[styles.tableHeader, { borderBottomColor: theme.colors.border }]}>
               <Text style={[styles.tableHeaderCell, styles.imageColumn, { color: theme.colors.textSecondary }]}>
                 Image
@@ -496,18 +632,25 @@ const ExpertDashboard = () => {
               </Text>
             </View>
 
+            {/* Table Rows */}
             {recentCourses.length > 0 ? (
               recentCourses.map((course, index) => (
                 <View
                   key={course.id || index}
                   style={[
                     styles.tableRow,
+                    index % 2 === 1 && {
+                      backgroundColor: isDark
+                        ? 'rgba(255,255,255,0.02)'
+                        : 'rgba(16,185,129,0.03)',
+                    },
                     index < recentCourses.length - 1 && {
                       borderBottomColor: theme.colors.border,
                       borderBottomWidth: 1,
                     },
                   ]}
                 >
+                  {/* Course Image */}
                   <View style={[styles.tableCell, styles.imageColumn]}>
                     {course.thumbnailImage ? (
                       <Image
@@ -522,6 +665,7 @@ const ExpertDashboard = () => {
                     )}
                   </View>
 
+                  {/* Course Title */}
                   <Text
                     style={[styles.tableCell, styles.courseNameColumn, styles.courseName, { color: theme.colors.textPrimary }]}
                     numberOfLines={2}
@@ -529,6 +673,7 @@ const ExpertDashboard = () => {
                     {course.name || 'Untitled Course'}
                   </Text>
 
+                  {/* Category */}
                   {!isMobile && (
                     <Text
                       style={[styles.tableCell, styles.categoryColumn, { color: theme.colors.textSecondary }]}
@@ -538,6 +683,7 @@ const ExpertDashboard = () => {
                     </Text>
                   )}
 
+                  {/* Status */}
                   <View style={[styles.tableCell, styles.statusColumn]}>
                     <View
                       style={[
@@ -568,6 +714,7 @@ const ExpertDashboard = () => {
                     </View>
                   </View>
 
+                  {/* Action */}
                   <View style={[styles.tableCell, styles.actionColumn]}>
                     <TouchableOpacity
                       style={[styles.viewDetailsButton, { borderColor: theme.colors.primary }]}
@@ -600,17 +747,90 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     scrollView: { flex: 1 },
     scrollContent: { paddingBottom: 40 },
     section: { paddingHorizontal: isMobile ? 16 : 24, marginBottom: 24 },
+
+    // ---- Page Banner ----
+    pageBanner: {
+      flexDirection: isTablet ? 'row' : 'column',
+      justifyContent: 'space-between',
+      alignItems: isTablet ? 'center' : 'flex-start',
+      paddingHorizontal: isMobile ? 16 : 24,
+      paddingVertical: 20,
+      marginBottom: 8,
+      gap: 12,
+    },
+    bannerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      flex: isTablet ? 1 : undefined,
+    },
+    bannerIconCircle: {
+      width: 48,
+      height: 48,
+      borderRadius: 14,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerTitle: {
+      fontSize: isMobile ? 20 : 26,
+      fontWeight: '800',
+    },
+    bannerSubtitle: {
+      fontSize: 13,
+      marginTop: 2,
+    },
+    createBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      borderRadius: 10,
+      backgroundColor: ORANGE,
+    },
+    createBtnText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+
+    // ---- Section Header ----
     sectionHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'flex-start',
       marginBottom: 16,
     },
-    sectionTitle: { fontSize: 18, fontWeight: '600', fontFamily: theme.typography.fontFamily.semiBold },
-    sectionSubtitle: { fontSize: 13, marginTop: 4 },
-    viewAllButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+    sectionTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    sectionIconBadge: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      backgroundColor: '#10B981' + '15',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      fontFamily: theme.typography.fontFamily.semiBold,
+    },
+    sectionSubtitle: {
+      fontSize: 13,
+      marginTop: 4,
+    },
+    viewAllButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
     viewAllText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
 
+    // Stats Section
     statsSection: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -620,27 +840,47 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     },
     statCard: {
       flex: 1,
-      minWidth: isMobile ? '47%' : isLargeScreen ? 200 : isTablet ? 180 : 140,
+      minWidth: isMobile ? '47%' : isLargeScreen ? 220 : isTablet ? 180 : 160,
       maxWidth: isLargeScreen ? 300 : undefined,
     },
 
+    // Charts Section
     chartsSection: {
       flexDirection: isLargeScreen ? 'row' : 'column',
       paddingHorizontal: isMobile ? 16 : 24,
       gap: 16,
       marginBottom: 24,
     },
-    chartCard: { flex: 1, minWidth: isLargeScreen ? 360 : undefined },
-    chartCardInner: { padding: isMobile ? 16 : 20 },
+    chartCard: {
+      flex: 1,
+      minWidth: isLargeScreen ? 400 : undefined,
+    },
+    chartCardInner: {
+      padding: isMobile ? 16 : 20,
+    },
     chartHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'flex-start',
       marginBottom: 16,
     },
+    chartHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      flex: 1,
+    },
+    chartIconBadge: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
     chartTitle: { fontSize: 16, fontWeight: '600' },
     chartSubtitle: { fontSize: 13, marginTop: 4 },
 
+    // Quick Actions
     quickActionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
     quickAction: {
       flex: 1,
@@ -649,7 +889,6 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       borderRadius: 12,
       alignItems: 'center',
       borderWidth: 1,
-      borderColor: theme.colors.border,
     },
     quickActionIcon: {
       width: 44,
@@ -661,6 +900,7 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     },
     quickActionText: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
 
+    // Table Styles
     tableCard: { padding: 0, overflow: 'hidden' },
     tableHeader: {
       flexDirection: 'row',
@@ -669,7 +909,7 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       borderBottomWidth: 1,
       backgroundColor: isDark ? theme.colors.backgroundSecondary : theme.colors.backgroundSecondary,
     },
-    tableHeaderCell: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+    tableHeaderCell: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
     tableRow: {
       flexDirection: 'row',
       paddingVertical: 14,
@@ -677,11 +917,11 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       alignItems: 'center',
     },
     tableCell: { fontSize: 14 },
-    imageColumn: { width: isMobile ? 45 : 55, paddingRight: 10 },
-    courseImage: { width: isMobile ? 36 : 44, height: isMobile ? 36 : 44, borderRadius: 8 },
+    imageColumn: { width: isMobile ? 50 : 60, paddingRight: 12 },
+    courseImage: { width: isMobile ? 40 : 48, height: isMobile ? 40 : 48, borderRadius: 8 },
     courseImagePlaceholder: {
-      width: isMobile ? 36 : 44,
-      height: isMobile ? 36 : 44,
+      width: isMobile ? 40 : 48,
+      height: isMobile ? 40 : 48,
       borderRadius: 8,
       justifyContent: 'center',
       alignItems: 'center',
@@ -699,8 +939,8 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       borderRadius: 20,
       gap: 6,
     },
-    statusDot: { width: 7, height: 7, borderRadius: 4 },
-    statusText: { fontSize: 11, fontWeight: '600' },
+    statusDot: { width: 8, height: 8, borderRadius: 4 },
+    statusText: { fontSize: 12, fontWeight: '600' },
     viewDetailsButton: {
       paddingHorizontal: isMobile ? 8 : 12,
       paddingVertical: 6,

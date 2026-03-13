@@ -15,6 +15,8 @@ import AppCard from './AppCard';
 // Section 15.1 - Desktop Tables (1024px+)
 // Section 15.2 - Mobile Adaptations (768px-)
 
+const ORANGE = '#FF8C42';
+
 const DataTable = ({
   columns = [],
   data = [],
@@ -31,7 +33,7 @@ const DataTable = ({
   const { theme, isDark } = useTheme();
   const isWeb = Platform.OS === 'web';
 
-  const styles = getStyles(theme, isDark);
+  const styles = getStyles(theme, isDark, isWeb, onRowPress);
 
   const handleSort = (column) => {
     if (column.sortable && onSort) {
@@ -56,7 +58,7 @@ const DataTable = ({
       <ScrollView horizontal={!isWeb} showsHorizontalScrollIndicator={false}>
         <View style={styles.table}>
           {/* Header Row */}
-          <View style={[styles.headerRow, { borderBottomColor: theme.colors.border }, headerStyle]}>
+          <View style={[styles.headerRow, headerStyle]}>
             {columns.map((column) => (
               <TouchableOpacity
                 key={column.key}
@@ -75,7 +77,7 @@ const DataTable = ({
                   <Icon
                     name={sortDirection === 'asc' ? 'arrow-up' : 'arrow-down'}
                     size={14}
-                    color={theme.colors.primary}
+                    color={ORANGE}
                     style={styles.sortIcon}
                   />
                 )}
@@ -89,7 +91,10 @@ const DataTable = ({
               key={row.id || rowIndex}
               style={[
                 styles.dataRow,
-                rowIndex < data.length - 1 && { borderBottomColor: theme.colors.border, borderBottomWidth: 1 },
+                rowIndex < data.length - 1 && {
+                  borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.06)',
+                  borderBottomWidth: 1,
+                },
                 rowStyle,
               ]}
               onPress={() => onRowPress?.(row)}
@@ -136,13 +141,14 @@ export const TablePagination = ({
   pageSizeOptions = [10, 25, 50, 100],
 }) => {
   const { theme, isDark } = useTheme();
-  const styles = getStyles(theme, isDark);
+  const isWeb = Platform.OS === 'web';
+  const styles = getStyles(theme, isDark, isWeb, null);
 
   const startItem = (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(currentPage * pageSize, totalItems);
 
   return (
-    <View style={[styles.paginationContainer, { borderTopColor: theme.colors.border }]}>
+    <View style={[styles.paginationContainer, { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)' }]}>
       <Text style={[styles.paginationInfo, { color: theme.colors.textSecondary }]}>
         Showing {startItem}-{endItem} of {totalItems}
       </Text>
@@ -182,7 +188,7 @@ export const TablePagination = ({
                 style={[
                   styles.pageNumber,
                   currentPage === pageNum && {
-                    backgroundColor: theme.colors.primary,
+                    backgroundColor: ORANGE,
                   },
                 ]}
                 onPress={() => onPageChange?.(pageNum)}
@@ -221,7 +227,7 @@ export const TablePagination = ({
   );
 };
 
-const getStyles = (theme, isDark) =>
+const getStyles = (theme, isDark, isWeb, onRowPress) =>
   StyleSheet.create({
     container: {
       padding: 0,
@@ -235,7 +241,8 @@ const getStyles = (theme, isDark) =>
       paddingVertical: 12,
       paddingHorizontal: 16,
       borderBottomWidth: 1,
-      backgroundColor: isDark ? theme.colors.backgroundSecondary : theme.colors.backgroundSecondary,
+      borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(26,26,46,0.03)',
     },
     headerCell: {
       flexDirection: 'row',
@@ -256,6 +263,7 @@ const getStyles = (theme, isDark) =>
       paddingVertical: 14, // Section 15.1: Rows 48-56px height
       paddingHorizontal: 16,
       alignItems: 'center',
+      ...(isWeb ? { transition: 'background-color 0.15s ease', cursor: onRowPress ? 'pointer' : 'default' } : {}),
     },
     dataCell: {
       paddingHorizontal: 8,
@@ -296,7 +304,9 @@ const getStyles = (theme, isDark) =>
       borderRadius: 8,
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: isDark ? theme.colors.backgroundTertiary : theme.colors.backgroundSecondary,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.05)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.08)',
     },
     paginationButtonDisabled: {
       opacity: 0.5,

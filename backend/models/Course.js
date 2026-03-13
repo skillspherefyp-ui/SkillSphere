@@ -53,6 +53,11 @@ const Course = sequelize.define('Course', {
     allowNull: true,
     defaultValue: null
   },
+  creationMode: {
+    type: DataTypes.ENUM('ai', 'manual'),
+    allowNull: false,
+    defaultValue: 'ai'
+  },
   createdAt: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW

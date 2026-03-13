@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
   ScrollView,
   Modal,
+  TextInput,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -22,6 +23,8 @@ import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
+
+const ORANGE = '#FF8C42';
 
 // Color palette for category cards
 const CATEGORY_COLORS = [
@@ -185,17 +188,21 @@ const CategoryManagementScreen = () => {
         <TouchableOpacity
           style={[
             styles.categoryCard,
-            { backgroundColor: isDark ? theme.colors.card : theme.colors.surface },
+            {
+              backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              borderLeftColor: color,
+            },
           ]}
           activeOpacity={0.7}
           onLongPress={() => handleDeleteClick(category)}
         >
           {/* Course Count Badge */}
-          <View style={styles.courseCountBadge}>
-            <Text style={[styles.courseCountNumber, { color: theme.colors.primary }]}>
+          <View style={[styles.courseCountBadge, { backgroundColor: color + '18', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 }]}>
+            <Text style={[styles.courseCountNumber, { color: color }]}>
               {courseCount}
             </Text>
-            <Text style={[styles.courseCountLabel, { color: theme.colors.textSecondary }]}>
+            <Text style={[styles.courseCountLabel, { color: color + 'CC' }]}>
               courses
             </Text>
           </View>
@@ -214,10 +221,13 @@ const CategoryManagementScreen = () => {
 
           {/* Delete Button */}
           <TouchableOpacity
-            style={styles.deleteButton}
+            style={[
+              styles.deleteButton,
+              { backgroundColor: isDark ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.08)' },
+            ]}
             onPress={() => handleDeleteClick(category)}
           >
-            <Icon name="trash-outline" size={18} color={theme.colors.error} />
+            <Icon name="trash-outline" size={16} color={theme.colors.error} />
           </TouchableOpacity>
         </TouchableOpacity>
       </Animated.View>
@@ -239,61 +249,111 @@ const CategoryManagementScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Section */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerTextContainer}>
-            <View style={styles.titleRow}>
-              <TouchableOpacity
-                style={[styles.backButton, { backgroundColor: theme.colors.surface }]}
-                onPress={() => navigation.goBack()}
-              >
-                <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
+        {/* Page Header Banner */}
+        <View
+          style={[
+            styles.pageHeaderBanner,
+            {
+              backgroundColor: isDark ? 'rgba(255,140,66,0.06)' : 'rgba(255,140,66,0.05)',
+              borderColor: 'rgba(255,140,66,0.15)',
+            },
+          ]}
+        >
+          {/* Left Side */}
+          <View style={styles.bannerLeft}>
+            <TouchableOpacity
+              style={[
+                styles.backButton,
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)' },
+              ]}
+              onPress={() => navigation.goBack()}
+            >
+              <Icon name="arrow-back" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={styles.bannerIconCircle}>
+              <Icon name="layers" size={22} color={ORANGE} />
+            </View>
+            <View style={styles.bannerTextGroup}>
               <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>
                 Skill Categories
               </Text>
+              <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
+                Organize your course catalog
+              </Text>
             </View>
-            <Text style={[styles.pageSubtitle, { color: theme.colors.textSecondary }]}>
-              Organize your courses into meaningful categories
-            </Text>
           </View>
-          <AppButton
-            title="Add Category"
+
+          {/* Right Side */}
+          <TouchableOpacity
+            style={styles.addCategoryBtn}
             onPress={() => setShowAddModal(true)}
-            variant="primary"
-            style={styles.addButton}
-            leftIcon="add"
-          />
+            activeOpacity={0.85}
+          >
+            <Icon name="add" size={18} color="#FFFFFF" />
+            <Text style={styles.addCategoryBtnText}>Add Category</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Stats Section */}
         <View style={styles.statsSection}>
-          <AppCard style={styles.statCard}>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+          {/* Total Categories */}
+          <View
+            style={[
+              styles.statCardNew,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(255,140,66,0.12)' }]}>
+              <Icon name="layers" size={20} color={ORANGE} />
+            </View>
+            <Text style={[styles.statValueNew, { color: ORANGE }]}>{stats.totalCategories}</Text>
+            <Text style={[styles.statLabelNew, { color: theme.colors.textSecondary }]}>
               Total Categories
             </Text>
-            <Text style={[styles.statValue, { color: theme.colors.primary }]}>
-              {stats.totalCategories}
-            </Text>
-          </AppCard>
+          </View>
 
-          <AppCard style={styles.statCard}>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+          {/* Total Courses */}
+          <View
+            style={[
+              styles.statCardNew,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(99,102,241,0.12)' }]}>
+              <Icon name="book" size={20} color="#6366F1" />
+            </View>
+            <Text style={[styles.statValueNew, { color: '#6366F1' }]}>{stats.totalCourses}</Text>
+            <Text style={[styles.statLabelNew, { color: theme.colors.textSecondary }]}>
               Total Courses
             </Text>
-            <Text style={[styles.statValue, { color: theme.colors.primary }]}>
-              {stats.totalCourses}
-            </Text>
-          </AppCard>
+          </View>
 
-          <AppCard style={styles.statCard}>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Avg Courses per Category
-            </Text>
-            <Text style={[styles.statValue, { color: theme.colors.primary }]}>
+          {/* Avg Per Category */}
+          <View
+            style={[
+              styles.statCardNew,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
+              },
+            ]}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+              <Icon name="bar-chart" size={20} color="#10B981" />
+            </View>
+            <Text style={[styles.statValueNew, { color: '#10B981' }]}>
               {stats.avgCoursesPerCategory}
             </Text>
-          </AppCard>
+            <Text style={[styles.statLabelNew, { color: theme.colors.textSecondary }]}>
+              Avg Per Category
+            </Text>
+          </View>
         </View>
 
         {/* Categories Grid */}
@@ -314,35 +374,80 @@ const CategoryManagementScreen = () => {
         )}
       </ScrollView>
 
-      {/* Add Category Modal */}
+      {/* Glassmorphic Add Category Modal */}
       <Modal
         visible={showAddModal}
-        transparent={true}
+        transparent
         animationType="fade"
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: isDark ? theme.colors.card : theme.colors.background }]}>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 20,
+            ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' } : {}),
+          }}
+        >
+          <View
+            style={{
+              width: '100%',
+              maxWidth: 420,
+              backgroundColor: isDark ? 'rgba(15,15,30,0.92)' : 'rgba(255,255,255,0.95)',
+              borderRadius: 24,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.1)',
+              padding: 28,
+              ...(Platform.OS === 'web' ? { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' } : {}),
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 20 },
+              shadowOpacity: isDark ? 0.5 : 0.15,
+              shadowRadius: 40,
+              elevation: 20,
+            }}
+          >
             {/* Modal Header */}
             <View style={styles.modalHeader}>
-              <View>
-                <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
-                  Create New Category
-                </Text>
-                <Text style={[styles.modalSubtitle, { color: theme.colors.textSecondary }]}>
-                  Add a new skill category to organize your courses
-                </Text>
+              <View style={styles.modalHeaderLeft}>
+                <View style={[styles.modalIconCircle, { backgroundColor: ORANGE + '20' }]}>
+                  <Icon name="layers" size={22} color={ORANGE} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.modalTitle, { color: isDark ? '#FFFFFF' : theme.colors.textPrimary }]}>
+                    Add New Category
+                  </Text>
+                  <Text style={[styles.modalSubtitle, { color: isDark ? 'rgba(255,255,255,0.55)' : theme.colors.textSecondary }]}>
+                    Create a skill category for your courses
+                  </Text>
+                </View>
               </View>
               <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setShowAddModal(false)}
+                style={[
+                  styles.modalCloseBtn,
+                  { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.06)' },
+                ]}
+                onPress={() => {
+                  setNewCategory('');
+                  setShowAddModal(false);
+                }}
               >
-                <Icon name="close" size={24} color={theme.colors.textSecondary} />
+                <Icon name="close" size={20} color={isDark ? 'rgba(255,255,255,0.7)' : theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            {/* Modal Body */}
-            <View style={styles.modalBody}>
+            {/* Divider */}
+            <View
+              style={{
+                height: 1,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.08)',
+                marginBottom: 24,
+              }}
+            />
+
+            {/* Input */}
+            <View style={{ marginBottom: 28 }}>
               <AppInput
                 label="Category Name"
                 value={newCategory}
@@ -351,7 +456,7 @@ const CategoryManagementScreen = () => {
               />
             </View>
 
-            {/* Modal Footer */}
+            {/* Action Buttons */}
             <View style={styles.modalFooter}>
               <AppButton
                 title="Cancel"
@@ -363,7 +468,7 @@ const CategoryManagementScreen = () => {
                 style={styles.modalCancelButton}
               />
               <AppButton
-                title="Create Category"
+                title="Add Category"
                 onPress={handleAddCategory}
                 variant="primary"
                 style={styles.modalCreateButton}
@@ -399,66 +504,108 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       paddingBottom: 40,
     },
 
-    // Header Section
-    headerSection: {
+    // Page Header Banner
+    pageHeaderBanner: {
       flexDirection: isTablet ? 'row' : 'column',
       justifyContent: 'space-between',
       alignItems: isTablet ? 'center' : 'flex-start',
+      padding: isMobile ? 16 : 20,
       marginBottom: 24,
-      gap: 16,
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: 12,
     },
-    headerTextContainer: {
-      flex: 1,
-    },
-    titleRow: {
+    bannerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      marginBottom: 4,
+      flex: isTablet ? 1 : undefined,
     },
     backButton: {
       width: 40,
       height: 40,
-      borderRadius: 12,
+      borderRadius: 20,
       justifyContent: 'center',
       alignItems: 'center',
-      ...theme.shadows.sm,
+    },
+    bannerIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(255,140,66,0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    bannerTextGroup: {
+      flex: 1,
     },
     pageTitle: {
-      fontSize: isMobile ? 24 : 28,
+      fontSize: isMobile ? 18 : 22,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
+      marginBottom: 2,
     },
     pageSubtitle: {
-      fontSize: 14,
+      fontSize: 13,
       fontFamily: theme.typography.fontFamily.regular,
     },
-    addButton: {
-      minWidth: isMobile ? '100%' : 150,
+    addCategoryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: ORANGE,
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+      borderRadius: 10,
+      alignSelf: isTablet ? 'auto' : 'flex-start',
+      ...(Platform.OS === 'web' && {
+        boxShadow: '0 2px 12px rgba(255,140,66,0.35)',
+      }),
+    },
+    addCategoryBtnText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '600',
+      fontFamily: theme.typography.fontFamily.semiBold,
     },
 
     // Stats Section
     statsSection: {
-      flexDirection: 'row',
+      flexDirection: isMobile ? 'column' : 'row',
       flexWrap: 'wrap',
-      gap: 16,
+      gap: isMobile ? 12 : 16,
       marginBottom: 24,
     },
-    statCard: {
+    statCardNew: {
       flex: 1,
-      minWidth: isMobile ? '100%' : isTablet ? 180 : 200,
-      maxWidth: isLargeScreen ? 300 : undefined,
-      padding: 20,
+      minWidth: 120,
+      padding: 16,
+      borderRadius: 14,
+      borderWidth: 1,
+      alignItems: 'center',
+      gap: 4,
+      ...(Platform.OS === 'web' && {
+        boxShadow: isDark ? 'none' : '0 1px 8px rgba(26,26,46,0.06)',
+      }),
     },
-    statLabel: {
-      fontSize: 13,
-      marginBottom: 8,
-      fontFamily: theme.typography.fontFamily.regular,
+    statIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 4,
     },
-    statValue: {
-      fontSize: isMobile ? 28 : 36,
+    statValueNew: {
+      fontSize: isMobile ? 28 : 32,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
+      lineHeight: isMobile ? 34 : 38,
+    },
+    statLabelNew: {
+      fontSize: 13,
+      fontFamily: theme.typography.fontFamily.regular,
+      textAlign: 'center',
     },
 
     // Categories Grid
@@ -481,25 +628,27 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       padding: 20,
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.1)' : theme.colors.border,
+      borderLeftWidth: 4,
       minHeight: 160,
       position: 'relative',
       ...theme.shadows.sm,
     },
     courseCountBadge: {
       position: 'absolute',
-      top: 16,
-      right: 16,
+      top: 14,
+      right: 14,
       alignItems: 'flex-end',
     },
     courseCountNumber: {
-      fontSize: 24,
+      fontSize: 22,
       fontWeight: '700',
       fontFamily: theme.typography.fontFamily.bold,
+      textAlign: 'right',
     },
     courseCountLabel: {
-      fontSize: 12,
+      fontSize: 11,
       fontFamily: theme.typography.fontFamily.regular,
+      textAlign: 'right',
     },
     categoryIconContainer: {
       width: 56,
@@ -522,11 +671,10 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     },
     deleteButton: {
       position: 'absolute',
-      bottom: 16,
-      right: 16,
+      bottom: 14,
+      right: 14,
       padding: 8,
       borderRadius: 8,
-      backgroundColor: isDark ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.1)',
     },
 
     // Empty State
@@ -535,42 +683,43 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       alignItems: 'center',
     },
 
-    // Modal Styles
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.6)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 20,
-    },
-    modalContent: {
-      width: '100%',
-      maxWidth: 480,
-      borderRadius: 16,
-      padding: 24,
-      ...theme.shadows.lg,
-    },
+    // Modal
     modalHeader: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'flex-start',
-      marginBottom: 24,
+      justifyContent: 'space-between',
+      marginBottom: 20,
+      gap: 12,
+    },
+    modalHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      flex: 1,
+    },
+    modalIconCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     modalTitle: {
-      fontSize: 20,
+      fontSize: 18,
       fontWeight: '700',
-      marginBottom: 4,
       fontFamily: theme.typography.fontFamily.bold,
+      marginBottom: 2,
     },
     modalSubtitle: {
-      fontSize: 14,
+      fontSize: 13,
       fontFamily: theme.typography.fontFamily.regular,
     },
-    modalCloseButton: {
-      padding: 4,
-    },
-    modalBody: {
-      marginBottom: 24,
+    modalCloseBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     modalFooter: {
       flexDirection: 'row',

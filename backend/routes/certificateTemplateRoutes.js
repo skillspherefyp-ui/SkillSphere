@@ -3,7 +3,11 @@ const router = express.Router();
 const certificateTemplateController = require('../controllers/certificateTemplateController');
 const { authenticateToken, requireAdmin, canManageCertificates } = require('../middleware/auth');
 
-// All routes require authentication and admin role
+// Student-accessible routes (auth only, no admin required)
+router.get('/active', authenticateToken, certificateTemplateController.getActiveTemplate);
+router.get('/for-course/:courseId', authenticateToken, certificateTemplateController.getTemplateForCourse);
+
+// All remaining routes require authentication and admin role
 router.use(authenticateToken);
 router.use(requireAdmin);
 
@@ -13,14 +17,8 @@ router.get('/stats', certificateTemplateController.getCertificateStats);
 // Get all templates
 router.get('/', certificateTemplateController.getAllTemplates);
 
-// Get active template (default global)
-router.get('/active', certificateTemplateController.getActiveTemplate);
-
 // Get active templates per course (shows all course-specific assignments)
 router.get('/active-per-course', certificateTemplateController.getActiveTemplatesPerCourse);
-
-// Get template for a specific course
-router.get('/for-course/:courseId', certificateTemplateController.getTemplateForCourse);
 
 // Preview certificate (with or without template ID)
 router.get('/preview', certificateTemplateController.previewCertificate);

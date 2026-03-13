@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   StyleSheet,
@@ -10,13 +10,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../../context/ThemeContext';
-import Sidebar from './Sidebar';
 import AppHeader from './AppHeader';
-
-// Section 17 - Page Structure & Content Hierarchy
-// Standard Page Layout: Fixed Header, Hover-trigger Sidebar, Main Content
-
-const SIDEBAR_WIDTH = 260;
 
 const MainLayout = ({
   children,
@@ -32,222 +26,137 @@ const MainLayout = ({
   showBack = false,
   headerStyle,
   contentStyle,
-  showMenuButton = true, // Show hamburger menu on mobile
-  customSidebar = null, // Custom sidebar content component
-  customSidebarVisible = false, // Control custom sidebar visibility externally
-  onCustomSidebarToggle = null, // Callback for custom sidebar toggle
-  customMenuIcon = null, // Custom icon for menu button (e.g., 'book-outline' for topics)
+  showMenuButton = true,
+  customSidebar = null,
+  customSidebarVisible = false,
+  onCustomSidebarToggle = null,
+  customMenuIcon = null,
+  hideHeaderToggle = false,
 }) => {
   const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === 'web';
   const isLargeScreen = width > 1024;
-
-  const [sidebarVisible, setSidebarVisible] = useState(false);
-  const shouldShowPersistentSidebar = isWeb && isLargeScreen && !customSidebar;
+  const isTablet = width > 768;
   const hasCustomSidebar = !!customSidebar;
 
-  const styles = getStyles(theme, isDark, isWeb, isLargeScreen, shouldShowPersistentSidebar, hasCustomSidebar);
+  // Responsive sidebar width — narrow enough to leave content usable on any screen
+  const sidebarWidth = isLargeScreen ? 280 : isTablet ? 250 : 220;
 
-  // Toggle sidebar for mobile
-  const toggleSidebar = () => {
+  const styles = getStyles(theme, isDark, isWeb, isTablet);
+
+  const toggleCustomSidebar = () => {
     if (hasCustomSidebar && onCustomSidebarToggle) {
       onCustomSidebarToggle(!customSidebarVisible);
-    } else {
-      setSidebarVisible(!sidebarVisible);
     }
   };
 
-  // Custom header left component with menu button
-  const HeaderLeftComponent = () => {
-    // For custom sidebar, always show menu button on non-large screens
-    if (hasCustomSidebar) {
-      if (isLargeScreen) return null; // Custom sidebar is always visible on large screens
-      return (
-        <TouchableOpacity
-          style={[styles.menuButton, customMenuIcon && styles.menuButtonCustom]}
-          onPress={toggleSidebar}
-          activeOpacity={0.7}
-        >
-          <Icon name={customMenuIcon || 'menu'} size={24} color={customMenuIcon ? theme.colors.primary : theme.colors.textPrimary} />
-        </TouchableOpacity>
-      );
-    }
-
-    if (shouldShowPersistentSidebar || !showMenuButton) return null;
-
-    return (
-      <TouchableOpacity
-        style={styles.menuButton}
-        onPress={toggleSidebar}
-        activeOpacity={0.7}
-      >
-        <Icon name="menu" size={24} color={theme.colors.textPrimary} />
-      </TouchableOpacity>
-    );
-  };
+  // Toggle button shown in header left section on ALL screen sizes when there's a custom sidebar
+  const HeaderLeftComponent = hasCustomSidebar && !hideHeaderToggle ? (
+    <TouchableOpacity
+      style={[
+        styles.menuButton,
+        customSidebarVisible && styles.menuButtonActive,
+      ]}
+      onPress={toggleCustomSidebar}
+      activeOpacity={0.7}
+    >
+      <Icon
+        name={customSidebarVisible ? 'close' : (customMenuIcon || 'menu')}
+        size={20}
+        color="#FFFFFF"
+      />
+    </TouchableOpacity>
+  ) : null;
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
-      <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={theme.colors.background}
-      />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: '#1A1A2E' }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#1A1A2E" />
 
       <View style={styles.container}>
-        {/* Custom Sidebar for large screens (persistent) */}
-        {hasCustomSidebar && isLargeScreen && (
-          <View style={styles.customSidebarContainer}>
-            {customSidebar}
-          </View>
-        )}
 
-        {/* Persistent Sidebar for large web screens (standard navigation) */}
-        {showSidebar && shouldShowPersistentSidebar && !hasCustomSidebar && (
-          <Sidebar
-            items={sidebarItems}
+        {/* Header — always full width across top */}
+        {showHeader && (
+          <AppHeader
+            showBack={showBack}
+            rightActions={rightActions}
+            leftComponent={HeaderLeftComponent}
+            style={headerStyle}
+            navItems={showSidebar && sidebarItems.length > 0 ? sidebarItems : []}
             activeRoute={activeRoute}
             onNavigate={onNavigate}
-            userInfo={userInfo}
-            onLogout={onLogout}
-            onSettings={onSettings}
-            isPersistent={true}
           />
         )}
 
-        {/* Main Content Area */}
-        <View style={[
-          styles.mainArea,
-          shouldShowPersistentSidebar && styles.mainAreaWithSidebar,
-          hasCustomSidebar && isLargeScreen && styles.mainAreaWithCustomSidebar
-        ]}>
-          {/* Header */}
-          {showHeader && (
-            <AppHeader
-              showBack={showBack}
-              rightActions={rightActions}
-              leftComponent={<HeaderLeftComponent />}
-              style={headerStyle}
-            />
+        {/* Body row: sidebar panel + content side-by-side */}
+        <View style={styles.bodyRow}>
+
+          {/* Custom sidebar panel — slides in from left, no overlay */}
+          {hasCustomSidebar && customSidebarVisible && (
+            <View style={[styles.sidebarPanel, { width: sidebarWidth }]}>
+              {customSidebar}
+            </View>
           )}
 
-          {/* Page Content */}
+          {/* Main content — takes remaining space */}
           <View style={[styles.content, contentStyle]}>
             {children}
           </View>
+
         </View>
 
-        {/* Custom Sidebar overlay for smaller screens */}
-        {hasCustomSidebar && !isLargeScreen && customSidebarVisible && (
-          <>
-            <TouchableOpacity
-              style={styles.customSidebarOverlay}
-              activeOpacity={1}
-              onPress={() => onCustomSidebarToggle?.(false)}
-            />
-            <View style={styles.customSidebarOverlayContent}>
-              {customSidebar}
-            </View>
-          </>
-        )}
-
-        {/* Overlay Sidebar for smaller screens or mobile (standard navigation) */}
-        {showSidebar && !shouldShowPersistentSidebar && !hasCustomSidebar && (
-          <Sidebar
-            items={sidebarItems}
-            activeRoute={activeRoute}
-            onNavigate={(route) => {
-              setSidebarVisible(false);
-              onNavigate?.(route);
-            }}
-            userInfo={userInfo}
-            onLogout={onLogout}
-            onSettings={onSettings}
-            visible={sidebarVisible}
-            onVisibilityChange={setSidebarVisible}
-            isPersistent={false}
-          />
-        )}
       </View>
     </SafeAreaView>
   );
 };
 
-const CUSTOM_SIDEBAR_WIDTH = 280;
-
-const getStyles = (theme, isDark, isWeb, isLargeScreen, hasPersistentSidebar, hasCustomSidebar) =>
+const getStyles = (theme, isDark, isWeb, isTablet) =>
   StyleSheet.create({
     safeArea: {
       flex: 1,
     },
     container: {
       flex: 1,
+      flexDirection: 'column',
+    },
+    bodyRow: {
+      flex: 1,
       flexDirection: 'row',
     },
-    mainArea: {
-      flex: 1,
-      backgroundColor: theme.colors.background,
+
+    // Sidebar panel — fixed width, sits to the left of content
+    sidebarPanel: {
+      backgroundColor: theme.colors.surface,
+      borderRightWidth: 1,
+      borderRightColor: isDark ? 'rgba(255,255,255,0.08)' : theme.colors.border,
+      shadowColor: '#000',
+      shadowOffset: { width: 2, height: 0 },
+      shadowOpacity: isDark ? 0.3 : 0.08,
+      shadowRadius: 8,
+      elevation: 4,
     },
-    mainAreaWithSidebar: {
-      marginLeft: SIDEBAR_WIDTH,
-    },
-    mainAreaWithCustomSidebar: {
-      marginLeft: CUSTOM_SIDEBAR_WIDTH,
-    },
+
+    // Main content area
     content: {
       flex: 1,
       backgroundColor: theme.colors.background,
     },
+
+    // Sidebar toggle button in header
     menuButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
+      width: 36,
+      height: 36,
+      borderRadius: 10,
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: isDark
-        ? theme.colors.backgroundTertiary
-        : theme.colors.backgroundSecondary,
-      marginRight: 12,
+      backgroundColor: 'rgba(255,255,255,0.1)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.15)',
+      marginRight: 6,
     },
-    menuButtonCustom: {
-      backgroundColor: isDark
-        ? theme.colors.primaryGlow
-        : theme.colors.primary + '15',
-    },
-    // Custom Sidebar styles
-    customSidebarContainer: {
-      position: 'absolute',
-      left: 0,
-      top: 0,
-      bottom: 0,
-      width: CUSTOM_SIDEBAR_WIDTH,
-      backgroundColor: theme.colors.surface,
-      borderRightWidth: 1,
-      borderRightColor: theme.colors.border,
-      zIndex: 10,
-    },
-    customSidebarOverlay: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      zIndex: 99,
-    },
-    customSidebarOverlayContent: {
-      position: 'absolute',
-      left: 0,
-      top: 0,
-      bottom: 0,
-      width: CUSTOM_SIDEBAR_WIDTH,
-      backgroundColor: theme.colors.surface,
-      zIndex: 100,
-      shadowColor: theme.colors.shadow,
-      shadowOffset: { width: 4, height: 0 },
-      shadowOpacity: 0.3,
-      shadowRadius: 12,
-      elevation: 20,
+    menuButtonActive: {
+      backgroundColor: 'rgba(255,140,66,0.25)',
+      borderColor: 'rgba(255,140,66,0.5)',
     },
   });
 

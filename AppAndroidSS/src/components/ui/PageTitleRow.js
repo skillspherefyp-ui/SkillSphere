@@ -7,6 +7,8 @@ import AppButton from './AppButton';
 // [Page Title (H1)] [Optional: Primary Action Button, right-aligned]
 // Breadcrumbs (where applicable): Home > Courses > Course Name
 
+const ORANGE = '#FF8C42';
+
 const PageTitleRow = ({
   title,
   subtitle,
@@ -18,8 +20,19 @@ const PageTitleRow = ({
   const { theme, isDark } = useTheme();
   const isWeb = Platform.OS === 'web';
 
+  const containerStyle = {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 24,
+    backgroundColor: isDark ? 'rgba(255,140,66,0.04)' : 'rgba(255,140,66,0.03)',
+    borderColor: 'rgba(255,140,66,0.12)',
+    ...(isWeb ? { backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' } : {}),
+  };
+
   return (
-    <View style={[styles.container, style]}>
+    <View style={[containerStyle, style]}>
       {/* Breadcrumbs */}
       {breadcrumbs.length > 0 && (
         <View style={styles.breadcrumbs}>
@@ -52,6 +65,9 @@ const PageTitleRow = ({
 
       {/* Title Row */}
       <View style={styles.titleRow}>
+        {/* Left accent line */}
+        <View style={styles.accentLine} />
+
         <View style={styles.titleSection}>
           <Text
             style={[
@@ -108,10 +124,6 @@ const PageTitleRow = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 24, // Section 17.2: Consistent padding
-    paddingVertical: 16,
-  },
   breadcrumbs: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -134,14 +146,22 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 16,
   },
+  accentLine: {
+    width: 4,
+    alignSelf: 'stretch',
+    backgroundColor: ORANGE,
+    borderRadius: 2,
+    marginRight: 12,
+    minHeight: 32,
+  },
   titleSection: {
     flex: 1,
     minWidth: 200,
   },
   title: {
-    fontSize: 28, // Section 5.2: H1 - Page Title 28px
-    fontWeight: '700',
-    lineHeight: 36,
+    fontSize: 24, // Section 5.2: H1 - Page Title
+    fontWeight: '800',
+    lineHeight: 32,
   },
   subtitle: {
     fontSize: 14,

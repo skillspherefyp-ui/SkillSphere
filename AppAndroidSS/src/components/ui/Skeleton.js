@@ -2,8 +2,6 @@ import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated, Platform } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 
-const USE_NATIVE_DRIVER = Platform.OS !== 'web';
-
 // Section 21 - Loading States
 // Section 21.1 - Skeleton Components: Placeholder shapes matching final UI
 
@@ -25,12 +23,12 @@ const Skeleton = ({
         Animated.timing(pulseAnim, {
           toValue: 1,
           duration: 800,
-          useNativeDriver: USE_NATIVE_DRIVER,
+          useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
           toValue: 0.3,
           duration: 800,
-          useNativeDriver: USE_NATIVE_DRIVER,
+          useNativeDriver: true,
         }),
       ])
     );

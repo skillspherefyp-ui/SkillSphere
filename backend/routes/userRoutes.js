@@ -13,8 +13,15 @@ router.get('/students', userController.getAllStudents);
 // Get all experts
 router.get('/experts', userController.getAllExperts);
 
+// User stats
+router.get('/stats', userController.getUserStats);
+router.get('/stats/:id', userController.getUserStats);
+
 // Get user by ID
 router.get('/:id', userController.getUserById);
+
+// Update user
+router.put('/:id', userController.updateUser);
 
 // Toggle user active status
 router.patch('/:id/toggle-status', userController.toggleUserStatus);

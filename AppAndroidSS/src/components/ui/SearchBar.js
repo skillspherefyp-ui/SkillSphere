@@ -10,8 +10,6 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../../context/ThemeContext';
 
-const USE_NATIVE_DRIVER = Platform.OS !== 'web';
-
 // Section 10 - Form Elements
 // Search input with icon, clear button, and optional filters
 
@@ -46,7 +44,7 @@ const SearchBar = ({
     setIsFocused(true);
     Animated.spring(scaleAnim, {
       toValue: 1.02,
-      useNativeDriver: USE_NATIVE_DRIVER,
+      useNativeDriver: true,
       friction: 8,
     }).start();
   };
@@ -55,7 +53,7 @@ const SearchBar = ({
     setIsFocused(false);
     Animated.spring(scaleAnim, {
       toValue: 1,
-      useNativeDriver: USE_NATIVE_DRIVER,
+      useNativeDriver: true,
       friction: 8,
     }).start();
   };
@@ -79,7 +77,7 @@ const SearchBar = ({
       <Icon
         name="search"
         size={config.iconSize}
-        color={isFocused ? theme.colors.primary : theme.colors.textTertiary}
+        color={isFocused ? '#FF8C42' : theme.colors.textTertiary}
         style={styles.searchIcon}
       />
 
@@ -123,7 +121,7 @@ const SearchBar = ({
       {showFilter && (
         <TouchableOpacity
           onPress={onFilterPress}
-          style={[styles.filterButton, { backgroundColor: theme.colors.backgroundSecondary }]}
+          style={styles.filterButton}
           activeOpacity={0.7}
         >
           <Icon
@@ -143,12 +141,20 @@ const getStyles = (theme, isDark, config, isFocused, isWeb) =>
       flexDirection: 'row',
       alignItems: 'center',
       height: config.height,
-      backgroundColor: isDark ? theme.colors.inputBackground : theme.colors.backgroundSecondary,
+      backgroundColor: isDark
+        ? 'rgba(255,255,255,0.06)'
+        : 'rgba(26,26,46,0.04)',
       borderRadius: 12, // Section 10.1: Border radius 12px
       borderWidth: isFocused ? 2 : 1,
-      borderColor: isFocused ? theme.colors.primary : theme.colors.border,
+      borderColor: isFocused
+        ? '#FF8C42'
+        : isDark
+          ? 'rgba(255,255,255,0.12)'
+          : 'rgba(26,26,46,0.10)',
       paddingHorizontal: config.padding,
       ...(isWeb && {
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
         transition: 'all 200ms ease',
       }),
     },
@@ -167,6 +173,10 @@ const getStyles = (theme, isDark, config, isFocused, isWeb) =>
     clearButton: {
       padding: 4,
       marginLeft: 4,
+      borderRadius: 12,
+      backgroundColor: isDark
+        ? 'rgba(255,255,255,0.08)'
+        : 'rgba(26,26,46,0.05)',
     },
     filterButton: {
       width: 32,
@@ -175,6 +185,9 @@ const getStyles = (theme, isDark, config, isFocused, isWeb) =>
       justifyContent: 'center',
       alignItems: 'center',
       marginLeft: 8,
+      backgroundColor: isDark
+        ? 'rgba(255,255,255,0.1)'
+        : 'rgba(26,26,46,0.06)',
     },
   });
 

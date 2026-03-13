@@ -122,4 +122,39 @@ exports.checkEnrollment = async (req, res) => {
   }
 };
 
+exports.updateEnrollmentProgress = async (req, res) => {
+  try {
+    const { courseId, progress } = req.body;
+
+    if (!courseId || typeof progress !== 'number') {
+      return res.status(400).json({ error: 'Course ID and numeric progress are required' });
+    }
+
+    const enrollment = await Enrollment.findOne({
+      where: {
+        userId: req.user.id,
+        courseId
+      }
+    });
+
+    if (!enrollment) {
+      return res.status(404).json({ error: 'Enrollment not found' });
+    }
+
+    enrollment.progressPercentage = Math.max(0, Math.min(100, progress));
+    enrollment.status = enrollment.progressPercentage >= 100
+      ? 'completed'
+      : enrollment.progressPercentage > 0
+        ? 'in-progress'
+        : 'enrolled';
+    enrollment.completedAt = enrollment.progressPercentage >= 100 ? new Date() : null;
+    await enrollment.save();
+
+    res.json({ success: true, enrollment });
+  } catch (error) {
+    console.error('Update enrollment progress error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 module.exports = exports;

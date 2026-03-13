@@ -2,17 +2,33 @@ import React from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, useWindowDimensions } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import AppHeader from '../../components/ui/AppHeader';
+import MainLayout from '../../components/ui/MainLayout';
 import AppCard from '../../components/ui/AppCard';
 import EmptyState from '../../components/ui/EmptyState';
 import { useData } from '../../context/DataContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
+
+const ORANGE = '#FF8C42';
 
 const NotificationsScreen = () => {
   const { notifications } = useData();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
-  
+  const navigation = useNavigation();
+  const { logout } = useAuth();
+
+  const sidebarItems = [
+    { label: 'Dashboard', icon: 'grid-outline', iconActive: 'grid', route: 'Dashboard' },
+    { label: 'Browse Courses', icon: 'library-outline', iconActive: 'library', route: 'Courses' },
+    { label: 'My Learning', icon: 'school-outline', iconActive: 'school', route: 'EnrolledCourses' },
+    { label: 'AI Assistant', icon: 'sparkles-outline', iconActive: 'sparkles', route: 'AITutor' },
+    { label: 'Certificates', icon: 'ribbon-outline', iconActive: 'ribbon', route: 'Certificates' },
+    { label: 'Reminders', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle', route: 'Todo' },
+  ];
+  const handleNavigate = (route) => navigation.navigate(route);
+
   const isWeb = Platform.OS === 'web';
   const maxWidth = isWeb && width > 1200 ? 1200 : '100%';
 
@@ -69,9 +85,12 @@ const NotificationsScreen = () => {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <AppHeader title="Notifications" />
-
+    <MainLayout
+      showSidebar={true}
+      sidebarItems={sidebarItems}
+      activeRoute="Dashboard"
+      onNavigate={handleNavigate}
+    >
       <View style={[styles.content, { maxWidth, alignSelf: 'center', width: '100%' }]}>
         <FlatList
           data={allNotifications}
@@ -79,6 +98,22 @@ const NotificationsScreen = () => {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <View style={[styles.pageHeaderBanner, {
+              backgroundColor: isDark ? 'rgba(255,140,66,0.06)' : 'rgba(255,140,66,0.05)',
+              borderColor: 'rgba(255,140,66,0.15)',
+            }]}>
+              <View style={styles.bannerLeft}>
+                <View style={[styles.bannerIconCircle, { backgroundColor: ORANGE + '20' }]}>
+                  <Icon name="notifications" size={22} color={ORANGE} />
+                </View>
+                <View style={styles.bannerTextGroup}>
+                  <Text style={[styles.bannerTitle, { color: theme.colors.textPrimary }]}>Notifications</Text>
+                  <Text style={[styles.bannerSubtitle, { color: theme.colors.textSecondary }]}>Stay up to date with your learning</Text>
+                </View>
+              </View>
+            </View>
+          }
           ListEmptyComponent={
             <EmptyState
               icon="notifications-outline"
@@ -88,7 +123,7 @@ const NotificationsScreen = () => {
           }
         />
       </View>
-    </View>
+    </MainLayout>
   );
 };
 
@@ -106,6 +141,10 @@ const styles = StyleSheet.create({
   notificationCard: {
     flexDirection: 'row',
     marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF8C42',
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   notificationIcon: {
     width: 48,
@@ -131,10 +170,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     alignSelf: 'center',
+    backgroundColor: '#FF8C42',
   },
 });
 

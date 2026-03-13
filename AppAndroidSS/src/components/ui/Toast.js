@@ -11,14 +11,12 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../../context/ThemeContext';
 
-const USE_NATIVE_DRIVER = Platform.OS !== 'web';
-
 // Section 20 - Toast Notifications
 // Section 27 - Global Glassmorphism
 
 const TOAST_WIDTH_WEB = 320;     // Section 20.1: Width 320px (web)
 const TOAST_MIN_HEIGHT = 56;     // Section 20.1: Min height 56px
-const TOAST_BORDER_RADIUS = 14;  // Section 20.1: Border radius 14px
+const TOAST_BORDER_RADIUS = 16;  // Section 20.1: Border radius 16px
 const ANIMATION_DURATION = 300;  // Section 20.2: Slide-in 300ms
 const AUTO_DISMISS_DELAY = 4000; // Section 20.2: Auto-dismiss 4 seconds
 
@@ -72,12 +70,12 @@ const Toast = ({
         Animated.timing(slideAnim, {
           toValue: 0,
           duration: ANIMATION_DURATION,
-          useNativeDriver: USE_NATIVE_DRIVER,
+          useNativeDriver: true,
         }),
         Animated.timing(opacityAnim, {
           toValue: 1,
           duration: ANIMATION_DURATION,
-          useNativeDriver: USE_NATIVE_DRIVER,
+          useNativeDriver: true,
         }),
       ]).start();
 
@@ -96,12 +94,12 @@ const Toast = ({
       Animated.timing(slideAnim, {
         toValue: -100,
         duration: ANIMATION_DURATION,
-        useNativeDriver: USE_NATIVE_DRIVER,
+        useNativeDriver: true,
       }),
       Animated.timing(opacityAnim, {
         toValue: 0,
         duration: ANIMATION_DURATION,
-        useNativeDriver: USE_NATIVE_DRIVER,
+        useNativeDriver: true,
       }),
     ]).start(() => {
       setIsVisible(false);
@@ -136,16 +134,19 @@ const Toast = ({
   const getGlassStyle = () => {
     if (isWeb) {
       return {
-        backgroundColor: theme.glass.background,
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        borderColor: theme.glass.border,
+        backgroundColor: isDark
+          ? 'rgba(15,15,30,0.88)'
+          : 'rgba(255,255,255,0.92)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.10)',
         borderWidth: 1,
       };
     }
-    // Native fallback - solid background
     return {
-      backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
+      backgroundColor: isDark ? '#1A1A2E' : '#FFFFFF',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(26,26,46,0.08)',
     };
   };
 
@@ -161,10 +162,17 @@ const Toast = ({
           width: toastWidth,
           transform: [{ translateY: slideAnim }],
           opacity: opacityAnim,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: isDark ? 0.4 : 0.12,
+          shadowRadius: 20,
+          elevation: 12,
         },
-        theme.shadows.lg,
       ]}
     >
+      {/* Left accent bar by type color */}
+      <View style={{ width: 3, height: '100%', backgroundColor: config.color, borderRadius: 2, marginRight: 4 }} />
+
       {/* Icon */}
       <View style={[styles.iconContainer, { backgroundColor: config.bgColor }]}>
         <Icon name={config.icon} size={24} color={config.color} />
@@ -204,7 +212,14 @@ const Toast = ({
 
       {/* Dismiss button */}
       <TouchableOpacity
-        style={styles.dismissButton}
+        style={[
+          styles.dismissButton,
+          {
+            backgroundColor: isDark
+              ? 'rgba(255,255,255,0.1)'
+              : 'rgba(26,26,46,0.06)',
+          },
+        ]}
         onPress={handleDismiss}
         activeOpacity={0.7}
       >
@@ -240,6 +255,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    overflow: 'hidden',
   },
   iconContainer: {
     width: 40,

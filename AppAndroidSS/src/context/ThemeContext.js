@@ -1,6 +1,7 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useColorScheme } from 'react-native';
+import { useColorScheme, Animated, View, StyleSheet } from 'react-native';
 
 const ThemeContext = createContext();
 
@@ -65,337 +66,180 @@ const spacing = {
 // Border Radius as per guide
 const borderRadius = {
   none: 0,
-  sm: 6,
-  md: 10,
-  lg: 14,
-  xl: 18,
-  '2xl': 22,
-  '3xl': 28,
+  sm: 4,
+  md: 8,
+  lg: 12,      // Forms & Inputs: 12px
+  xl: 14,      // Toast notifications: 14px
+  '2xl': 16,   // Cards: 16px as per guide
+  '3xl': 20,
   full: 9999,
 };
 
-const createSemanticColors = (palette) => {
-  return {
-    primary: palette.primary,
-    primaryDark: palette.primaryDark,
-    primaryLight: palette.primaryLight,
-    primaryMuted: palette.primaryMuted,
-
-    secondary: palette.secondary,
-    secondaryDark: palette.secondaryDark,
-    secondaryLight: palette.secondaryLight,
-    secondaryMuted: palette.secondaryMuted,
-
-    accent: palette.accent,
-    accentHover: palette.accentHover,
-
-    background: palette.background,
-    backgroundSecondary: palette.backgroundSecondary,
-    backgroundTertiary: palette.backgroundTertiary,
-    surface: palette.surface,
-    card: palette.card,
-    cardElevated: palette.cardElevated,
-    cardBackground: palette.card,
-    cardGlass: palette.cardGlass,
-    cardBorder: palette.cardBorder,
-    cardBorderHover: palette.cardBorderHover,
-
-    text: palette.text,
-    textPrimary: palette.text,
-    textSecondary: palette.textSecondary,
-    textTertiary: palette.textTertiary,
-    textMuted: palette.muted,
-    textInverse: palette.textInverse,
-    textOnPrimary: palette.textOnPrimary,
-
-    muted: palette.muted,
-    border: palette.border,
-    borderLight: palette.borderLight,
-    borderFocus: palette.primary,
-    divider: palette.divider,
-
-    success: palette.success,
-    successLight: palette.successLight,
-    successDark: palette.successDark,
-    warning: palette.warning,
-    warningLight: palette.warningLight,
-    warningDark: palette.warningDark,
-    error: palette.error,
-    errorLight: palette.errorLight,
-    errorDark: palette.errorDark,
-    info: palette.info,
-    infoLight: palette.infoLight,
-    infoDark: palette.infoDark,
-
-    icon: palette.icon,
-    placeholder: palette.placeholder,
-    inputBackground: palette.inputBackground,
-    inputBorder: palette.inputBorder,
-    inputBorderFocus: palette.primary,
-    inputText: palette.inputText,
-    inputPlaceholder: palette.placeholder,
-    disabled: palette.disabled,
-    disabledText: palette.disabledText,
-    shadow: palette.shadow,
-    shadowMedium: palette.shadowMedium,
-    shadowStrong: palette.shadowStrong,
-    shadowPrimary: palette.shadowPrimary,
-    notification: palette.notification,
-    overlay: palette.overlay,
-    overlayLight: palette.overlayLight,
-
-    tabBarBackground: palette.tabBarBackground,
-    tabBarActiveTint: palette.tabBarActiveTint,
-    tabBarInactiveTint: palette.tabBarInactiveTint,
-    tabBarBorder: palette.tabBarBorder,
-
-    link: palette.primary,
-    linkHover: palette.primaryDark,
-
-    gradientStart: palette.gradientStart,
-    gradientMid: palette.gradientMid,
-    gradientEnd: palette.gradientEnd,
-    heroGradientStart: palette.gradientStart,
-    heroGradientMid: palette.gradientMid,
-    heroGradientEnd: palette.gradientEnd,
-    buttonGradientStart: palette.buttonGradientStart,
-    buttonGradientEnd: palette.buttonGradientEnd,
-
-    navbarBackground: palette.navbarBackground,
-    navbarText: palette.navbarText,
-    navbarTextHover: palette.navbarTextHover,
-    sidebarGradientTop: palette.sidebarGradientTop,
-    sidebarGradientBottom: palette.sidebarGradientBottom,
-
-    headerBackground: palette.headerBackground,
-    headerSurface: palette.headerSurface,
-    headerBorder: palette.headerBorder,
-    headerText: palette.headerText,
-    headerMutedText: palette.headerMutedText,
-    headerIcon: palette.headerIcon,
-    sectionBackground: palette.sectionBackground,
-    sectionElevated: palette.sectionElevated,
-
-    primaryGlow: palette.primaryGlow,
-    secondaryGlow: palette.secondaryGlow,
-    successGlow: palette.successGlow,
-    errorGlow: palette.errorGlow,
-  };
-};
-
-const lightPalette = {
-  primary: '#1F4D78',
-  primaryDark: '#173A5B',
-  primaryLight: '#4D7193',
-  primaryMuted: '#89A1B9',
-  secondary: '#6A7B8D',
-  secondaryDark: '#566678',
-  secondaryLight: '#93A1AE',
-  secondaryMuted: '#BAC4CE',
-  accent: '#3D7B74',
-  accentHover: '#2F645F',
-  background: '#F7F5F1',
-  backgroundSecondary: '#F1EEE8',
-  backgroundTertiary: '#E6E1D8',
-  surface: '#FEFDFC',
-  card: '#FFFFFF',
-  cardElevated: '#FFFFFF',
-  cardGlass: 'rgba(255, 253, 250, 0.84)',
-  cardBorder: '#DDD8CF',
-  cardBorderHover: '#89A1B9',
-  text: '#1B2430',
-  textSecondary: '#5E6A77',
-  textTertiary: '#858F9A',
-  muted: '#A7AFB8',
-  textInverse: '#FFFDFC',
-  textOnPrimary: '#F8FAFC',
-  border: '#DDD8CF',
-  borderLight: '#EAE4DC',
-  divider: '#E2DDD4',
-  success: '#2F6F57',
-  successLight: '#DCECE4',
-  successDark: '#245540',
-  warning: '#A57A3B',
-  warningLight: '#F2E7D1',
-  warningDark: '#7E5D29',
-  error: '#B45D53',
-  errorLight: '#F3E0DD',
-  errorDark: '#8E473F',
-  info: '#456E94',
-  infoLight: '#DDE6EF',
-  infoDark: '#315474',
-  icon: '#566677',
-  placeholder: '#88929D',
-  inputBackground: '#FFFFFF',
-  inputBorder: '#D6D0C7',
-  inputText: '#1B2430',
-  disabled: '#D7D2CA',
-  disabledText: '#9D968C',
-  shadow: 'rgba(15, 23, 34, 0.08)',
-  shadowMedium: 'rgba(15, 23, 34, 0.13)',
-  shadowStrong: 'rgba(15, 23, 34, 0.18)',
-  shadowPrimary: 'rgba(31, 77, 120, 0.18)',
-  notification: '#1F4D78',
-  overlay: 'rgba(19, 31, 46, 0.40)',
-  overlayLight: 'rgba(19, 31, 46, 0.22)',
-  tabBarBackground: '#FEFDFC',
-  tabBarActiveTint: '#1F4D78',
-  tabBarInactiveTint: '#858F9A',
-  tabBarBorder: '#DDD8CF',
-  gradientStart: '#1C4063',
-  gradientMid: '#315779',
-  gradientEnd: '#4D6882',
-  buttonGradientStart: '#1F4D78',
-  buttonGradientEnd: '#355D83',
-  navbarBackground: 'linear-gradient(135deg, #1C4063 0%, #4D6882 100%)',
-  navbarText: '#F8FAFC',
-  navbarTextHover: 'rgba(248, 250, 252, 0.78)',
-  sidebarGradientTop: '#FBF9F5',
-  sidebarGradientBottom: '#EEE8DE',
-  headerBackground: '#1C4063',
-  headerSurface: 'rgba(248, 250, 252, 0.12)',
-  headerBorder: 'rgba(248, 250, 252, 0.18)',
-  headerText: '#F8FAFC',
-  headerMutedText: 'rgba(248, 250, 252, 0.78)',
-  headerIcon: '#F8FAFC',
-  sectionBackground: '#F2EEE7',
-  sectionElevated: '#FFFFFF',
-  primaryGlow: 'rgba(31, 77, 120, 0.12)',
-  secondaryGlow: 'rgba(106, 123, 141, 0.10)',
-  successGlow: 'rgba(47, 111, 87, 0.12)',
-  errorGlow: 'rgba(180, 93, 83, 0.12)',
-};
-
-const darkPalette = {
-  primary: '#7EA4C8',
-  primaryDark: '#6488AB',
-  primaryLight: '#A6BDD4',
-  primaryMuted: '#53687F',
-  secondary: '#93A4B7',
-  secondaryDark: '#76889B',
-  secondaryLight: '#B4C0CB',
-  secondaryMuted: '#536273',
-  accent: '#6D978E',
-  accentHover: '#83AAA2',
-  background: '#111821',
-  backgroundSecondary: '#17202B',
-  backgroundTertiary: '#223040',
-  surface: '#1A2430',
-  card: '#1F2A36',
-  cardElevated: '#263341',
-  cardGlass: 'rgba(31, 42, 54, 0.82)',
-  cardBorder: '#324252',
-  cardBorderHover: '#6488AB',
-  text: '#E6ECF2',
-  textSecondary: '#A8B4C1',
-  textTertiary: '#7E8C9B',
-  muted: '#627181',
-  textInverse: '#111821',
-  textOnPrimary: '#F4F7FB',
-  border: '#324252',
-  borderLight: '#243140',
-  divider: '#2B3948',
-  success: '#68AD89',
-  successLight: 'rgba(104, 173, 137, 0.18)',
-  successDark: '#4F876A',
-  warning: '#CAA566',
-  warningLight: 'rgba(202, 165, 102, 0.18)',
-  warningDark: '#9E7E4B',
-  error: '#CF837A',
-  errorLight: 'rgba(207, 131, 122, 0.18)',
-  errorDark: '#A9655D',
-  info: '#78A4CA',
-  infoLight: 'rgba(120, 164, 202, 0.18)',
-  infoDark: '#5D84A8',
-  icon: '#99A8B7',
-  placeholder: '#748292',
-  inputBackground: '#16202A',
-  inputBorder: '#324252',
-  inputText: '#E6ECF2',
-  disabled: '#293644',
-  disabledText: '#677587',
-  shadow: 'rgba(5, 9, 15, 0.40)',
-  shadowMedium: 'rgba(5, 9, 15, 0.50)',
-  shadowStrong: 'rgba(5, 9, 15, 0.60)',
-  shadowPrimary: 'rgba(126, 164, 200, 0.24)',
-  notification: '#7EA4C8',
-  overlay: 'rgba(6, 10, 16, 0.70)',
-  overlayLight: 'rgba(6, 10, 16, 0.48)',
-  tabBarBackground: '#1A2430',
-  tabBarActiveTint: '#A6BDD4',
-  tabBarInactiveTint: '#7E8C9B',
-  tabBarBorder: '#324252',
-  gradientStart: '#1B3149',
-  gradientMid: '#27415B',
-  gradientEnd: '#314A63',
-  buttonGradientStart: '#355472',
-  buttonGradientEnd: '#47627C',
-  navbarBackground: 'linear-gradient(135deg, #1B3149 0%, #314A63 100%)',
-  navbarText: '#F4F7FB',
-  navbarTextHover: 'rgba(244, 247, 251, 0.78)',
-  sidebarGradientTop: '#18222D',
-  sidebarGradientBottom: '#121A24',
-  headerBackground: '#1B3149',
-  headerSurface: 'rgba(244, 247, 251, 0.10)',
-  headerBorder: 'rgba(244, 247, 251, 0.14)',
-  headerText: '#F4F7FB',
-  headerMutedText: 'rgba(244, 247, 251, 0.76)',
-  headerIcon: '#F4F7FB',
-  sectionBackground: '#16202A',
-  sectionElevated: '#22303D',
-  primaryGlow: 'rgba(126, 164, 200, 0.20)',
-  secondaryGlow: 'rgba(147, 164, 183, 0.16)',
-  successGlow: 'rgba(104, 173, 137, 0.16)',
-  errorGlow: 'rgba(207, 131, 122, 0.16)',
-};
-
-// Light Theme - Academic and premium neutral palette
+// Light Theme - EduView Orange / Navy palette
 const lightTheme = {
   mode: 'light',
-  colors: createSemanticColors(lightPalette),
+  colors: {
+    // Primary Palette — warm orange
+    primary: '#FF8C42',
+    primaryDark: '#E87532',
+    primaryLight: '#F5A53A',
+    primaryMuted: '#FFB380',
 
-  // Glassmorphism config (Section 27.2 - Light Mode)
-  glass: {
-    background: 'rgba(255, 253, 250, 0.78)',
-    backdropBlur: 12,  // 12-16px
-    border: 'rgba(221, 216, 207, 0.7)',
-    borderHover: 'rgba(77, 113, 147, 0.24)',
+    // Secondary Colors — purple
+    secondary: '#7C6FCD',
+    secondaryDark: '#6455B0',
+    secondaryLight: '#9B8DE0',
+    secondaryMuted: '#BDB0F0',
+
+    // Accent Colors — yellow
+    accent: '#F5C842',
+    accentHover: '#E0B530',
+
+    // Gradient Colors
+    gradientStart: '#FF8C42',
+    gradientMid: '#F5A53A',
+    gradientEnd: '#F5C842',
+
+    // Hero/Navbar Gradient — navy
+    heroGradientStart: '#1A1A2E',
+    heroGradientMid: '#1E1E38',
+    heroGradientEnd: '#252540',
+
+    // Button Gradients
+    buttonGradientStart: '#FF8C42',
+    buttonGradientEnd: '#F5A53A',
+
+    // Background Colors (Section 5.2 - Light Theme)
+    background: '#F9FAFB',        // Background: #F9FAFB
+    backgroundSecondary: '#F3F4F6',
+    backgroundTertiary: '#E5E7EB',
+    surface: '#FFFFFF',           // Surface/Card: #FFFFFF
+
+    // Card Colors
+    card: '#FFFFFF',
+    cardElevated: '#FFFFFF',
+    cardBackground: '#FFFFFF',
+    cardGlass: 'rgba(255, 255, 255, 0.65)',  // Glass Effect (Section 27.2)
+    cardBorder: '#E5E7EB',        // Border: #E5E7EB
+    cardBorderHover: '#4F46E5',
+
+    // Text Colors (Section 5.2)
+    text: '#111827',              // Text Primary: #111827
+    textPrimary: '#111827',
+    textSecondary: '#6B7280',     // Text Secondary: #6B7280
+    textTertiary: '#9CA3AF',
+    textMuted: '#D1D5DB',
+    textInverse: '#FFFFFF',
+    textOnPrimary: '#FFFFFF',
+
+    // Border Colors
+    border: '#E5E7EB',
+    borderLight: '#F3F4F6',
+    borderFocus: '#FF8C42',
+    divider: '#E5E7EB',
+
+    // Interactive States
+    link: '#FF8C42',
+    linkHover: '#E87532',
+    placeholder: '#9CA3AF',
+    disabled: '#D1D5DB',
+    disabledText: '#9CA3AF',
+
+    // Status Colors (consistent with guide)
+    success: '#10B981',
+    successLight: '#D1FAE5',
+    successDark: '#059669',
+    error: '#EF4444',
+    errorLight: '#FEE2E2',
+    errorDark: '#DC2626',
+    warning: '#F59E0B',
+    warningLight: '#FEF3C7',
+    warningDark: '#D97706',
+    info: '#3B82F6',
+    infoLight: '#DBEAFE',
+    infoDark: '#2563EB',
+
+    // Shadow Colors (Section 7.2)
+    shadow: 'rgba(0,0,0,0.08)',   // Light: 0 8px 24px rgba(0,0,0,0.08)
+    shadowMedium: 'rgba(0,0,0,0.12)',
+    shadowStrong: 'rgba(0,0,0,0.18)',
+    shadowPrimary: 'rgba(255, 140, 66, 0.25)',
+
+    // Overlay
+    overlay: 'rgba(17, 24, 39, 0.5)',
+    overlayLight: 'rgba(17, 24, 39, 0.3)',
+
+    // Glow Effects
+    primaryGlow: 'rgba(255, 140, 66, 0.2)',
+    secondaryGlow: 'rgba(124, 111, 205, 0.2)',
+    successGlow: 'rgba(16, 185, 129, 0.15)',
+    errorGlow: 'rgba(239, 68, 68, 0.15)',
+
+    // Input Colors
+    inputBackground: '#FFFFFF',
+    inputBorder: '#E5E7EB',
+    inputBorderFocus: '#FF8C42',
+    inputText: '#111827',
+    inputPlaceholder: '#9CA3AF',
+
+    // Navbar specific
+    navbarBackground: 'linear-gradient(135deg, #1A1A2E 0%, #252540 100%)',
+    navbarText: '#FFFFFF',
+    navbarTextHover: 'rgba(255, 255, 255, 0.8)',
+
+    // Sidebar / surface extras
+    sidebarGradientTop: '#1A1A2E',
+    sidebarGradientBottom: '#252540',
+
+    // Tab Bar
+    tabBarBackground: '#FFFFFF',
+    tabBarActiveTint: '#FF8C42',
+    tabBarInactiveTint: '#9CA3AF',
+    tabBarBorder: '#E5E7EB',
   },
 
-  // Shadows (Section 7.2)
+  // Glassmorphism config
+  glass: {
+    background: 'rgba(255, 255, 255, 0.65)',
+    backdropBlur: 12,
+    border: 'rgba(255, 255, 255, 0.3)',
+    borderHover: 'rgba(255, 140, 66, 0.3)',
+  },
+
+  // Shadows
   shadows: {
     sm: {
-      shadowColor: '#0F1722',
+      shadowColor: '#000000',
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.05,
       shadowRadius: 2,
       elevation: 1,
     },
     md: {
-      shadowColor: '#0F1722',
+      shadowColor: '#000000',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.08,
       shadowRadius: 12,
       elevation: 3,
     },
     lg: {
-      shadowColor: '#0F1722',
+      shadowColor: '#000000',
       shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.08,   // Light: rgba(0,0,0,0.08)
+      shadowOpacity: 0.08,
       shadowRadius: 24,
       elevation: 6,
     },
     xl: {
-      shadowColor: '#0F1722',
+      shadowColor: '#000000',
       shadowOffset: { width: 0, height: 10 },
       shadowOpacity: 0.18,
       shadowRadius: 30,
       elevation: 8,
     },
     glow: {
-      shadowColor: '#1F4D78',
+      shadowColor: '#FF8C42',
       shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.25,
+      shadowOpacity: 0.3,
       shadowRadius: 12,
       elevation: 6,
     },
@@ -424,58 +268,176 @@ const lightTheme = {
   },
 };
 
-// Dark Theme - Graphite and slate academic palette
+// Dark Theme — navy + orange palette
 const darkTheme = {
   mode: 'dark',
-  colors: createSemanticColors(darkPalette),
+  colors: {
+    // Primary Colors — orange consistent across themes
+    primary: '#FF8C42',
+    primaryDark: '#E87532',
+    primaryLight: '#F5A53A',
+    primaryMuted: '#C06820',
 
-  // Glassmorphism config (Section 27.2 - Dark Mode)
-  glass: {
-    background: 'rgba(31, 42, 54, 0.84)',
-    backdropBlur: 16,  // 12-20px
-    border: 'rgba(104, 122, 142, 0.26)',
-    borderHover: 'rgba(126, 164, 200, 0.34)',
+    // Secondary Colors — purple
+    secondary: '#9B8DE0',
+    secondaryDark: '#7C6FCD',
+    secondaryLight: '#BDB0F0',
+    secondaryMuted: '#6455B0',
+
+    // Accent Colors
+    accent: '#F5C842',
+    accentHover: '#E0B530',
+
+    // Gradient Colors
+    gradientStart: '#FF8C42',
+    gradientMid: '#F5A53A',
+    gradientEnd: '#F5C842',
+
+    // Hero/Navbar Gradient
+    heroGradientStart: '#1A1A2E',
+    heroGradientMid: '#1E1E38',
+    heroGradientEnd: '#252540',
+
+    // Button Gradients
+    buttonGradientStart: '#FF8C42',
+    buttonGradientEnd: '#F5A53A',
+
+    // Background Colors — navy dark
+    background: '#0D0D1E',
+    backgroundSecondary: '#1A1A2E',
+    backgroundTertiary: '#252540',
+    surface: '#1A1A2E',
+
+    // Card Colors
+    card: '#1A1A2E',
+    cardElevated: '#252540',
+    cardBackground: '#1A1A2E',
+    cardGlass: 'rgba(26, 26, 46, 0.85)',
+    cardBorder: 'rgba(255,255,255,0.08)',
+    cardBorderHover: '#FF8C42',
+
+    // Text Colors
+    text: '#F8FAFC',
+    textPrimary: '#F8FAFC',
+    textSecondary: '#94A3B8',
+    textTertiary: '#64748B',
+    textMuted: '#475569',
+    textInverse: '#0D0D1E',
+    textOnPrimary: '#FFFFFF',
+
+    // Border Colors
+    border: 'rgba(255,255,255,0.1)',
+    borderLight: 'rgba(255,255,255,0.06)',
+    borderFocus: '#FF8C42',
+    divider: 'rgba(255,255,255,0.08)',
+
+    // Interactive States
+    link: '#FF8C42',
+    linkHover: '#F5A53A',
+    placeholder: '#64748B',
+    disabled: '#374151',
+    disabledText: '#6B7280',
+
+    // Status Colors
+    success: '#34D399',
+    successLight: 'rgba(52, 211, 153, 0.15)',
+    successDark: '#10B981',
+    error: '#F87171',
+    errorLight: 'rgba(248, 113, 113, 0.15)',
+    errorDark: '#EF4444',
+    warning: '#FBBF24',
+    warningLight: 'rgba(251, 191, 36, 0.15)',
+    warningDark: '#F59E0B',
+    info: '#60A5FA',
+    infoLight: 'rgba(96, 165, 250, 0.15)',
+    infoDark: '#3B82F6',
+
+    // Shadow Colors
+    shadow: 'rgba(0,0,0,0.5)',
+    shadowMedium: 'rgba(0,0,0,0.6)',
+    shadowStrong: 'rgba(0,0,0,0.7)',
+    shadowPrimary: 'rgba(255, 140, 66, 0.3)',
+
+    // Overlay
+    overlay: 'rgba(0, 0, 0, 0.7)',
+    overlayLight: 'rgba(0, 0, 0, 0.5)',
+
+    // Tab Bar
+    tabBarBackground: '#1A1A2E',
+    tabBarActiveTint: '#FF8C42',
+    tabBarInactiveTint: 'rgba(255,255,255,0.4)',
+    tabBarBorder: 'rgba(255,255,255,0.08)',
+
+    // Glow Effects
+    primaryGlow: 'rgba(255, 140, 66, 0.3)',
+    secondaryGlow: 'rgba(155, 141, 224, 0.3)',
+    successGlow: 'rgba(52, 211, 153, 0.3)',
+    errorGlow: 'rgba(248, 113, 113, 0.3)',
+
+    // Input Colors
+    inputBackground: '#252540',
+    inputBorder: 'rgba(255,255,255,0.12)',
+    inputBorderFocus: '#FF8C42',
+    inputText: '#F8FAFC',
+    inputPlaceholder: '#64748B',
+
+    // Navbar specific
+    navbarBackground: 'linear-gradient(135deg, #1A1A2E 0%, #252540 100%)',
+    navbarText: '#FFFFFF',
+    navbarTextHover: 'rgba(255, 255, 255, 0.8)',
+
+    // Sidebar
+    sidebarGradientTop: '#1A1A2E',
+    sidebarGradientBottom: '#252540',
   },
 
-  // Shadows with dark mode adjustments
+  // Glassmorphism config — dark mode
+  glass: {
+    background: 'rgba(26, 26, 46, 0.85)',
+    backdropBlur: 16,
+    border: 'rgba(255, 255, 255, 0.1)',
+    borderHover: 'rgba(255, 140, 66, 0.4)',
+  },
+
+  // Shadows
   shadows: {
     sm: {
-      shadowColor: '#05090F',
+      shadowColor: '#000000',
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.3,
       shadowRadius: 2,
       elevation: 1,
     },
     md: {
-      shadowColor: '#05090F',
+      shadowColor: '#000000',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.4,
       shadowRadius: 12,
       elevation: 3,
     },
     lg: {
-      shadowColor: '#05090F',
+      shadowColor: '#000000',
       shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.4,   // Dark: rgba(0,0,0,0.4)
+      shadowOpacity: 0.4,
       shadowRadius: 24,
       elevation: 6,
     },
     xl: {
-      shadowColor: '#05090F',
+      shadowColor: '#000000',
       shadowOffset: { width: 0, height: 10 },
       shadowOpacity: 0.5,
       shadowRadius: 30,
       elevation: 8,
     },
     glow: {
-      shadowColor: '#7EA4C8',
+      shadowColor: '#FF8C42',
       shadowOffset: { width: 0, height: 0 },
       shadowOpacity: 0.5,
       shadowRadius: 20,
       elevation: 8,
     },
-    glowBlue: {
-      shadowColor: '#6D978E',
+    glowPurple: {
+      shadowColor: '#9B8DE0',
       shadowOffset: { width: 0, height: 0 },
       shadowOpacity: 0.5,
       shadowRadius: 20,
@@ -511,6 +473,10 @@ export const ThemeProvider = ({ children }) => {
   const [themeMode, setThemeMode] = useState('light');
   const [isLoading, setIsLoading] = useState(true);
 
+  // Theme transition overlay
+  const transitionAnim = useRef(new Animated.Value(0)).current;
+  const [overlayColor, setOverlayColor] = useState('#F9FAFB');
+
   useEffect(() => {
     loadTheme();
   }, []);
@@ -531,22 +497,36 @@ export const ThemeProvider = ({ children }) => {
     }
   };
 
-  const toggleTheme = async () => {
-    const newTheme = themeMode === 'light' ? 'dark' : 'light';
-    setThemeMode(newTheme);
-    try {
-      await AsyncStorage.setItem('themeMode', newTheme);
-    } catch (error) {
-      console.error('Error saving theme:', error);
-    }
+  // Animate a full-screen color wash: fade in the new theme's bg color,
+  // switch theme at peak (invisible behind overlay), then fade out.
+  const animateThemeSwitch = (newMode) => {
+    const bgColor = newMode === 'dark' ? '#0D0D1E' : '#F9FAFB';
+    setOverlayColor(bgColor);
+
+    Animated.timing(transitionAnim, {
+      toValue: 1,
+      duration: 220,
+      useNativeDriver: true,
+    }).start(() => {
+      setThemeMode(newMode);
+      AsyncStorage.setItem('themeMode', newMode).catch(() => {});
+
+      Animated.timing(transitionAnim, {
+        toValue: 0,
+        duration: 420,
+        useNativeDriver: true,
+      }).start();
+    });
   };
 
-  const setTheme = async (mode) => {
-    setThemeMode(mode);
-    try {
-      await AsyncStorage.setItem('themeMode', mode);
-    } catch (error) {
-      console.error('Error saving theme:', error);
+  const toggleTheme = () => {
+    const newTheme = themeMode === 'light' ? 'dark' : 'light';
+    animateThemeSwitch(newTheme);
+  };
+
+  const setTheme = (mode) => {
+    if (mode !== themeMode) {
+      animateThemeSwitch(mode);
     }
   };
 
@@ -561,5 +541,25 @@ export const ThemeProvider = ({ children }) => {
     isDark: themeMode === 'dark',
   };
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>
+      <View style={themeProviderStyles.root}>
+        {children}
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: overlayColor, opacity: transitionAnim },
+          ]}
+        />
+      </View>
+    </ThemeContext.Provider>
+  );
 };
+
+const themeProviderStyles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+});
+

@@ -11,6 +11,7 @@ import {
   progressAPI,
   userAPI,
   feedbackAPI,
+  todoAPI,
 } from '../services/apiClient';
 
 const DataContext = createContext();
@@ -33,6 +34,7 @@ export const DataProvider = ({ children }) => {
   const [certificates, setCertificates] = useState([]);
   const [quizzes, setQuizzes] = useState([]);
   const [progress, setProgress] = useState([]);
+  const [todos, setTodos] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -199,11 +201,17 @@ export const DataProvider = ({ children }) => {
   };
 
   // Enrollments
+  // Normalize enrollment: backend uses `progressPercentage`, frontend expects `progress`
+  const normalizeEnrollment = (e) => ({
+    ...e,
+    progress: e.progressPercentage ?? e.progress ?? 0,
+  });
+
   const fetchMyEnrollments = useCallback(async () => {
     try {
       const response = await enrollmentAPI.getMyEnrollments();
       if (response.success) {
-        setEnrollments(response.enrollments || []);
+        setEnrollments((response.enrollments || []).map(normalizeEnrollment));
       }
       return response;
     } catch (err) {
@@ -215,7 +223,7 @@ export const DataProvider = ({ children }) => {
     try {
       const response = await enrollmentAPI.enroll(courseId);
       if (response.success) {
-        setEnrollments((prev) => [...prev, response.enrollment]);
+        setEnrollments((prev) => [...prev, normalizeEnrollment(response.enrollment)]);
       }
       return response;
     } catch (err) {
@@ -433,6 +441,47 @@ export const DataProvider = ({ children }) => {
     }
   };
 
+  // Todos
+  const fetchTodos = useCallback(async () => {
+    try {
+      const response = await todoAPI.getMyTodos();
+      if (response.success) setTodos(response.todos || []);
+      return response;
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }, []);
+
+  const addTodo = async ({ text, type, scheduledAt }) => {
+    try {
+      const response = await todoAPI.create({ text, type: type || 'reminder', scheduledAt: scheduledAt || null });
+      if (response.success) setTodos((prev) => [response.todo, ...prev]);
+      return response;
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const toggleTodo = async (id) => {
+    try {
+      const response = await todoAPI.toggle(id);
+      if (response.success) setTodos((prev) => prev.map((t) => t.id === id ? response.todo : t));
+      return response;
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const deleteTodo = async (id) => {
+    try {
+      const response = await todoAPI.delete(id);
+      if (response.success) setTodos((prev) => prev.filter((t) => t.id !== id));
+      return response;
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
   // Feedback
   const fetchFeedback = useCallback(async () => {
     try {
@@ -526,6 +575,13 @@ export const DataProvider = ({ children }) => {
     updateUser,
     deleteUser,
     toggleUserStatus,
+
+    // Todos
+    todos,
+    fetchTodos,
+    addTodo,
+    toggleTodo,
+    deleteTodo,
 
     // Feedback
     fetchFeedback,
