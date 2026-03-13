@@ -4,13 +4,13 @@ const OpenAI = require('openai');
 
 let openaiClient = null;
 
-function getRequestTimeoutMs() {
-  const timeout = Number(process.env.OPENAI_REQUEST_TIMEOUT_MS || 45000);
-  return Number.isFinite(timeout) && timeout > 0 ? timeout : 45000;
+function getRequestTimeoutMs(override, fallbackMs = 45000) {
+  const timeout = Number(override || fallbackMs);
+  return Number.isFinite(timeout) && timeout > 0 ? timeout : fallbackMs;
 }
 
-async function withOpenAITimeout(task, label) {
-  const timeoutMs = getRequestTimeoutMs();
+async function withOpenAITimeout(task, label, timeoutOverride, fallbackMs) {
+  const timeoutMs = getRequestTimeoutMs(timeoutOverride, fallbackMs);
 
   return Promise.race([
     task(),
@@ -183,7 +183,9 @@ ${JSON.stringify({
         }
       ]
     }),
-    'lecture package generation'
+    'lecture package generation',
+    process.env.OPENAI_LECTURE_REQUEST_TIMEOUT_MS,
+    180000
   );
 
   return {
@@ -212,7 +214,9 @@ async function repairLecturePackage(rawJsonText, validationErrors) {
         }
       ]
     }),
-    'lecture package repair'
+    'lecture package repair',
+    process.env.OPENAI_LECTURE_REPAIR_TIMEOUT_MS,
+    90000
   );
 
   return getJsonFromCompletion(completion);
@@ -261,7 +265,9 @@ async function answerLectureQuestion({
         }
       ]
     }),
-    'lecture question answering'
+    'lecture question answering',
+    process.env.OPENAI_QA_REQUEST_TIMEOUT_MS,
+    45000
   );
 
   const answer = completion?.choices?.[0]?.message?.content?.trim();
@@ -335,7 +341,9 @@ async function planChunkTeaching({
         }
       ]
     }),
-    'teaching plan generation'
+    'teaching plan generation',
+    process.env.OPENAI_PLANNER_REQUEST_TIMEOUT_MS,
+    45000
   );
 
   return {
@@ -393,7 +401,9 @@ async function answerGeneralChat({
         }
       ]
     }),
-    'general chat response'
+    'general chat response',
+    process.env.OPENAI_CHAT_REQUEST_TIMEOUT_MS,
+    45000
   );
 
   const answer = completion?.choices?.[0]?.message?.content?.trim();
@@ -422,7 +432,9 @@ async function synthesizeSpeech(text, outputPath) {
       format: 'mp3',
       input: text
     }),
-    'speech synthesis'
+    'speech synthesis',
+    process.env.OPENAI_TTS_REQUEST_TIMEOUT_MS,
+    60000
   );
 
   const buffer = Buffer.from(await response.arrayBuffer());
@@ -448,7 +460,9 @@ async function transcribeAudio(tempFilePath) {
       model,
       file: fs.createReadStream(tempFilePath)
     }),
-    'audio transcription'
+    'audio transcription',
+    process.env.OPENAI_STT_REQUEST_TIMEOUT_MS,
+    60000
   );
 
   return {
@@ -475,7 +489,9 @@ async function smokeTest() {
         { role: 'user', content: 'Ping' }
       ]
     }),
-    'smoke test'
+    'smoke test',
+    process.env.OPENAI_SMOKE_TEST_TIMEOUT_MS,
+    20000
   );
 
   return completion?.choices?.[0]?.message?.content?.trim();
