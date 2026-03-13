@@ -741,8 +741,13 @@ async function canManageCourse(user, courseId) {
   }
 
   const isSuperAdmin = user.role === 'superadmin';
+  const isAdmin = user.role === 'admin';
   const isOwner = course.userId === user.id;
   const canManageAll = user.permissions?.canManageAllCourses === true;
+
+  if (!isSuperAdmin && !isAdmin) {
+    throw new Error('Only admins can manage AI content for this course');
+  }
 
   if (!isSuperAdmin && !isOwner && !canManageAll) {
     throw new Error('You do not have permission to manage AI content for this course');

@@ -1,5 +1,22 @@
 const { Course, Category, Topic, Material, Enrollment, Quiz } = require('../models');
 
+function ensureCourseAuthoringAccess(user, course = null) {
+  const isSuperAdmin = user.role === 'superadmin';
+  const isAdmin = user.role === 'admin';
+  const canManageAll = user.permissions?.canManageAllCourses === true;
+  const isOwner = course ? course.userId === user.id : false;
+
+  if (!isSuperAdmin && !isAdmin) {
+    return 'Only admins can manage courses';
+  }
+
+  if (course && !isSuperAdmin && !isOwner && !canManageAll) {
+    return 'You do not have permission to manage this course';
+  }
+
+  return null;
+}
+
 // Get top N published courses by enrollment count (public)
 exports.getTopCourses = async (req, res) => {
   try {
@@ -38,6 +55,11 @@ exports.getTopCourses = async (req, res) => {
 exports.createCourse = async (req, res) => {
   try {
     const { name, description, level, language, categoryId, duration, materials, thumbnailImage, creationMode } = req.body;
+
+    const accessError = ensureCourseAuthoringAccess(req.user);
+    if (accessError) {
+      return res.status(403).json({ error: accessError });
+    }
 
     console.log('📝 Creating course...');
     console.log('🖼️  Received thumbnailImage:', thumbnailImage);
@@ -197,13 +219,9 @@ exports.updateCourse = async (req, res) => {
       return res.status(404).json({ error: 'Course not found' });
     }
 
-    // Permission check: SuperAdmin, Admin with canManageAllCourses, or course owner
-    const isSuperAdmin = req.user.role === 'superadmin';
-    const isOwner = course.userId === req.user.id;
-    const canManageAll = req.user.permissions?.canManageAllCourses === true;
-
-    if (!isSuperAdmin && !isOwner && !canManageAll) {
-      return res.status(403).json({ error: 'You do not have permission to update this course' });
+    const accessError = ensureCourseAuthoringAccess(req.user, course);
+    if (accessError) {
+      return res.status(403).json({ error: accessError });
     }
 
     if (categoryId) {
@@ -265,13 +283,9 @@ exports.deleteCourse = async (req, res) => {
       return res.status(404).json({ error: 'Course not found' });
     }
 
-    // Permission check: SuperAdmin, Admin with canManageAllCourses, or course owner
-    const isSuperAdmin = req.user.role === 'superadmin';
-    const isOwner = course.userId === req.user.id;
-    const canManageAll = req.user.permissions?.canManageAllCourses === true;
-
-    if (!isSuperAdmin && !isOwner && !canManageAll) {
-      return res.status(403).json({ error: 'You do not have permission to delete this course' });
+    const accessError = ensureCourseAuthoringAccess(req.user, course);
+    if (accessError) {
+      return res.status(403).json({ error: accessError });
     }
 
     // Manually delete related records first
@@ -307,13 +321,9 @@ exports.publishCourse = async (req, res) => {
       return res.status(404).json({ error: 'Course not found' });
     }
 
-    // Permission check: SuperAdmin, Admin with canManageAllCourses, or course owner
-    const isSuperAdmin = req.user.role === 'superadmin';
-    const isOwner = course.userId === req.user.id;
-    const canManageAll = req.user.permissions?.canManageAllCourses === true;
-
-    if (!isSuperAdmin && !isOwner && !canManageAll) {
-      return res.status(403).json({ error: 'You do not have permission to publish/unpublish this course' });
+    const accessError = ensureCourseAuthoringAccess(req.user, course);
+    if (accessError) {
+      return res.status(403).json({ error: accessError });
     }
 
     course.status = 'published';
@@ -325,5 +335,4 @@ exports.publishCourse = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-
 

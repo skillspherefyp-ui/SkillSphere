@@ -1,5 +1,22 @@
 const { sequelize, Topic, Course, Material, Quiz } = require('../models');
 
+function ensureTopicAuthoringAccess(user, course) {
+  const isSuperAdmin = user.role === 'superadmin';
+  const isAdmin = user.role === 'admin';
+  const canManageAll = user.permissions?.canManageAllCourses === true;
+  const isOwner = course.userId === user.id;
+
+  if (!isSuperAdmin && !isAdmin) {
+    return 'Only admins can manage course topics';
+  }
+
+  if (!isSuperAdmin && !isOwner && !canManageAll) {
+    return 'You do not have permission to manage topics for this course';
+  }
+
+  return null;
+}
+
 function sanitizeQuizQuestions(questions = []) {
   if (!Array.isArray(questions)) {
     return [];
@@ -36,13 +53,9 @@ exports.createTopic = async (req, res) => {
       return res.status(404).json({ error: 'Course not found' });
     }
 
-    // Check if the requesting user is the course creator, super admin, or has canManageAllCourses permission
-    const isSuperAdmin = req.user.role === 'superadmin';
-    const isOwner = course.userId === req.user.id;
-    const canManageAll = req.user.permissions?.canManageAllCourses === true;
-
-    if (!isSuperAdmin && !isOwner && !canManageAll) {
-      return res.status(403).json({ error: 'You do not have permission to add topics to this course' });
+    const accessError = ensureTopicAuthoringAccess(req.user, course);
+    if (accessError) {
+      return res.status(403).json({ error: accessError });
     }
 
     // Get the highest order number for this course
@@ -136,14 +149,10 @@ exports.updateTopic = async (req, res) => {
       return res.status(404).json({ error: 'Topic not found' });
     }
 
-    // Check if the requesting user is the course creator, super admin, or has canManageAllCourses permission
     const course = topic.course;
-    const isSuperAdmin = req.user.role === 'superadmin';
-    const isOwner = course.userId === req.user.id;
-    const canManageAll = req.user.permissions?.canManageAllCourses === true;
-
-    if (!isSuperAdmin && !isOwner && !canManageAll) {
-      return res.status(403).json({ error: 'You do not have permission to update this topic' });
+    const accessError = ensureTopicAuthoringAccess(req.user, course);
+    if (accessError) {
+      return res.status(403).json({ error: accessError });
     }
 
     if (title) topic.title = title;
@@ -218,14 +227,10 @@ exports.deleteTopic = async (req, res) => {
       return res.status(404).json({ error: 'Topic not found' });
     }
 
-    // Check if the requesting user is the course creator, super admin, or has canManageAllCourses permission
     const course = topic.course;
-    const isSuperAdmin = req.user.role === 'superadmin';
-    const isOwner = course.userId === req.user.id;
-    const canManageAll = req.user.permissions?.canManageAllCourses === true;
-
-    if (!isSuperAdmin && !isOwner && !canManageAll) {
-      return res.status(403).json({ error: 'You do not have permission to delete this topic' });
+    const accessError = ensureTopicAuthoringAccess(req.user, course);
+    if (accessError) {
+      return res.status(403).json({ error: accessError });
     }
 
     await topic.destroy();
@@ -236,4 +241,3 @@ exports.deleteTopic = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-

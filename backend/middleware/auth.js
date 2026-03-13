@@ -21,8 +21,8 @@ const authenticateToken = async (req, res, next) => {
       return res.status(401).json({ error: 'Account is inactive' });
     }
 
-    // Ensure permissions object exists for admin/expert users
-    if (['admin', 'expert'].includes(user.role) && !user.permissions) {
+    // Ensure permissions object exists for admin users
+    if (user.role === 'admin' && !user.permissions) {
       user.permissions = {
         canManageAllCourses: true,
         canManageCategories: true,
@@ -111,6 +111,5 @@ module.exports = {
   canManageCertificates,
   canViewFeedback
 };
-
 
 
