@@ -3,6 +3,11 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const webpack = require('webpack');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 
+const resolveModule = (request) =>
+  require.resolve(request, {
+    paths: [__dirname, path.resolve(__dirname, '../node_modules')],
+  });
+
 // Helper function to check if a file path contains any of the specified packages
 const shouldTranspileModule = (filepath) => {
   const packagesToTranspile = [
@@ -42,10 +47,10 @@ module.exports = {
     ],
     alias: {
       'react-native$': path.resolve(__dirname, 'react-native-web-compat.js'),
-      'react-native/package.json': path.resolve(__dirname, 'node_modules/react-native/package.json'),
+      'react-native/package.json': resolveModule('react-native/package.json'),
       '@react-native-async-storage/async-storage': '@react-native-async-storage/async-storage',
-      'react': path.resolve(__dirname, 'node_modules/react'),
-      'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
+      react: path.dirname(resolveModule('react/package.json')),
+      'react-dom': path.dirname(resolveModule('react-dom/package.json')),
     },
     fallback: {
       process: require.resolve('process/browser'),
@@ -146,7 +151,7 @@ module.exports = {
     new CopyWebpackPlugin({
       patterns: [
         {
-          from: path.resolve(__dirname, 'node_modules/react-native-vector-icons/Fonts'),
+          from: path.dirname(resolveModule('react-native-vector-icons/package.json')) + '/Fonts',
           to: path.resolve(__dirname, 'web-build/assets/fonts'),
           noErrorOnMissing: true,
         },
@@ -185,7 +190,5 @@ module.exports = {
   },
   devtool: 'source-map',
 };
-
-
 
 
