@@ -166,7 +166,10 @@ exports.restartSession = async (req, res) => {
 
 exports.pauseSession = async (req, res) => {
   try {
-    const session = await aiTutorService.setSessionPaused(req.params.sessionId, req.user.id, true);
+    const session = await aiTutorService.setSessionPaused(req.params.sessionId, req.user.id, true, {
+      pauseReason: req.body.pauseReason,
+      resumeLeadIn: req.body.resumeLeadIn,
+    });
     res.json({ success: true, session });
   } catch (error) {
     console.error('Pause AI tutor session error:', error);

@@ -155,6 +155,23 @@ function getModeLabel(mode) {
   }
 }
 
+function getWhiteboardMode(classroomMode) {
+  switch (classroomMode) {
+    case 'diagram_explainer':
+    case 'flowchart_explainer':
+      return 'diagram_mode';
+    case 'comparison_explainer':
+      return 'compare_mode';
+    case 'code_walkthrough':
+      return 'example_mode';
+    case 'checkpoint':
+    case 'recap':
+      return 'summary_mode';
+    default:
+      return 'concept_mode';
+  }
+}
+
 function resolveClassroomMode({ chunk, plan, checkpointText, snippetData }) {
   const visualType = plan.visual_priority || chunk.visualMode || 'none';
   const isTechnical = plan.concept_type === 'technical' || Boolean(snippetData);
@@ -321,6 +338,337 @@ function composeNarration(segments) {
   return segments.join(' ');
 }
 
+function summarizeBoardAction(action = {}) {
+  const payload = action.payload || {};
+  switch (action.type) {
+    case 'add_title':
+      return payload.text || '';
+    case 'add_paragraph':
+      return [payload.title, payload.text].filter(Boolean).join(': ');
+    case 'add_bullet_list':
+      return [payload.title, ...((payload.items || []).slice(0, 4))].filter(Boolean).join(' | ');
+    case 'draw_diagram':
+      return payload.title || payload.diagramType || 'diagram';
+    case 'show_example':
+      return payload.title || payload.content || 'example';
+    case 'show_equation':
+      return payload.expression || 'equation';
+    case 'highlight_element':
+      return payload.label || payload.targetId || 'highlight';
+    case 'focus_region':
+      return payload.label || payload.region || 'focus';
+    case 'transition':
+      return payload.text || 'transition';
+    default:
+      return '';
+  }
+}
+
+function buildVisibleBoardContext({ scenes = [], sceneIndex = 0, boardContent, supportPanel }) {
+  const safeScenes = Array.isArray(scenes) ? scenes : [];
+  const activeScene = safeScenes[Math.min(Math.max(sceneIndex, 0), Math.max(safeScenes.length - 1, 0))] || null;
+  const visibleActions = safeScenes
+    .slice(0, Math.min(sceneIndex + 1, safeScenes.length))
+    .flatMap((scene) => Array.isArray(scene?.board_actions || scene?.boardActions) ? (scene.board_actions || scene.boardActions) : []);
+  const visibleElements = dedupeStrings(visibleActions.map(summarizeBoardAction).filter(Boolean)).slice(0, 8);
+
+  return {
+    scene_index: sceneIndex,
+    scene_title: activeScene?.title || '',
+    scene_type: activeScene?.type || '',
+    scene_mode: activeScene?.mode || '',
+    subtitle: `${activeScene?.subtitle_text || activeScene?.subtitle || activeScene?.narration || ''}`.trim(),
+    visible_elements: visibleElements,
+    board_summary: boardContent?.title || '',
+    board_type: boardContent?.type || 'narration',
+    support_note: supportPanel?.text || '',
+    diagram_context: activeScene?.diagram_instructions || activeScene?.diagram_instruction || null,
+    example_context: activeScene?.example_instructions || activeScene?.example || null,
+    highlight_focus: visibleActions
+      .filter((action) => action.type === 'highlight_element' || action.type === 'focus_region')
+      .map(summarizeBoardAction)
+      .filter(Boolean)
+      .slice(-3),
+  };
+}
+
+function getStoredScenes(chunk, fallbackScenes) {
+  const storedScenes = Array.isArray(chunk?.scenes) && chunk.scenes.length
+    ? chunk.scenes
+    : Array.isArray(chunk?.visualData?.scenes) && chunk.visualData.scenes.length
+      ? chunk.visualData.scenes
+      : [];
+
+  return storedScenes.length > 0 ? storedScenes : fallbackScenes;
+}
+
+function buildBoardActions({ boardContent, supportPanel, checkpointText, reinforcementPoints }) {
+  if (!boardContent) {
+    return [];
+  }
+
+  const actions = [
+    { type: 'clear_board', payload: { tone: 'clean', accent: '#dbeafe' } },
+    { type: 'add_title', payload: { id: 'board-title', text: boardContent.title || 'Explanation' } },
+  ];
+
+  switch (boardContent.type) {
+    case 'whiteboard_notes':
+    case 'narration':
+      actions.push({
+        type: 'add_bullet_list',
+        payload: {
+          id: 'whiteboard-notes',
+          title: 'Core ideas',
+          items: (boardContent.notes || []).slice(0, 5),
+        }
+      });
+      if (boardContent.emphasis) {
+        actions.push({
+          type: 'highlight_element',
+          payload: { id: 'board-emphasis', label: boardContent.emphasis, tone: 'accent' }
+        });
+      }
+      break;
+    case 'slide_summary':
+    case 'recap':
+      actions.push({
+        type: 'add_bullet_list',
+        payload: {
+          id: 'summary-list',
+          title: 'Summary',
+          items: (boardContent.bullets || []).slice(0, 5),
+        }
+      });
+      break;
+    case 'diagram':
+      actions.push({
+        type: 'draw_diagram',
+        payload: {
+          id: 'primary-diagram',
+          title: boardContent.caption || 'Concept map',
+          diagramType: 'concept_map',
+          nodes: (boardContent.nodes || []).slice(0, 6),
+        }
+      });
+      break;
+    case 'flowchart':
+      actions.push({
+        type: 'draw_diagram',
+        payload: {
+          id: 'flow-diagram',
+          title: boardContent.title || 'Process flow',
+          diagramType: 'flowchart',
+          steps: (boardContent.steps || []).slice(0, 6),
+        }
+      });
+      break;
+    case 'comparison_table':
+      actions.push({
+        type: 'draw_diagram',
+        payload: {
+          id: 'comparison-grid',
+          title: boardContent.title || 'Comparison',
+          diagramType: 'comparison_table',
+          columns: boardContent.columns || ['Concept', 'Teaching note'],
+          rows: (boardContent.rows || []).slice(0, 5),
+        }
+      });
+      break;
+    case 'code':
+      actions.push({
+        type: 'show_example',
+        payload: {
+          id: 'code-example',
+          title: boardContent.title || 'Worked example',
+          format: 'code',
+          language: boardContent.snippetLanguage || 'text',
+          content: boardContent.snippet || '',
+          note: boardContent.snippetExplanation || '',
+        }
+      });
+      break;
+    case 'checkpoint':
+      actions.push({
+        type: 'add_paragraph',
+        payload: {
+          id: 'checkpoint-card',
+          text: boardContent.question || checkpointText || '',
+          tone: 'focus',
+          role: 'checkpoint',
+        }
+      });
+      actions.push({
+        type: 'focus_region',
+        payload: { region: 'checkpoint', label: 'Pause and reflect' }
+      });
+      break;
+    default:
+      actions.push({
+        type: 'add_paragraph',
+        payload: { id: 'board-paragraph', text: boardContent.title || 'Explanation' }
+      });
+      break;
+  }
+
+  if (supportPanel?.text) {
+    actions.push({
+      type: 'add_paragraph',
+      payload: {
+        id: 'support-note',
+        title: supportPanel.title || 'Teacher note',
+        text: supportPanel.text,
+        tone: supportPanel.type === 'checkpoint' ? 'focus' : 'support',
+        role: 'support',
+      }
+    });
+  }
+
+  if (reinforcementPoints?.[0]) {
+    actions.push({
+      type: 'highlight_element',
+      payload: { id: 'reinforcement-highlight', label: reinforcementPoints[0], tone: 'accent' }
+    });
+  }
+
+  return actions;
+}
+
+function buildLectureScenes({
+  chunk,
+  boardContent,
+  supportPanel,
+  narrationSegments,
+  narrationText,
+  transitionText,
+  checkpointText,
+  classroomMode,
+  recommendedDurationSeconds,
+  plan
+}) {
+  const totalDurationMs = Math.max(3200, (Number(recommendedDurationSeconds) || 6) * 1000);
+  const whiteboardMode = getWhiteboardMode(classroomMode);
+  const scenes = [];
+  let cursor = 0;
+
+  if (transitionText) {
+    const durationMs = 1600;
+    scenes.push({
+      id: 'scene-transition',
+      title: 'Transition',
+      type: 'transition',
+      mode: 'concept_mode',
+      narration: transitionText,
+      subtitle_text: transitionText,
+      timing: { start_ms: cursor, duration_ms: durationMs },
+      board_actions: [
+        { type: 'clear_board', payload: { tone: 'clean', accent: '#dbeafe' } },
+        { type: 'transition', payload: { id: 'transition-overlay', text: transitionText } }
+      ],
+    });
+    cursor += durationMs;
+  }
+
+  const coreDurationMs = Math.max(1800, Math.round(totalDurationMs * (chunk.examples?.[0] ? 0.56 : checkpointText ? 0.68 : 0.78)));
+  scenes.push({
+    id: 'scene-core',
+    title: boardContent?.title || chunk.title || 'Core concept',
+    type: 'instruction',
+    mode: whiteboardMode,
+    narration: narrationSegments[1] || narrationText,
+    subtitle_text: narrationSegments[1] || narrationText,
+    timing: { start_ms: cursor, duration_ms: coreDurationMs },
+    diagram_instructions: ['diagram_explainer', 'flowchart_explainer', 'comparison_explainer'].includes(classroomMode)
+      ? {
+          visual_type: boardContent?.type || plan.visual_priority,
+          caption: chunk.visualCaption || boardContent?.caption || '',
+        }
+      : null,
+    board_actions: buildBoardActions({
+      boardContent,
+      supportPanel,
+      checkpointText,
+      reinforcementPoints: plan.reinforcement_points,
+    }),
+  });
+  cursor += coreDurationMs;
+
+  if (plan.use_example && chunk.examples?.[0]) {
+    const exampleDurationMs = Math.max(1400, Math.round(totalDurationMs * 0.2));
+    scenes.push({
+      id: 'scene-example',
+      title: 'Worked example',
+      type: 'example',
+      mode: 'example_mode',
+      narration: `For example, ${chunk.examples[0]}`,
+      subtitle_text: `For example, ${chunk.examples[0]}`,
+      timing: { start_ms: cursor, duration_ms: exampleDurationMs },
+      example_instructions: {
+        type: 'worked_example',
+        text: chunk.examples[0],
+      },
+      board_actions: [
+        {
+          type: 'show_example',
+          payload: {
+            id: 'worked-example',
+            title: 'Example',
+            content: chunk.examples[0],
+            format: 'text',
+          }
+        },
+        {
+          type: 'highlight_element',
+          payload: { id: 'example-highlight', targetId: 'worked-example', label: 'Example' }
+        }
+      ],
+    });
+    cursor += exampleDurationMs;
+  }
+
+  if (checkpointText || plan.reinforcement_points?.length) {
+    const summaryDurationMs = Math.max(1200, totalDurationMs - cursor);
+    scenes.push({
+      id: checkpointText ? 'scene-checkpoint' : 'scene-summary',
+      title: checkpointText ? 'Quick check' : 'Summary',
+      type: checkpointText ? 'checkpoint' : 'summary',
+      mode: 'summary_mode',
+      narration: checkpointText
+        ? `Before we move on, ${checkpointText}`
+        : `To summarize, ${(plan.reinforcement_points || []).slice(0, 3).join('. ')}`,
+      subtitle_text: checkpointText || (plan.reinforcement_points || []).slice(0, 3).join(' • '),
+      timing: { start_ms: cursor, duration_ms: summaryDurationMs },
+      board_actions: checkpointText
+        ? [
+            {
+              type: 'add_paragraph',
+              payload: { id: 'checkpoint-summary', text: checkpointText, tone: 'focus', role: 'checkpoint' }
+            },
+            {
+              type: 'focus_region',
+              payload: { region: 'summary', label: 'Student response time' }
+            }
+          ]
+        : [
+            {
+              type: 'add_bullet_list',
+              payload: {
+                id: 'summary-points',
+                title: 'Key takeaways',
+                items: (plan.reinforcement_points || []).slice(0, 3),
+              }
+            },
+            {
+              type: 'highlight_element',
+              payload: { id: 'summary-highlight', label: plan.reinforcement_points?.[0] || 'Key takeaway' }
+            }
+          ],
+    });
+  }
+
+  return scenes;
+}
+
 function shouldUseAiPlanner(plan, chunk, session) {
   if (process.env.ENABLE_TUTOR_MICRO_PLANNER !== 'true') {
     return false;
@@ -341,6 +689,36 @@ function shouldUseAiPlanner(plan, chunk, session) {
   ];
 
   return signals.filter(Boolean).length >= 2;
+}
+
+function buildPlannerTutorContext({ chunk, session, plan }) {
+  const storedScenes = Array.isArray(chunk?.scenes) && chunk.scenes.length
+    ? chunk.scenes
+    : Array.isArray(chunk?.visualData?.scenes) ? chunk.visualData.scenes : [];
+  const sceneIndex = Number.isInteger(session?.teachingState?.currentStepIndex) ? session.teachingState.currentStepIndex : 0;
+  const currentScene = storedScenes[Math.min(sceneIndex, Math.max(storedScenes.length - 1, 0))] || null;
+
+  return {
+    current_scene: currentScene ? {
+      title: currentScene.title || '',
+      type: currentScene.type || '',
+      mode: currentScene.mode || '',
+      subtitle: currentScene.subtitle || currentScene.subtitle_text || '',
+    } : null,
+    visible_whiteboard: {
+      title: chunk?.title || '',
+      whiteboard_explanation: chunk?.whiteboardExplanation || '',
+      bullets: (chunk?.slideBullets || []).slice(0, 5),
+      examples: (chunk?.examples || []).slice(0, 2),
+      visual_mode: chunk?.visualMode || plan.visual_priority || 'none',
+      checkpoint: chunk?.checkpointQuestion || '',
+    },
+    current_highlight: currentScene?.board_actions
+      ?.filter((action) => action.type === 'highlight_element' || action.type === 'focus_region')
+      .map(summarizeBoardAction)
+      .filter(Boolean)
+      .slice(-2) || [],
+  };
 }
 
 async function getTeachingDecision({ lecture, chunk, session, visualSuggestion, previousChunk, nextChunk }) {
@@ -378,6 +756,7 @@ async function getTeachingDecision({ lecture, chunk, session, visualSuggestion, 
           title: nextChunk.title,
           summary: nextChunk.summary,
         } : null,
+        tutorContext: buildPlannerTutorContext({ chunk, session, plan: basePlan }),
         teachingPlanSeed: basePlan,
         resumeContext: session?.teachingState?.lastPauseReason || null
       });
@@ -429,6 +808,29 @@ async function getTeachingDecision({ lecture, chunk, session, visualSuggestion, 
     resumeText
   });
   const narrationText = composeNarration(narrationSegments);
+  const generatedScenes = buildLectureScenes({
+    chunk,
+    boardContent,
+    supportPanel,
+    narrationSegments,
+    narrationText,
+    transitionText: resumeText || finalPlan.transition_in,
+    checkpointText,
+    classroomMode,
+    recommendedDurationSeconds: finalPlan.recommended_duration_seconds,
+    plan: finalPlan,
+  });
+  const scenes = getStoredScenes(chunk, generatedScenes);
+  const currentStepIndex = Number.isInteger(session?.teachingState?.currentStepIndex)
+    ? Math.max(0, Math.min(session.teachingState.currentStepIndex, Math.max(scenes.length - 1, 0)))
+    : 0;
+  const visibleBoardContext = buildVisibleBoardContext({
+    scenes,
+    sceneIndex: currentStepIndex,
+    boardContent,
+    supportPanel,
+  });
+  const primaryNarration = scenes.map((scene) => `${scene?.narration || ''}`.trim()).filter(Boolean).join(' ') || narrationText;
 
   return {
     speak_now: true,
@@ -440,7 +842,7 @@ async function getTeachingDecision({ lecture, chunk, session, visualSuggestion, 
     use_analogy: finalPlan.use_analogy,
     visual_type: panelContent.visualType,
     visual_query: panelContent.visualQuery,
-    narration_text: narrationText,
+    narration_text: primaryNarration,
     narration_segments: narrationSegments,
     transition_text: resumeText || finalPlan.transition_in,
     resume_text: resumeText,
@@ -455,9 +857,23 @@ async function getTeachingDecision({ lecture, chunk, session, visualSuggestion, 
     support_panel: supportPanel,
     teacher_tone: finalPlan.teacher_tone,
     teaching_sequence: sequence,
-    current_step_index: 0,
+    current_step_index: currentStepIndex,
+    current_scene: scenes[currentStepIndex] || null,
+    visible_board_context: visibleBoardContext,
     current_mode: classroomMode,
     current_mode_label: getModeLabel(classroomMode),
+    whiteboard_mode: getWhiteboardMode(classroomMode),
+    scenes,
+    orchestration: {
+      version: 'v2',
+      whiteboard_mode: getWhiteboardMode(classroomMode),
+      scenes,
+      interruptPolicy: {
+        pauseOnRaiseHand: true,
+        pauseOnQuestionPanel: true,
+        resumeFromCurrentScene: true,
+      },
+    },
     next_action: nextChunk?.title ? `Prepare next chunk: ${nextChunk.title}` : 'next_chunk',
     recommended_duration_seconds: finalPlan.recommended_duration_seconds,
     planner_source: plannerSource,

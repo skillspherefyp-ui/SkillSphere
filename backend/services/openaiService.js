@@ -49,24 +49,9 @@ function getJsonFromCompletion(completion) {
   }
 }
 
-async function generateLecturePackage({
-  course,
-  topic,
-  materials,
-  priorTopics,
-  nextTopicTitle,
-  outlineText,
-  compactMode = false,
-  minimalMode = false
-}) {
-  const client = getClient();
-  const model = process.env.OPENAI_MODEL_LECTURE;
-
-  if (!model) {
-    throw new Error('OPENAI_MODEL_LECTURE is not configured');
-  }
-
-  const schemaDescription = {
+function getLectureSchemaDescription() {
+  return {
+    lecture_version: 'scene_v1',
     title: 'string',
     summary: 'string',
     estimatedDurationMinutes: 'integer',
@@ -104,7 +89,34 @@ async function generateLecturePackage({
             teaching_sequence: ['speak', 'slide', 'diagram', 'whiteboard', 'visual'],
             difficulty_level: 'introductory | intermediate | advanced',
             estimated_duration_seconds: 'integer',
-            checkpoint_question_if_any: 'string'
+            checkpoint_question_if_any: 'string',
+            scenes: [
+              {
+                id: 'string',
+                title: 'string',
+                type: 'transition | instruction | diagram | example | compare | summary | checkpoint',
+                mode: 'concept_mode | diagram_mode | example_mode | compare_mode | summary_mode',
+                narration: 'string',
+                subtitle: 'string',
+                timing_ms: 'integer',
+                board_actions: [
+                  {
+                    type: 'clear_board | add_title | add_paragraph | add_bullet_list | draw_diagram | show_equation | show_example | highlight_element | animate_element | remove_element | focus_region | transition',
+                    payload: 'object'
+                  }
+                ],
+                diagram_instruction: {
+                  type: 'string',
+                  prompt: 'string',
+                  data: 'object'
+                },
+                example: {
+                  title: 'string',
+                  content: 'string',
+                  format: 'text | code | table'
+                }
+              }
+            ]
           }
         ]
       }
@@ -128,6 +140,26 @@ async function generateLecturePackage({
       ]
     }
   };
+}
+
+async function generateLecturePackage({
+  course,
+  topic,
+  materials,
+  priorTopics,
+  nextTopicTitle,
+  outlineText,
+  compactMode = false,
+  minimalMode = false
+}) {
+  const client = getClient();
+  const model = process.env.OPENAI_MODEL_LECTURE;
+
+  if (!model) {
+    throw new Error('OPENAI_MODEL_LECTURE is not configured');
+  }
+
+  const schemaDescription = getLectureSchemaDescription();
 
   const generationProfile = minimalMode
     ? {
@@ -190,6 +222,14 @@ Constraints:
 - Generate ${generationProfile.chunkRange} chunks per section for incremental delivery.
 - Each chunk should be ${generationProfile.chunkDetail}.
 - Every chunk must contain a real spoken explanation in full sentences.
+- Every chunk must include a short scenes array designed for whiteboard-first teaching.
+- Scenes must be stable JSON objects, not prose blobs.
+- Keep scenes short and well paced for TTS playback. Aim for 2 to 4 scenes per chunk, usually 1200ms to 6500ms each.
+- subtitle should be the exact learner-facing subtitle line for that scene.
+- board_actions must tell the whiteboard what to show inside the board area itself.
+- Use diagram_instruction only when a diagram genuinely helps.
+- Use example only when a concrete example improves understanding.
+- Smoothly transition between scenes like a professional AI lecturer.
 - Use visual_mode deliberately. Choose whiteboard, slide, diagram, flowchart, comparison_table, mixed, or none based on the concept.
 - Use teaching_sequence to decide the order of teaching actions for that chunk.
 - Include examples, key terms, and analogy_if_helpful when they make the explanation stronger.
@@ -216,7 +256,11 @@ ${JSON.stringify(compactTopicContext, null, 2)}
       messages: [
         {
           role: 'system',
-          content: 'You generate strict JSON lecture packages for an educational tutoring platform.'
+          content: [
+            'You generate strict JSON lecture packages for an educational tutoring platform.',
+            'Your output must be production-safe, parseable, and scene-based.',
+            'Prefer short, classroom-friendly scenes with explicit whiteboard actions.'
+          ].join(' ')
         },
         {
           role: 'user',
@@ -247,11 +291,15 @@ async function repairLecturePackage(rawJsonText, validationErrors) {
       messages: [
         {
           role: 'system',
-          content: 'Repair invalid JSON lecture packages. Return JSON only.'
+          content: [
+            'Repair invalid JSON lecture packages.',
+            'Return JSON only.',
+            'Preserve or reconstruct scene-based chunks with short scenes, subtitles, timing, and board_actions.'
+          ].join(' ')
         },
         {
           role: 'user',
-          content: `Fix this lecture package so it matches the required shape. Validation errors: ${validationErrors.join('; ')}. Raw JSON: ${rawJsonText}`
+          content: `Fix this lecture package so it matches the required shape: ${JSON.stringify(getLectureSchemaDescription())}. Validation errors: ${validationErrors.join('; ')}. Raw JSON: ${rawJsonText}`
         }
       ]
     }),
@@ -268,6 +316,7 @@ async function answerLectureQuestion({
   lectureSummary,
   currentChunk,
   currentSection,
+  tutorContext,
   recentMessages,
   question
 }) {
@@ -288,6 +337,12 @@ async function answerLectureQuestion({
           content: [
             'You are an AI tutor answering in-context lecture questions.',
             'Stay focused on the active lecture and explain clearly.',
+            'Treat the active scene and visible whiteboard content as the source of truth for what the student is currently seeing.',
+            'Keep answers concise, student-friendly, and consistent with the visible board.',
+            'When the board shows a diagram, explain the diagram naturally instead of introducing unrelated content.',
+            'When the board shows an example, use that example before inventing a new one.',
+            'If a concept is highlighted or focused, anchor your explanation on that highlighted idea.',
+            'End with a brief bridge back into the lecture flow when helpful.',
             'You must only answer questions that are directly related to the current lecture, current section, or current chunk context you were given.',
             'If the user asks something unrelated, politely refuse and say you can only help with this lecture here, and they can ask the main AI assistant for broader questions.',
             'Do not answer off-topic questions even if you know the answer.',
@@ -303,6 +358,7 @@ async function answerLectureQuestion({
             lectureSummary,
             currentSection,
             currentChunk,
+            tutorContext,
             recentMessages,
             question
           })
@@ -329,6 +385,7 @@ async function planChunkTeaching({
   lectureTitle,
   lectureSummary,
   currentChunk,
+  tutorContext,
   previousChunk,
   nextChunk,
   teachingPlanSeed,
@@ -353,7 +410,9 @@ async function planChunkTeaching({
             'You are a lightweight micro-teaching planner for a stored lecture system.',
             'Return valid JSON only.',
             'Do not regenerate the lesson.',
-            'Only decide how the current chunk should be taught like a real teacher.'
+            'Only decide how the current chunk should be taught like a real teacher.',
+            'Use the active scene and visible whiteboard context to decide whether to show a diagram, example, highlight, or plain explanation.',
+            'Keep the plan concise, student-friendly, and aligned with what is visible on the board.'
           ].join(' ')
         },
         {
@@ -363,6 +422,7 @@ async function planChunkTeaching({
             lectureSummary,
             previousChunk,
             currentChunk,
+            tutorContext,
             nextChunk,
             teachingPlanSeed,
             resumeContext,

@@ -454,6 +454,7 @@ function buildFallbackLecturePackage({
   }
 
   return {
+    lecture_version: 'scene_v1',
     title: `${topic.title}`,
     summary: `A structured lecture package for ${topic.title} in ${course.name}.`,
     estimatedDurationMinutes: Math.max(8, sections.length * 3),
@@ -467,6 +468,234 @@ function buildFallbackLecturePackage({
       questions: quizQuestions
     }
   };
+}
+
+function inferSceneMode({ sceneType = '', visualMode = 'slide', hasExample = false }) {
+  if (sceneType === 'diagram' || visualMode === 'diagram' || visualMode === 'flowchart') return 'diagram_mode';
+  if (sceneType === 'compare' || visualMode === 'comparison_table') return 'compare_mode';
+  if (sceneType === 'example' || hasExample) return 'example_mode';
+  if (sceneType === 'summary' || sceneType === 'checkpoint') return 'summary_mode';
+  return 'concept_mode';
+}
+
+function buildDefaultBoardActions({
+  title,
+  learningObjective,
+  visualMode,
+  slideBullets = [],
+  examples = [],
+  analogyIfHelpful = '',
+  checkpointQuestion = '',
+  whiteboardExplanation = '',
+}) {
+  const actions = [
+    { type: 'clear_board', payload: { tone: 'clean', accent: '#dbeafe' } },
+    { type: 'add_title', payload: { id: 'board-title', text: title } },
+  ];
+
+  if (visualMode === 'diagram') {
+    actions.push({
+      type: 'draw_diagram',
+      payload: {
+        id: 'diagram-main',
+        title,
+        diagramType: 'concept_map',
+        nodes: slideBullets.slice(0, 5).map((bullet, index) => ({ id: `node-${index + 1}`, label: bullet })),
+      }
+    });
+  } else if (visualMode === 'flowchart') {
+    actions.push({
+      type: 'draw_diagram',
+      payload: {
+        id: 'flow-main',
+        title,
+        diagramType: 'flowchart',
+        steps: slideBullets.slice(0, 5).map((bullet, index) => ({ id: `step-${index + 1}`, label: bullet })),
+      }
+    });
+  } else if (visualMode === 'comparison_table') {
+    actions.push({
+      type: 'draw_diagram',
+      payload: {
+        id: 'compare-main',
+        title,
+        diagramType: 'comparison_table',
+        columns: ['Concept', 'Teaching note'],
+        rows: slideBullets.slice(0, 4).map((bullet, index) => ({
+          left: bullet.split(':')[0]?.trim() || `Point ${index + 1}`,
+          right: bullet.split(':').slice(1).join(':').trim() || examples[index] || learningObjective,
+        })),
+      }
+    });
+  } else {
+    actions.push({
+      type: 'add_bullet_list',
+      payload: {
+        id: 'core-points',
+        title: 'Core points',
+        items: slideBullets.slice(0, 5).length ? slideBullets.slice(0, 5) : [learningObjective || whiteboardExplanation || title].filter(Boolean),
+      }
+    });
+  }
+
+  if (analogyIfHelpful) {
+    actions.push({
+      type: 'highlight_element',
+      payload: { id: 'analogy-highlight', label: analogyIfHelpful, tone: 'accent' }
+    });
+  }
+
+  if (checkpointQuestion) {
+    actions.push({
+      type: 'focus_region',
+      payload: { region: 'checkpoint', label: checkpointQuestion }
+    });
+  }
+
+  return actions;
+}
+
+function buildChunkScenesFromLegacy({
+  title,
+  learningObjective,
+  spokenExplanation,
+  whiteboardExplanation,
+  slideBullets = [],
+  examples = [],
+  analogyIfHelpful = '',
+  visualMode = 'slide',
+  checkpointQuestion = '',
+  estimatedDurationSeconds = 50,
+}) {
+  const totalDurationMs = Math.max(3200, (Number(estimatedDurationSeconds) || 50) * 1000);
+  const scenes = [
+    {
+      id: 'scene-core',
+      title: 'Core concept',
+      type: visualMode === 'diagram' || visualMode === 'flowchart' ? 'diagram' : 'instruction',
+      mode: inferSceneMode({ visualMode }),
+      narration: spokenExplanation,
+      subtitle: spokenExplanation,
+      timing_ms: Math.max(1800, Math.round(totalDurationMs * (examples[0] ? 0.62 : checkpointQuestion ? 0.76 : 0.88))),
+      board_actions: buildDefaultBoardActions({
+        title,
+        learningObjective,
+        visualMode,
+        slideBullets,
+        examples,
+        analogyIfHelpful,
+        checkpointQuestion,
+        whiteboardExplanation,
+      }),
+      diagram_instruction: ['diagram', 'flowchart', 'comparison_table'].includes(visualMode)
+        ? { type: visualMode, prompt: whiteboardExplanation || learningObjective || title, data: buildVisualData(visualMode, title, slideBullets, examples, analogyIfHelpful) }
+        : null,
+      example: null,
+    }
+  ];
+
+  if (examples[0]) {
+    scenes.push({
+      id: 'scene-example',
+      title: 'Worked example',
+      type: 'example',
+      mode: 'example_mode',
+      narration: `For example, ${examples[0]}`,
+      subtitle: `For example, ${examples[0]}`,
+      timing_ms: Math.max(1400, Math.round(totalDurationMs * 0.2)),
+      board_actions: [
+        {
+          type: 'show_example',
+          payload: { id: 'worked-example', title: 'Example', content: examples[0], format: 'text' }
+        },
+        {
+          type: 'highlight_element',
+          payload: { id: 'worked-example-highlight', targetId: 'worked-example', label: 'Example' }
+        }
+      ],
+      diagram_instruction: null,
+      example: { title: 'Example', content: examples[0], format: 'text' },
+    });
+  }
+
+  if (checkpointQuestion) {
+    scenes.push({
+      id: 'scene-checkpoint',
+      title: 'Quick check',
+      type: 'checkpoint',
+      mode: 'summary_mode',
+      narration: `Before we move on, ${checkpointQuestion}`,
+      subtitle: checkpointQuestion,
+      timing_ms: Math.max(1200, totalDurationMs - scenes.reduce((sum, scene) => sum + (scene.timing_ms || 0), 0)),
+      board_actions: [
+        {
+          type: 'add_paragraph',
+          payload: { id: 'checkpoint-card', text: checkpointQuestion, tone: 'focus', role: 'checkpoint' }
+        },
+        {
+          type: 'focus_region',
+          payload: { region: 'checkpoint', label: 'Pause and respond' }
+        }
+      ],
+      diagram_instruction: null,
+      example: null,
+    });
+  }
+
+  return scenes.filter(Boolean);
+}
+
+function normalizeBoardAction(action, actionIndex) {
+  if (!action || typeof action !== 'object' || !action.type) {
+    return null;
+  }
+
+  return {
+    id: `${action.id || action.type}-${actionIndex + 1}`,
+    type: `${action.type}`.trim(),
+    payload: action.payload && typeof action.payload === 'object' ? action.payload : {},
+  };
+}
+
+function normalizeScenes(rawScenes, fallbackContext) {
+  const legacyScenes = buildChunkScenesFromLegacy(fallbackContext);
+  const inputScenes = Array.isArray(rawScenes) && rawScenes.length > 0 ? rawScenes : legacyScenes;
+
+  return inputScenes.map((scene, index) => {
+    const narration = `${scene?.narration || scene?.spoken_explanation || ''}`.trim();
+    const subtitle = `${scene?.subtitle || scene?.subtitle_text || narration}`.trim();
+    const example = scene?.example && typeof scene.example === 'object' ? {
+      title: `${scene.example.title || 'Example'}`.trim(),
+      content: `${scene.example.content || ''}`.trim(),
+      format: `${scene.example.format || 'text'}`.trim(),
+    } : null;
+    const diagramInstruction = scene?.diagram_instruction && typeof scene.diagram_instruction === 'object'
+      ? {
+          type: `${scene.diagram_instruction.type || fallbackContext.visualMode || 'diagram'}`.trim(),
+          prompt: `${scene.diagram_instruction.prompt || fallbackContext.whiteboardExplanation || fallbackContext.learningObjective || fallbackContext.title}`.trim(),
+          data: scene.diagram_instruction.data && typeof scene.diagram_instruction.data === 'object'
+            ? scene.diagram_instruction.data
+            : buildVisualData(fallbackContext.visualMode, fallbackContext.title, fallbackContext.slideBullets, fallbackContext.examples, fallbackContext.analogyIfHelpful),
+        }
+      : null;
+
+    return {
+      id: `${scene?.id || `scene-${index + 1}`}`.trim(),
+      title: `${scene?.title || `Scene ${index + 1}`}`.trim(),
+      type: `${scene?.type || (index === 0 ? 'instruction' : example ? 'example' : 'summary')}`.trim(),
+      mode: `${scene?.mode || inferSceneMode({ sceneType: scene?.type, visualMode: fallbackContext.visualMode, hasExample: Boolean(example) })}`.trim(),
+      narration,
+      subtitle,
+      timing_ms: Number.isInteger(scene?.timing_ms)
+        ? scene.timing_ms
+        : Number.isInteger(scene?.timing?.duration_ms)
+          ? scene.timing.duration_ms
+          : Math.max(1200, Math.round((fallbackContext.estimatedDurationSeconds || 50) * 1000 / Math.max(inputScenes.length, 1))),
+      board_actions: (Array.isArray(scene?.board_actions) ? scene.board_actions : []).map(normalizeBoardAction).filter(Boolean),
+      diagram_instruction: diagramInstruction,
+      example,
+    };
+  }).filter((scene) => scene.narration || scene.subtitle || scene.board_actions.length > 0);
 }
 
 function validateLecturePackage(candidate) {
@@ -499,8 +728,10 @@ function validateLecturePackage(candidate) {
           return;
         }
 
-        if (!chunk?.spoken_explanation && !chunk?.spokenExplanation && !chunk?.text && !chunk?.chunkText) {
-          errors.push(`sections[${index}].chunks[${chunkIndex}] spoken explanation is required`);
+        const hasNarration = Boolean(chunk?.spoken_explanation || chunk?.spokenExplanation || chunk?.text || chunk?.chunkText);
+        const hasScenes = Array.isArray(chunk?.scenes) && chunk.scenes.length > 0;
+        if (!hasNarration && !hasScenes) {
+          errors.push(`sections[${index}].chunks[${chunkIndex}] must include spoken explanation or scenes`);
         }
       });
     });
@@ -541,12 +772,26 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
           slideBullets,
           examples
         });
+        const chunkTitle = `${section?.title || `${topicTitle} Section ${sectionIndex + 1}`} - Step ${chunkIndex + 1}`.trim();
+        const estimatedDurationSeconds = Math.min(90, Math.max(40, chunk.length / 3));
+        const synthesizedScenes = normalizeScenes([], {
+          title: chunkTitle,
+          learningObjective: `${section?.summary || explanation || topicTitle}`.trim(),
+          spokenExplanation: chunk,
+          whiteboardExplanation: `${section?.whiteboardSuggestion || section?.summary || chunk}`.trim(),
+          slideBullets,
+          examples,
+          analogyIfHelpful: '',
+          visualMode,
+          checkpointQuestion: chunkIndex === rawChunks.length - 1 ? `What is the key takeaway from ${section?.title || topicTitle}?` : '',
+          estimatedDurationSeconds,
+        });
         const teachingPlan = deriveTeachingPlan({
           sectionTitle: section?.title || topicTitle,
           previousChunkTitle,
           nextChunkTitle,
           chunk: {
-            title: `${section?.title || `${topicTitle} Section ${sectionIndex + 1}`} - Step ${chunkIndex + 1}`.trim(),
+            title: chunkTitle,
             learningObjective: `${section?.summary || explanation || topicTitle}`.trim(),
             spokenExplanation: chunk,
             keyTerms: dedupeStrings([section?.title, topicTitle]),
@@ -554,12 +799,12 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
             analogyIfHelpful: '',
             visualMode,
             snippetData,
-            estimatedDurationSeconds: Math.min(90, Math.max(40, chunk.length / 3)),
+            estimatedDurationSeconds,
             checkpointQuestion: chunkIndex === rawChunks.length - 1 ? `What is the key takeaway from ${section?.title || topicTitle}?` : '',
           }
         });
         return {
-          title: `${section?.title || `${topicTitle} Section ${sectionIndex + 1}`} - Step ${chunkIndex + 1}`.trim(),
+          title: chunkTitle,
           learningObjective: `${section?.summary || explanation || topicTitle}`.trim(),
           spokenExplanation: chunk,
           whiteboardExplanation: `${section?.whiteboardSuggestion || section?.summary || chunk}`.trim(),
@@ -572,15 +817,18 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
           visualCaption: `${section?.visualSuggestion || section?.summary || topicTitle}`.trim(),
           teachingSequence: buildTeachingSequence(visualMode),
           difficultyLevel: 'intermediate',
-          estimatedDurationSeconds: Math.min(90, Math.max(40, chunk.length / 3)),
+          estimatedDurationSeconds,
           checkpointQuestion: chunkIndex === rawChunks.length - 1 ? `What is the key takeaway from ${section?.title || topicTitle}?` : '',
           visualData: attachTeachingPlanToVisualData(
             {
               ...buildVisualData(visualMode, section?.title || topicTitle, slideBullets, examples, ''),
-              snippetData: snippetData || undefined
+              snippetData: snippetData || undefined,
+              scenes: synthesizedScenes,
+              sceneVersion: 'scene_v1',
             },
             teachingPlan
           ),
+          scenes: synthesizedScenes,
           teachingPlan,
         };
       }
@@ -600,10 +848,11 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
         examples,
         rawChunk: chunk
       });
+      const baseSpokenExplanation = `${chunk?.spoken_explanation || chunk?.spokenExplanation || chunk?.chunkText || chunk?.text || explanation || topicTitle}`.trim();
       const normalizedChunk = {
         title: `${chunk?.title || section?.title || `${topicTitle} Section ${sectionIndex + 1}`}`.trim(),
         learningObjective: `${chunk?.learning_objective || chunk?.learningObjective || section?.learningObjective || section?.summary || topicTitle}`.trim(),
-        spokenExplanation: `${chunk?.spoken_explanation || chunk?.spokenExplanation || chunk?.chunkText || chunk?.text || explanation || topicTitle}`.trim(),
+        spokenExplanation: baseSpokenExplanation,
         whiteboardExplanation: `${chunk?.whiteboard_explanation || chunk?.whiteboardExplanation || section?.whiteboardSuggestion || section?.summary || ''}`.trim(),
         slideBullets,
         keyTerms: dedupeStrings(chunk?.key_terms || chunk?.keyTerms || [section?.title, topicTitle]),
@@ -618,7 +867,7 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
           ? chunk.estimated_duration_seconds
           : Number.isInteger(chunk?.estimatedDurationSeconds)
             ? chunk.estimatedDurationSeconds
-            : Math.min(90, Math.max(40, `${chunk?.spoken_explanation || chunk?.spokenExplanation || ''}`.length / 3)),
+            : Math.min(90, Math.max(40, `${baseSpokenExplanation}`.length / 3)),
         checkpointQuestion: `${chunk?.checkpoint_question_if_any || chunk?.checkpointQuestionIfAny || chunk?.checkpointQuestion || ''}`.trim(),
         visualData: {
           ...(chunk?.visual_data || chunk?.visualData || buildVisualData(visualMode, chunk?.title || section?.title || topicTitle, slideBullets, examples, analogy)),
@@ -626,6 +875,10 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
         },
         snippetData,
       };
+      const normalizedScenes = normalizeScenes(chunk?.scenes || chunk?.lecture_scenes || chunk?.lectureScenes, normalizedChunk);
+      if (normalizedScenes.length > 0) {
+        normalizedChunk.spokenExplanation = normalizedChunk.spokenExplanation || normalizedScenes.map((scene) => scene.narration).filter(Boolean).join(' ');
+      }
       const teachingPlan = deriveTeachingPlan({
         sectionTitle: section?.title || topicTitle,
         previousChunkTitle,
@@ -634,7 +887,12 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
       });
       return {
         ...normalizedChunk,
-        visualData: attachTeachingPlanToVisualData(normalizedChunk.visualData, teachingPlan),
+        visualData: attachTeachingPlanToVisualData({
+          ...normalizedChunk.visualData,
+          scenes: normalizedScenes,
+          sceneVersion: 'scene_v1',
+        }, teachingPlan),
+        scenes: normalizedScenes,
         teachingPlan,
       };
     });
@@ -667,13 +925,19 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
           checkpointQuestion: '',
           visualData: {},
         };
+        const fallbackScenes = normalizeScenes([], fallbackChunk);
         const teachingPlan = deriveTeachingPlan({
           sectionTitle: section?.title || topicTitle,
           chunk: fallbackChunk
         });
         return [{
           ...fallbackChunk,
-          visualData: attachTeachingPlanToVisualData(fallbackChunk.visualData, teachingPlan),
+          visualData: attachTeachingPlanToVisualData({
+            ...fallbackChunk.visualData,
+            scenes: fallbackScenes,
+            sceneVersion: 'scene_v1',
+          }, teachingPlan),
+          scenes: fallbackScenes,
           teachingPlan,
         }];
       })()
@@ -685,10 +949,11 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
   const slideOutline = Array.isArray(rawPackage.slideOutline) ? rawPackage.slideOutline : [];
 
   return {
+    lectureVersion: `${rawPackage.lecture_version || rawPackage.lectureVersion || 'scene_v1'}`.trim(),
     title: `${rawPackage.title || topicTitle}`.trim(),
     summary: `${rawPackage.summary || `Lecture covering ${topicTitle}.`}`.trim(),
     estimatedDurationMinutes: Number.isInteger(rawPackage.estimatedDurationMinutes) ? rawPackage.estimatedDurationMinutes : 10,
-    teachingScript: `${rawPackage.teachingScript || normalizedSections.map((section) => section.explanation).join('\n\n')}`.trim(),
+    teachingScript: `${rawPackage.teachingScript || normalizedSections.map((section) => section.chunks.map((chunk) => (chunk.scenes || []).map((scene) => scene.narration).filter(Boolean).join(' ')).join('\n')).join('\n\n') || normalizedSections.map((section) => section.explanation).join('\n\n')}`.trim(),
     sections: normalizedSections,
     slideOutline: slideOutline.map((slide, slideIndex) => ({
       title: `${slide?.title || `Slide ${slideIndex + 1}`}`.trim(),
@@ -1384,7 +1649,8 @@ function mapLectureChunk(lecture, sectionIndex, chunkIndex) {
     estimatedDurationSeconds: chunk.estimatedDurationSeconds,
     checkpointQuestion: chunk.checkpointQuestion,
     visualData: chunk.visualData || {},
-    teachingPlan: chunk.visualData?.teachingPlan || null
+    teachingPlan: chunk.visualData?.teachingPlan || null,
+    scenes: chunk.visualData?.scenes || []
   };
 }
 
@@ -1412,6 +1678,58 @@ function getChunkNeighbors(lecture, chunk) {
   };
 }
 
+function buildTutorSceneContext(chunk = {}, session = {}) {
+  const delivery = chunk.delivery || {};
+  const visibleBoard = delivery.visible_board_context || {};
+  const currentScene = delivery.current_scene || (Array.isArray(chunk.scenes) ? chunk.scenes[0] : null) || null;
+
+  return {
+    lectureTopic: chunk.title || '',
+    sceneIndex: Number.isInteger(delivery.current_step_index)
+      ? delivery.current_step_index
+      : Number.isInteger(session?.teachingState?.currentStepIndex)
+        ? session.teachingState.currentStepIndex
+        : 0,
+    sceneTitle: currentScene?.title || visibleBoard.scene_title || '',
+    sceneType: currentScene?.type || visibleBoard.scene_type || '',
+    sceneMode: currentScene?.mode || visibleBoard.scene_mode || '',
+    subtitle: `${currentScene?.subtitle_text || currentScene?.subtitle || visibleBoard.subtitle || ''}`.trim(),
+    visibleWhiteboardContent: visibleBoard.visible_elements || [],
+    boardSummary: visibleBoard.board_summary || '',
+    boardType: visibleBoard.board_type || '',
+    diagramContext: visibleBoard.diagram_context || currentScene?.diagram_instruction || currentScene?.diagram_instructions || null,
+    exampleContext: visibleBoard.example_context || currentScene?.example || currentScene?.example_instructions || null,
+    highlightFocus: visibleBoard.highlight_focus || [],
+    supportNote: visibleBoard.support_note || '',
+  };
+}
+
+function buildTutorContext({ lecture, chunk, session }) {
+  const sceneContext = buildTutorSceneContext(chunk, session);
+  return {
+    lecture: {
+      title: lecture?.title || '',
+      summary: lecture?.summary || '',
+      topicId: lecture?.topicId || null,
+      courseId: lecture?.courseId || null,
+    },
+    chunk: {
+      title: chunk?.title || '',
+      learningObjective: chunk?.learningObjective || chunk?.summary || '',
+      teachingMode: chunk?.delivery?.current_mode_label || '',
+      whiteboardMode: chunk?.delivery?.whiteboard_mode || '',
+      visualMode: chunk?.visualMode || 'none',
+      examples: chunk?.examples || [],
+      keyTerms: chunk?.keyTerms || [],
+    },
+    whiteboard: sceneContext,
+    continuation: {
+      resumeLeadIn: session?.teachingState?.resumeLeadIn || '',
+      pauseReason: session?.teachingState?.lastPauseReason || null,
+    }
+  };
+}
+
 async function attachTeachingDecision(lecture, session, chunk) {
   if (!chunk) {
     return null;
@@ -1427,7 +1745,7 @@ async function attachTeachingDecision(lecture, session, chunk) {
     nextChunk
   });
 
-  if (session && (delivery.planner_source === 'ai_runtime' || delivery.resume_consumed)) {
+  if (session) {
     const currentTeachingState = session.teachingState || {};
     const nextTeachingState = {
       ...currentTeachingState,
@@ -1440,6 +1758,10 @@ async function attachTeachingDecision(lecture, session, chunk) {
       resumePending: delivery.resume_consumed ? false : currentTeachingState.resumePending,
       resumeLeadIn: delivery.resume_consumed ? '' : (currentTeachingState.resumeLeadIn || ''),
       lastPauseReason: delivery.resume_consumed ? null : (currentTeachingState.lastPauseReason || null),
+      currentStepIndex: delivery.current_step_index || 0,
+      currentSceneTitle: delivery.current_scene?.title || '',
+      currentSceneType: delivery.current_scene?.type || '',
+      visibleBoardContext: delivery.visible_board_context || {},
     };
     await session.update({
       teachingState: nextTeachingState,
@@ -1597,7 +1919,7 @@ async function getSessionState(sessionId, userId) {
   };
 }
 
-async function setSessionPaused(sessionId, userId, paused) {
+async function setSessionPaused(sessionId, userId, paused, options = {}) {
   const session = await AITutorSession.findOne({
     where: { id: sessionId, userId }
   });
@@ -1607,17 +1929,19 @@ async function setSessionPaused(sessionId, userId, paused) {
   }
 
   const teachingState = session.teachingState || {};
+  const pauseReason = `${options.pauseReason || teachingState.lastPauseReason || 'manual_pause'}`.trim();
+  const resumeLeadIn = `${options.resumeLeadIn || ''}`.trim();
   await session.update({
     status: paused ? 'paused' : (session.status === 'lecture_completed' ? 'lecture_completed' : 'in_progress'),
     teachingState: paused ? {
       ...teachingState,
-      lastPauseReason: teachingState.lastPauseReason || 'manual_pause'
+      lastPauseReason: pauseReason
     } : {
       ...teachingState,
       resumePending: true,
-      resumeLeadIn: teachingState.lastPauseReason === 'question'
+      resumeLeadIn: resumeLeadIn || ((teachingState.lastPauseReason === 'question' || teachingState.lastPauseReason === 'student_interrupt')
         ? "Now that we've cleared that up, let's continue."
-        : "Coming back to the main idea, let's continue.",
+        : "Coming back to the main idea, let's continue."),
     },
     lastActivityAt: new Date()
   });
@@ -1770,18 +2094,24 @@ async function submitQuestion(sessionId, userId, question) {
     throw new Error('Lecture package not found');
   }
 
-  const currentChunk = mapLectureChunk(lecture, session.currentSectionIndex, session.currentChunkIndex);
+  const currentChunk = await attachTeachingDecision(
+    lecture,
+    session,
+    mapLectureChunk(lecture, session.currentSectionIndex, session.currentChunkIndex)
+  );
   const sectionChunks = (lecture.sections || [])
     .filter((item) => item.sectionIndex === session.currentSectionIndex)
     .sort((a, b) => a.chunkIndex - b.chunkIndex)
     .map((item) => item.chunkText);
+  const tutorContext = buildTutorContext({ lecture, chunk: currentChunk, session });
+  const sceneTitle = tutorContext.whiteboard.sceneTitle || currentChunk?.title || lecture.title;
 
   await session.update({
     status: 'paused',
     teachingState: {
       ...(session.teachingState || {}),
       lastPauseReason: 'question',
-      resumeLeadIn: "Now that we've cleared that up, let's continue."
+      resumeLeadIn: `Now that we've cleared up ${sceneTitle.toLowerCase()}, let's continue.`
     },
     lastActivityAt: new Date()
   });
@@ -1818,6 +2148,7 @@ async function submitQuestion(sessionId, userId, question) {
         query: currentChunk?.visualQuery || ''
       }
     },
+    tutorContext,
     recentMessages: (session.messages || []).slice().reverse().map((message) => ({
       sender: message.sender,
       content: message.content
@@ -2012,7 +2343,7 @@ async function submitQuiz(lectureId, userId, answers) {
 }
 
 async function getOrCreateAudioAsset({ lectureId, sessionId, assetType, text }) {
-  const cacheKey = openaiService.createAudioCacheKey([`${lectureId || ''}`, `${sessionId || ''}`, assetType, text]);
+  const cacheKey = openaiService.createAudioCacheKey([`${lectureId || ''}`, assetType, text]);
   const existing = await AIAudioAsset.findOne({ where: { cacheKey } });
   if (existing && fs.existsSync(existing.storagePath)) {
     return existing;
