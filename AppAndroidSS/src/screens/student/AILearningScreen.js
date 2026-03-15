@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   Platform,
   Animated as RNAnimated,
   ScrollView,
@@ -53,8 +52,7 @@ const LearningScreen = () => {
   const [chatMessages, setChatMessages] = useState([]);
   const [question, setQuestion] = useState('');
   const [showQuestionPanel, setShowQuestionPanel] = useState(false);
-  const [showFlashcardsModal, setShowFlashcardsModal] = useState(false);
-  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [activeToolPanel, setActiveToolPanel] = useState(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [voiceMode, setVoiceMode] = useState(Platform.OS === 'web');
   const [isRecording, setIsRecording] = useState(false);
@@ -64,6 +62,9 @@ const LearningScreen = () => {
   const [showTopicsSidebar, setShowTopicsSidebar] = useState(false);
   const [revealedFlashcards, setRevealedFlashcards] = useState({});
   const [teachingProgress, setTeachingProgress] = useState(0);
+  const [quizPreview, setQuizPreview] = useState(null);
+  const [quizPreviewLoading, setQuizPreviewLoading] = useState(false);
+  const [handRaised, setHandRaised] = useState(false);
 
   const recognitionRef = useRef(null);
   const playbackRef = useRef(null);
@@ -121,6 +122,7 @@ const LearningScreen = () => {
     return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m lecture` : `${hours}h lecture`;
   };
   const lectureDurationLabel = formatLectureDuration(lecture?.estimatedDurationMinutes);
+  const isDrawerOpen = Boolean(activeToolPanel);
   const tutorStatus = lectureCompleted
     ? { label: 'Lecture complete', detail: 'Open the stored quiz when you are ready to continue.', tone: '#10b981' }
     : showQuestionPanel
@@ -151,6 +153,36 @@ const LearningScreen = () => {
   useEffect(() => {
     setRevealedFlashcards({});
   }, [lecture?.id]);
+
+  useEffect(() => {
+    if (activeToolPanel !== 'quiz' || !lecture?.id) {
+      return;
+    }
+
+    let cancelled = false;
+    const loadQuizPreview = async () => {
+      setQuizPreviewLoading(true);
+      try {
+        const response = await aiTutorAPI.getQuiz(lecture.id);
+        if (!cancelled && response.success) {
+          setQuizPreview(response.quiz || null);
+        }
+      } catch (_) {
+        if (!cancelled) {
+          setQuizPreview(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setQuizPreviewLoading(false);
+        }
+      }
+    };
+
+    loadQuizPreview();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeToolPanel, lecture?.id]);
 
   useEffect(() => {
     if (session && currentChunk && isPlaying && !showQuestionPanel && !lectureCompleted) {
@@ -342,6 +374,7 @@ const LearningScreen = () => {
         }
         stopPlayback();
         setShowQuestionPanel(true);
+        setActiveToolPanel('chat');
         setIsPlaying(false);
       } else {
         const response = await aiTutorAPI.resumeSession(session.id);
@@ -351,6 +384,7 @@ const LearningScreen = () => {
         setSession(response.session);
         setCurrentChunk(response.chunk);
         setShowQuestionPanel(false);
+        setActiveToolPanel(null);
         setIsPlaying(true);
       }
     } catch (error) {
@@ -484,10 +518,30 @@ const LearningScreen = () => {
   const openQuestionPanel = async () => {
     if (!session || !isPlaying) {
       setShowQuestionPanel(true);
+      setActiveToolPanel('chat');
       return;
     }
 
     await togglePause();
+  };
+
+  const closeToolPanel = () => {
+    if (activeToolPanel === 'chat') {
+      setShowQuestionPanel(false);
+    }
+    setActiveToolPanel(null);
+  };
+
+  const openToolPanel = async (panel) => {
+    if (panel === 'chat') {
+      await openQuestionPanel();
+      return;
+    }
+
+    setActiveToolPanel((current) => (current === panel ? null : panel));
+    if (showQuestionPanel) {
+      setShowQuestionPanel(false);
+    }
   };
 
   const toggleFlashcardReveal = (cardId) => {
@@ -538,6 +592,7 @@ const LearningScreen = () => {
       setCurrentChunk(response.chunk);
       setLectureCompleted(false);
       setShowQuestionPanel(false);
+      setActiveToolPanel(null);
       setIsPlaying(true);
       setTeachingProgress(0);
       Toast.show({
@@ -694,6 +749,244 @@ const LearningScreen = () => {
     );
   };
 
+  const renderStageInsights = () => {
+    const visibleReinforcement = getProgressiveItems(reinforcementPoints, 2);
+    const visibleConfusion = getProgressiveItems(confusionPoints, 1);
+
+    if (!visibleReinforcement.length && !visibleConfusion.length && !supportPanel) {
+      return null;
+    }
+
+    return (
+      <View style={styles.stageInsightsGrid}>
+        {!!supportPanel && renderSupportPanel()}
+        {!!visibleReinforcement.length && (
+          <View style={[styles.insightCard, { backgroundColor: isDark ? '#101827' : '#f8fafc', borderColor: isDark ? 'rgba(59,130,246,0.18)' : '#bfdbfe' }]}>
+            <Text style={[styles.insightLabel, { color: '#60a5fa' }]}>Key explanation points</Text>
+            {visibleReinforcement.map((point, index) => (
+              <Text key={`${point}-${index}`} style={[styles.insightText, { color: theme.colors.textPrimary }]}>- {point}</Text>
+            ))}
+          </View>
+        )}
+        {!!visibleConfusion.length && (
+          <View style={[styles.insightCard, { backgroundColor: isDark ? '#1a1408' : '#fff7ed', borderColor: isDark ? 'rgba(245,158,11,0.18)' : '#fdba74' }]}>
+            <Text style={[styles.insightLabel, { color: '#f59e0b' }]}>Watch for this</Text>
+            {visibleConfusion.map((point, index) => (
+              <Text key={`${point}-${index}`} style={[styles.insightText, { color: theme.colors.textPrimary }]}>- {point}</Text>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderToolPanel = () => {
+    if (!activeToolPanel) {
+      return null;
+    }
+
+    if (activeToolPanel === 'chat') {
+      return (
+        <View style={[styles.toolPanelCard, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? 'rgba(148,163,184,0.12)' : theme.colors.border }]}>
+          <View style={styles.toolPanelHeader}>
+            <View>
+              <Text style={[styles.toolPanelTitle, { color: theme.colors.textPrimary }]}>AI Chat</Text>
+              <Text style={[styles.toolPanelSubtitle, { color: theme.colors.textSecondary }]}>Ask about the current chunk without losing your place.</Text>
+            </View>
+            <TouchableOpacity onPress={closeToolPanel} accessibilityRole="button" accessibilityLabel="Close AI chat panel">
+              <Icon name="close" size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatScrollContent} showsVerticalScrollIndicator={false}>
+            {!chatMessages.length && !submittingQuestion && (
+              <View style={[styles.chatEmptyState, { borderColor: theme.colors.border }]}>
+                <MaterialIcon name="chat-processing-outline" size={20} color={theme.colors.primary} />
+                <Text style={[styles.chatEmptyTitle, { color: theme.colors.textPrimary }]}>Ask about this lecture point</Text>
+                <Text style={[styles.chatEmptyText, { color: theme.colors.textSecondary }]}>The AI Tutor answers from the active lecture context and lets you continue smoothly.</Text>
+              </View>
+            )}
+            {chatMessages.map((message, index) => (
+              <View key={`${message.type}-${index}`} style={[styles.chatBubble, message.type === 'user' ? styles.chatBubbleUser : [styles.chatBubbleAi, { borderColor: theme.colors.border }]]}>
+                <Text style={[styles.chatRole, { color: message.type === 'user' ? 'rgba(255,255,255,0.75)' : theme.colors.primary }]}>{message.type === 'user' ? 'You' : 'AI Tutor'}</Text>
+                <Text style={{ color: message.type === 'user' ? '#fff' : theme.colors.textPrimary, lineHeight: 21 }}>{message.text}</Text>
+              </View>
+            ))}
+            {submittingQuestion && (
+              <View style={[styles.chatBubble, styles.chatBubbleAi, { borderColor: theme.colors.border }]}>
+                <Text style={[styles.chatRole, { color: theme.colors.primary }]}>AI Tutor</Text>
+                <Text style={{ color: theme.colors.textSecondary }}>Preparing a contextual explanation...</Text>
+              </View>
+            )}
+          </ScrollView>
+          <View style={[styles.inputRow, { borderColor: theme.colors.border, backgroundColor: isDark ? '#0f172a' : '#f8fafc' }]}>
+            <TouchableOpacity style={[styles.iconButton, { backgroundColor: isRecording ? theme.colors.error : theme.colors.primary }]} onPress={startVoiceInput} accessibilityRole="button" accessibilityLabel="Start voice input">
+              <Icon name={isRecording ? 'stop' : 'mic'} size={18} color="#fff" />
+            </TouchableOpacity>
+            <TextInput
+              style={[styles.input, {
+                color: theme.colors.textPrimary,
+                backgroundColor: isDark ? '#1f2937' : '#f1f5f9',
+                borderColor: isDark ? '#334155' : '#e2e8f0',
+              }]}
+              value={question}
+              onChangeText={setQuestion}
+              onSubmitEditing={askQuestion}
+              placeholder={isRecording ? 'Listening...' : 'Type your question...'}
+              placeholderTextColor={theme.colors.textTertiary}
+              multiline
+            />
+            <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.primary }]} onPress={askQuestion} disabled={submittingQuestion} accessibilityRole="button" accessibilityLabel="Send AI question">
+              {submittingQuestion ? <ActivityIndicator size="small" color="#fff" /> : <Icon name="send" size={18} color="#fff" />}
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    if (activeToolPanel === 'notes') {
+      return (
+        <View style={[styles.toolPanelCard, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? 'rgba(148,163,184,0.12)' : theme.colors.border }]}>
+          <View style={styles.toolPanelHeader}>
+            <View>
+              <Text style={[styles.toolPanelTitle, { color: theme.colors.textPrimary }]}>Lecture Notes</Text>
+              <Text style={[styles.toolPanelSubtitle, { color: theme.colors.textSecondary }]}>Condensed notes for the current lecture package.</Text>
+            </View>
+            <TouchableOpacity onPress={closeToolPanel} accessibilityRole="button" accessibilityLabel="Close notes panel">
+              <Icon name="close" size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.toolPanelScrollContent}>
+            <Text style={[styles.notesTitle, { color: theme.colors.textPrimary }]}>{lecture.title}</Text>
+            <Text style={[styles.notesBody, { color: theme.colors.textSecondary }]}>{lecture.summary}</Text>
+            {(currentSlides.length ? currentSlides : lecture.slideOutlines || []).map((slide, index) => (
+              <View key={slide.id || index} style={styles.noteSection}>
+                <Text style={[styles.noteSectionTitle, { color: theme.colors.primary }]}>{slide.title}</Text>
+                {(slide.bullets || []).map((bullet, bulletIndex) => (
+                  <Text key={`${slide.id || index}-${bulletIndex}`} style={[styles.notesBody, { color: theme.colors.textPrimary }]}>- {bullet}</Text>
+                ))}
+                {!!slide.notes && <Text style={[styles.notesBody, { color: theme.colors.textSecondary }]}>{slide.notes}</Text>}
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      );
+    }
+
+    if (activeToolPanel === 'flashcards') {
+      return (
+        <View style={[styles.toolPanelCard, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? 'rgba(148,163,184,0.12)' : theme.colors.border }]}>
+          <View style={styles.toolPanelHeader}>
+            <View>
+              <Text style={[styles.toolPanelTitle, { color: theme.colors.textPrimary }]}>Flashcards</Text>
+              <Text style={[styles.toolPanelSubtitle, { color: theme.colors.textSecondary }]}>Review core prompts and reveal answers when ready.</Text>
+            </View>
+            <TouchableOpacity onPress={closeToolPanel} accessibilityRole="button" accessibilityLabel="Close flashcards panel">
+              <Icon name="close" size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.toolPanelScrollContent}>
+            {(lecture.flashcards || []).map((card, index) => {
+              const cardId = card.id || index;
+              const revealed = Boolean(revealedFlashcards[cardId]);
+              return (
+                <TouchableOpacity key={cardId} activeOpacity={0.92} onPress={() => toggleFlashcardReveal(cardId)} style={[styles.flashcard, { borderColor: theme.colors.border, backgroundColor: isDark ? '#101827' : '#f8fafc' }]}>
+                  <View style={styles.flashcardHeader}>
+                    <Text style={[styles.flashcardLabel, { color: theme.colors.primary }]}>{revealed ? 'Answer' : 'Prompt'}</Text>
+                    <Text style={[styles.flashcardHint, { color: theme.colors.textTertiary }]}>{revealed ? 'Tap to hide' : 'Tap to reveal'}</Text>
+                  </View>
+                  <Text style={[styles.flashcardFront, { color: theme.colors.textPrimary }]}>{revealed ? card.backText : card.frontText}</Text>
+                  <View style={[styles.flashcardDivider, { backgroundColor: theme.colors.border }]} />
+                  <Text style={[styles.flashcardMeta, { color: theme.colors.textSecondary }]}>{revealed ? 'Use this answer to confirm your recall.' : 'Try answering from memory before revealing the back.'}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          <AppButton title="Export Flashcards" onPress={exportFlashcards} variant="outline" />
+        </View>
+      );
+    }
+
+    if (activeToolPanel === 'quiz') {
+      const questions = quizPreview?.questions || [];
+      return (
+        <View style={[styles.toolPanelCard, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? 'rgba(148,163,184,0.12)' : theme.colors.border }]}>
+          <View style={styles.toolPanelHeader}>
+            <View>
+              <Text style={[styles.toolPanelTitle, { color: theme.colors.textPrimary }]}>Quiz Panel</Text>
+              <Text style={[styles.toolPanelSubtitle, { color: theme.colors.textSecondary }]}>Preview readiness before opening the full quiz flow.</Text>
+            </View>
+            <TouchableOpacity onPress={closeToolPanel} accessibilityRole="button" accessibilityLabel="Close quiz panel">
+              <Icon name="close" size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          <View style={[styles.quizPreviewCard, { backgroundColor: isDark ? '#0f172a' : '#f8fafc', borderColor: theme.colors.border }]}>
+            <Text style={[styles.quizPreviewLabel, { color: theme.colors.textSecondary }]}>Quiz status</Text>
+            <Text style={[styles.quizPreviewValue, { color: theme.colors.textPrimary }]}>{lectureCompleted ? 'Ready to attempt' : 'Locked until lecture completion'}</Text>
+            <Text style={[styles.quizPreviewMeta, { color: theme.colors.textSecondary }]}>
+              {lectureCompleted ? 'Finish with the stored lecture and move straight into the graded quiz.' : 'Complete this lecture first to unlock the next topic through the quiz.'}
+            </Text>
+          </View>
+          {quizPreviewLoading ? (
+            <View style={styles.quizLoadingWrap}>
+              <ActivityIndicator size="small" color={theme.colors.primary} />
+              <Text style={[styles.toolPanelSubtitle, { color: theme.colors.textSecondary }]}>Loading quiz preview...</Text>
+            </View>
+          ) : (
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.toolPanelScrollContent}>
+              {!!quizPreview?.instructions && <Text style={[styles.notesBody, { color: theme.colors.textSecondary }]}>{quizPreview.instructions}</Text>}
+              {questions.slice(0, 3).map((item, index) => (
+                <View key={item.id || index} style={[styles.quizQuestionPreview, { borderColor: theme.colors.border }]}>
+                  <Text style={[styles.quizQuestionIndex, { color: theme.colors.primary }]}>Question {index + 1}</Text>
+                  <Text style={[styles.quizQuestionText, { color: theme.colors.textPrimary }]}>{item.prompt}</Text>
+                </View>
+              ))}
+              {!questions.length && (
+                <Text style={[styles.notesBody, { color: theme.colors.textSecondary }]}>No preview questions are available yet for this lecture package.</Text>
+              )}
+            </ScrollView>
+          )}
+          <AppButton title="Open Full Quiz" onPress={openQuiz} variant="primary" disabled={!lectureCompleted} />
+        </View>
+      );
+    }
+
+    return (
+      <View style={[styles.toolPanelCard, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? 'rgba(148,163,184,0.12)' : theme.colors.border }]}>
+        <View style={styles.toolPanelHeader}>
+          <View>
+            <Text style={[styles.toolPanelTitle, { color: theme.colors.textPrimary }]}>Essentials</Text>
+            <Text style={[styles.toolPanelSubtitle, { color: theme.colors.textSecondary }]}>Quick classroom utilities and lecture actions.</Text>
+          </View>
+          <TouchableOpacity onPress={closeToolPanel} accessibilityRole="button" accessibilityLabel="Close essentials panel">
+            <Icon name="close" size={20} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.essentialsGrid}>
+          <TouchableOpacity style={[styles.essentialsCard, { backgroundColor: '#0f766e' }]} onPress={restartLecture}>
+            <Icon name="refresh" size={18} color="#fff" />
+            <Text style={styles.essentialsTitle}>Restart</Text>
+            <Text style={styles.essentialsMeta}>Start this lecture from the beginning.</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.essentialsCard, { backgroundColor: '#3b82f6' }]} onPress={exportFlashcards}>
+            <Icon name="download" size={18} color="#fff" />
+            <Text style={styles.essentialsTitle}>Export</Text>
+            <Text style={styles.essentialsMeta}>Download revision flashcards.</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.essentialsCard, { backgroundColor: voiceMode ? '#4f46e5' : '#475569' }]} onPress={() => setVoiceMode((prev) => !prev)}>
+            <MaterialIcon name={voiceMode ? 'volume-high' : 'volume-off'} size={18} color="#fff" />
+            <Text style={styles.essentialsTitle}>{voiceMode ? 'Voice On' : 'Voice Off'}</Text>
+            <Text style={styles.essentialsMeta}>Switch spoken delivery mode.</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.essentialsCard, { backgroundColor: handRaised ? '#f59e0b' : '#334155' }]} onPress={() => setHandRaised((prev) => !prev)}>
+            <MaterialIcon name="hand-wave-outline" size={18} color="#fff" />
+            <Text style={styles.essentialsTitle}>{handRaised ? 'Hand Raised' : 'Raise Hand'}</Text>
+            <Text style={styles.essentialsMeta}>Mark attention for the current topic.</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   if (!course || !topic) {
     return (
       <MainLayout showSidebar={false} showHeader={true} showBack={true}>
@@ -749,6 +1042,18 @@ const LearningScreen = () => {
       hideHeaderToggle={true}
     >
       <View style={[styles.container, styles.sessionShell, { backgroundColor: isDark ? '#090b13' : '#eef2ff' }]}>
+        {(() => {
+          const controlItems = [
+            { key: 'mic', label: isRecording ? 'Stop Mic' : 'Mic', icon: isRecording ? 'stop' : 'mic', onPress: startVoiceInput, active: isRecording },
+            { key: 'hand', label: handRaised ? 'Lower Hand' : 'Raise Hand', icon: 'hand-left-outline', onPress: () => setHandRaised((prev) => !prev), active: handRaised },
+            { key: 'chat', label: 'AI Chat', icon: 'chatbubble-ellipses-outline', onPress: () => openToolPanel('chat'), active: activeToolPanel === 'chat' },
+            { key: 'notes', label: 'Notes', icon: 'document-text-outline', onPress: () => openToolPanel('notes'), active: activeToolPanel === 'notes' },
+            { key: 'flashcards', label: 'Flashcards', icon: 'albums-outline', onPress: () => openToolPanel('flashcards'), active: activeToolPanel === 'flashcards' },
+            { key: 'quiz', label: 'Quiz', icon: 'help-circle-outline', onPress: () => openToolPanel('quiz'), active: activeToolPanel === 'quiz' },
+            { key: 'more', label: 'More', icon: 'ellipsis-horizontal', onPress: () => openToolPanel('more'), active: activeToolPanel === 'more' },
+          ];
+
+          return (
         <View style={[styles.sessionToolbar, { backgroundColor: isDark ? 'rgba(10,14,25,0.92)' : 'rgba(255,255,255,0.92)', borderColor: isDark ? 'rgba(148,163,184,0.12)' : 'rgba(99,102,241,0.12)' }]}>
           <View style={styles.sessionToolbarLeft}>
             <TouchableOpacity style={[styles.iconButton, styles.toolbarBackButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#eef2ff' }]} onPress={() => navigation.goBack()}>
@@ -783,16 +1088,35 @@ const LearningScreen = () => {
           </View>
 
           <View style={styles.sessionToolbarRight}>
-            <TouchableOpacity style={[styles.toolbarAction, { backgroundColor: isDark ? '#152033' : '#e0e7ff' }]} onPress={() => setVoiceMode((prev) => !prev)}>
-              <MaterialIcon name={voiceMode ? 'volume-high' : 'volume-off'} size={16} color={theme.colors.textPrimary} />
-              <Text style={[styles.toolbarActionText, { color: theme.colors.textPrimary }]}>{voiceMode ? 'Voice' : 'Muted'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.toolbarAction, { backgroundColor: isDark ? '#152033' : '#f8fafc' }]} onPress={() => setShowNotesModal(true)}>
-              <Icon name="document-text-outline" size={16} color={theme.colors.textPrimary} />
-              <Text style={[styles.toolbarActionText, { color: theme.colors.textPrimary }]}>Notes</Text>
-            </TouchableOpacity>
+            {controlItems.map((item) => (
+              <TouchableOpacity
+                key={item.key}
+                style={[
+                  styles.toolbarAction,
+                  {
+                    backgroundColor: item.active
+                      ? (isDark ? 'rgba(79,70,229,0.22)' : '#e0e7ff')
+                      : (isDark ? '#152033' : '#f8fafc'),
+                    borderColor: item.active ? 'rgba(99,102,241,0.45)' : 'transparent',
+                    borderWidth: 1,
+                  },
+                ]}
+                onPress={item.onPress}
+                accessibilityRole="button"
+                accessibilityLabel={item.label}
+              >
+                <Icon name={item.icon} size={16} color={item.active ? theme.colors.primary : theme.colors.textPrimary} />
+                <Text style={[styles.toolbarActionText, { color: item.active ? theme.colors.primary : theme.colors.textPrimary }]}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+            <View style={[styles.liveIndicator, { backgroundColor: isDark ? '#0f172a' : '#eef2ff', borderColor: isDark ? 'rgba(148,163,184,0.16)' : 'rgba(99,102,241,0.14)' }]}>
+              <View style={[styles.liveIndicatorDot, { backgroundColor: voiceMode ? '#10b981' : '#f59e0b' }]} />
+              <Text style={[styles.liveIndicatorText, { color: theme.colors.textPrimary }]}>{voiceMode ? 'Live Voice' : 'Text Live'}</Text>
+            </View>
           </View>
         </View>
+          );
+        })()}
 
         <View style={[styles.classroomStage, isMobile && styles.classroomStageStack]}>
           <View style={styles.classroomMainColumn}>
@@ -810,6 +1134,27 @@ const LearningScreen = () => {
                   </View>
                 </View>
                 <Text style={[styles.sessionClockText, { color: theme.colors.primary }]}>{progress}% complete</Text>
+              </View>
+
+              <View style={styles.stageMetaRow}>
+                <View style={[styles.stageTutorChip, { backgroundColor: isDark ? '#111827' : '#eef2ff', borderColor: isDark ? 'rgba(148,163,184,0.14)' : 'rgba(99,102,241,0.14)' }]}>
+                  <RNAnimated.View style={[styles.stageTutorPulse, { transform: [{ scale: pulseAnim }] }]}>
+                    <MaterialIcon name="robot-excited-outline" size={16} color="#fff" />
+                  </RNAnimated.View>
+                  <View style={styles.stageTutorMeta}>
+                    <Text style={[styles.stageTutorName, { color: theme.colors.textPrimary }]}>AI Tutor</Text>
+                    <Text style={[styles.stageTutorLine, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                      Section {currentChunk.sectionIndex + 1} | Chunk {currentChunk.chunkIndex + 1}
+                    </Text>
+                  </View>
+                </View>
+                {!!supportPanel && (
+                  <View style={[styles.stageSupportChip, { backgroundColor: isDark ? '#111827' : '#fff7ed', borderColor: isDark ? 'rgba(245,158,11,0.16)' : '#fdba74' }]}>
+                    <Text style={[styles.stageSupportLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                      {supportPanel.title}
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {!!transitionText && (
@@ -844,6 +1189,8 @@ const LearningScreen = () => {
                 </View>
               </View>
 
+              {renderStageInsights()}
+
               <View style={[styles.subtitleDock, { backgroundColor: isDark ? '#0f172a' : '#eef2ff', borderColor: isDark ? 'rgba(148,163,184,0.14)' : 'rgba(99,102,241,0.12)' }]}>
                 <View style={styles.subtitlesHeader}>
                   <View style={styles.subtitleDockTitleWrap}>
@@ -866,104 +1213,11 @@ const LearningScreen = () => {
             </View>
           </View>
 
-          <View style={[styles.classroomRail, isMobile && styles.classroomRailStack, { backgroundColor: isDark ? '#0d1424' : 'rgba(255,255,255,0.88)', borderColor: isDark ? 'rgba(148,163,184,0.12)' : 'rgba(99,102,241,0.12)' }]}>
-            <View style={[styles.tutorPanel, styles.tutorPanelWide, { backgroundColor: isDark ? '#111827' : '#f8fafc' }]}>
-              <Text style={[styles.tutorLabel, { color: theme.colors.textPrimary }]}>AI Tutor</Text>
-              <RNAnimated.View style={[styles.avatarRing, { transform: [{ scale: pulseAnim }] }]}>
-                <View style={styles.avatarInner}>
-                  <Text style={styles.avatarText}>AI</Text>
-                </View>
-              </RNAnimated.View>
-              <Text style={[styles.tutorMeta, { color: theme.colors.textSecondary }]}>{lecture.title}</Text>
-              <Text style={[styles.tutorMeta, { color: theme.colors.textSecondary }]}>Section {currentChunk.sectionIndex + 1} · Chunk {currentChunk.chunkIndex + 1}</Text>
-              <Text style={[styles.tutorMeta, { color: theme.colors.primary }]}>{tutorStatus.detail}</Text>
+          {isDrawerOpen && (
+            <View style={[styles.contextDrawer, isMobile && styles.contextDrawerOverlay, { backgroundColor: isDark ? '#0d1424' : 'rgba(255,255,255,0.96)', borderColor: isDark ? 'rgba(148,163,184,0.12)' : 'rgba(99,102,241,0.12)' }]}>
+              {renderToolPanel()}
             </View>
-
-            {renderSupportPanel()}
-
-            {showQuestionPanel ? (
-              <View style={[styles.qaCard, styles.railPanel, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? 'rgba(148,163,184,0.12)' : theme.colors.border }]}>
-                <View style={styles.qaHeader}>
-                  <Text style={[styles.qaTitle, { color: theme.colors.textPrimary }]}>Ask Your Question</Text>
-                  <TouchableOpacity onPress={() => setShowQuestionPanel(false)}>
-                    <Icon name="close" size={20} color={theme.colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-                <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatScrollContent} showsVerticalScrollIndicator={false}>
-                  {!chatMessages.length && !submittingQuestion && (
-                    <View style={[styles.chatEmptyState, { borderColor: theme.colors.border }]}>
-                      <MaterialIcon name="chat-processing-outline" size={20} color={theme.colors.primary} />
-                      <Text style={[styles.chatEmptyTitle, { color: theme.colors.textPrimary }]}>Ask about this lecture point</Text>
-                      <Text style={[styles.chatEmptyText, { color: theme.colors.textSecondary }]}>The AI Tutor will answer from the current lecture context and then you can resume from this chunk.</Text>
-                    </View>
-                  )}
-                  {chatMessages.map((message, index) => (
-                    <View key={`${message.type}-${index}`} style={[styles.chatBubble, message.type === 'user' ? styles.chatBubbleUser : [styles.chatBubbleAi, { borderColor: theme.colors.border }]]}>
-                      <Text style={[styles.chatRole, { color: message.type === 'user' ? 'rgba(255,255,255,0.75)' : theme.colors.primary }]}>{message.type === 'user' ? 'You' : 'AI Tutor'}</Text>
-                      <Text style={{ color: message.type === 'user' ? '#fff' : theme.colors.textPrimary, lineHeight: 21 }}>{message.text}</Text>
-                    </View>
-                  ))}
-                  {submittingQuestion && (
-                    <View style={[styles.chatBubble, styles.chatBubbleAi, { borderColor: theme.colors.border }]}>
-                      <Text style={[styles.chatRole, { color: theme.colors.primary }]}>AI Tutor</Text>
-                      <Text style={{ color: theme.colors.textSecondary }}>Preparing a contextual explanation...</Text>
-                    </View>
-                  )}
-                </ScrollView>
-                <View style={[styles.inputRow, { borderColor: theme.colors.border, backgroundColor: isDark ? '#0f172a' : '#f8fafc' }]}>
-                  <TouchableOpacity style={[styles.iconButton, { backgroundColor: isRecording ? theme.colors.error : theme.colors.primary }]} onPress={startVoiceInput}>
-                    <Icon name={isRecording ? 'stop' : 'mic'} size={18} color="#fff" />
-                  </TouchableOpacity>
-                  <TextInput
-                    style={[styles.input, {
-                      color: theme.colors.textPrimary,
-                      backgroundColor: isDark ? '#1f2937' : '#f1f5f9',
-                      borderColor: isDark ? '#334155' : '#e2e8f0',
-                    }]}
-                    value={question}
-                    onChangeText={setQuestion}
-                    onSubmitEditing={askQuestion}
-                    placeholder={isRecording ? 'Listening...' : 'Type your question...'}
-                    placeholderTextColor={theme.colors.textTertiary}
-                    multiline
-                  />
-                  <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.primary }]} onPress={askQuestion} disabled={submittingQuestion}>
-                    {submittingQuestion ? <ActivityIndicator size="small" color="#fff" /> : <Icon name="send" size={18} color="#fff" />}
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <View style={[styles.railActionGrid, { borderColor: isDark ? 'rgba(148,163,184,0.12)' : 'rgba(99,102,241,0.12)' }]}>
-                {lectureCompleted && (
-                  <TouchableOpacity style={[styles.railActionCard, { backgroundColor: '#0f766e' }]} onPress={restartLecture}>
-                    <Icon name="refresh" size={18} color="#fff" />
-                    <Text style={styles.railActionTitle}>Take Again</Text>
-                    <Text style={styles.railActionMeta}>Restart the full lecture</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity style={[styles.railActionCard, { backgroundColor: '#3b82f6' }]} onPress={() => setShowNotesModal(true)}>
-                  <Icon name="document-text" size={18} color="#fff" />
-                  <Text style={styles.railActionTitle}>Notes</Text>
-                  <Text style={styles.railActionMeta}>Open structured lecture notes</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.railActionCard, { backgroundColor: '#a855f7' }]} onPress={() => setShowFlashcardsModal(true)}>
-                  <MaterialIcon name="cards" size={18} color="#fff" />
-                  <Text style={styles.railActionTitle}>Flashcards</Text>
-                  <Text style={styles.railActionMeta}>Revise key concepts quickly</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.railActionCard, { backgroundColor: '#10b981' }]} onPress={openQuiz}>
-                  <MaterialIcon name="help-circle" size={18} color="#fff" />
-                  <Text style={styles.railActionTitle}>Quiz</Text>
-                  <Text style={styles.railActionMeta}>Check understanding and unlock next topic</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.railActionCard, { backgroundColor: '#f97316' }]} onPress={exportFlashcards}>
-                  <Icon name="download" size={18} color="#fff" />
-                  <Text style={styles.railActionTitle}>Materials</Text>
-                  <Text style={styles.railActionMeta}>Export your revision set</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
+          )}
         </View>
 
         <View style={[styles.footer, styles.sessionFooter, { backgroundColor: isDark ? 'rgba(10,14,25,0.96)' : 'rgba(255,255,255,0.96)', borderColor: isDark ? 'rgba(148,163,184,0.12)' : 'rgba(99,102,241,0.12)' }]}>
@@ -1000,63 +1254,6 @@ const LearningScreen = () => {
         }}
         onCancel={() => setShowCompleteDialog(false)}
       />
-
-      <Modal visible={showFlashcardsModal} transparent animationType="slide" onRequestClose={() => setShowFlashcardsModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: isDark ? theme.colors.card : '#fff' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>Flashcards</Text>
-              <TouchableOpacity onPress={() => setShowFlashcardsModal(false)}>
-                <Icon name="close" size={20} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView>
-              {(lecture.flashcards || []).map((card, index) => {
-                const cardId = card.id || index;
-                const revealed = Boolean(revealedFlashcards[cardId]);
-                return (
-                  <TouchableOpacity key={cardId} activeOpacity={0.92} onPress={() => toggleFlashcardReveal(cardId)} style={[styles.flashcard, { borderColor: theme.colors.border, backgroundColor: isDark ? '#101827' : '#f8fafc' }]}>
-                    <View style={styles.flashcardHeader}>
-                      <Text style={[styles.flashcardLabel, { color: theme.colors.primary }]}>{revealed ? 'Answer' : 'Prompt'}</Text>
-                      <Text style={[styles.flashcardHint, { color: theme.colors.textTertiary }]}>{revealed ? 'Tap to hide' : 'Tap to reveal'}</Text>
-                    </View>
-                    <Text style={[styles.flashcardFront, { color: theme.colors.textPrimary }]}>{revealed ? card.backText : card.frontText}</Text>
-                    <View style={[styles.flashcardDivider, { backgroundColor: theme.colors.border }]} />
-                    <Text style={[styles.flashcardMeta, { color: theme.colors.textSecondary }]}>{revealed ? 'Use this answer to confirm your recall.' : 'Try answering from memory before revealing the back.'}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <AppButton title="Export Flashcards" onPress={exportFlashcards} variant="outline" />
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={showNotesModal} transparent animationType="slide" onRequestClose={() => setShowNotesModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: isDark ? theme.colors.card : '#fff' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>Lecture Notes</Text>
-              <TouchableOpacity onPress={() => setShowNotesModal(false)}>
-                <Icon name="close" size={20} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView>
-              <Text style={[styles.notesTitle, { color: theme.colors.textPrimary }]}>{lecture.title}</Text>
-              <Text style={[styles.notesBody, { color: theme.colors.textSecondary }]}>{lecture.summary}</Text>
-              {(currentSlides.length ? currentSlides : lecture.slideOutlines || []).map((slide, index) => (
-                <View key={slide.id || index} style={styles.noteSection}>
-                  <Text style={[styles.noteSectionTitle, { color: theme.colors.primary }]}>{slide.title}</Text>
-                  {(slide.bullets || []).map((bullet, bulletIndex) => (
-                    <Text key={`${slide.id || index}-${bulletIndex}`} style={[styles.notesBody, { color: theme.colors.textPrimary }]}>- {bullet}</Text>
-                  ))}
-                  {!!slide.notes && <Text style={[styles.notesBody, { color: theme.colors.textSecondary }]}>{slide.notes}</Text>}
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </MainLayout>
   );
 };
@@ -1101,6 +1298,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   toolbarActionText: { fontSize: 12, fontWeight: '700' },
+  liveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  liveIndicatorDot: { width: 10, height: 10, borderRadius: 5 },
+  liveIndicatorText: { fontSize: 12, fontWeight: '800' },
   classroomStage: { flex: 1, flexDirection: 'row', gap: 14, minHeight: 0 },
   classroomStageStack: { flexDirection: 'column' },
   classroomMainColumn: { flex: 1, minHeight: 0 },
@@ -1114,10 +1322,40 @@ const styles = StyleSheet.create({
   },
   stageHeroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   stageHeroLeft: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, flex: 1 },
+  stageMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },
   stageModePill: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   stageModePillText: { color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
   stageMetaPillText: { fontSize: 11, fontWeight: '700' },
   sessionClockText: { fontSize: 12, fontWeight: '800' },
+  stageTutorChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    maxWidth: '100%',
+  },
+  stageTutorPulse: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#4f46e5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stageTutorMeta: { flex: 1, minWidth: 0 },
+  stageTutorName: { fontSize: 13, fontWeight: '800' },
+  stageTutorLine: { fontSize: 12, marginTop: 2 },
+  stageSupportChip: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    maxWidth: '100%',
+  },
+  stageSupportLabel: { fontSize: 12, fontWeight: '700' },
   inlineTransitionCard: { borderRadius: 16, padding: 12, borderWidth: 1 },
   stageCanvasFrame: {
     flex: 1,
@@ -1141,27 +1379,18 @@ const styles = StyleSheet.create({
   stageMiniControl: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   subtitleDock: { borderRadius: 20, borderWidth: 1, padding: 16 },
   subtitleDockTitleWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  subtitleDockText: { fontSize: 15, lineHeight: 24, fontWeight: '500' },
-  classroomRail: {
-    width: 320,
+  subtitleDockText: { fontSize: 14, lineHeight: 22, fontWeight: '500' },
+  contextDrawer: {
+    width: 360,
     borderRadius: 28,
     borderWidth: 1,
-    padding: 14,
-    gap: 12,
+    padding: 12,
+    minHeight: 0,
   },
-  classroomRailStack: { width: '100%' },
-  tutorPanelWide: { width: '100%' },
-  railPanel: { borderWidth: 1, flex: 1, minHeight: 240 },
-  railActionGrid: { gap: 10 },
-  railActionCard: {
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    minHeight: 88,
-    justifyContent: 'center',
+  contextDrawerOverlay: {
+    width: '100%',
+    maxHeight: 360,
   },
-  railActionTitle: { color: '#fff', fontSize: 14, fontWeight: '800', marginTop: 8 },
-  railActionMeta: { color: 'rgba(255,255,255,0.78)', fontSize: 11, lineHeight: 16, marginTop: 4 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   loadingText: { marginTop: 16, fontSize: 16 },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
@@ -1252,6 +1481,10 @@ const styles = StyleSheet.create({
   supportCard: { borderWidth: 1, borderRadius: 16, padding: 14 },
   supportLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
   supportText: { fontSize: 13, lineHeight: 20 },
+  stageInsightsGrid: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
+  insightCard: { flex: 1, minWidth: 220, borderWidth: 1, borderRadius: 18, padding: 14 },
+  insightLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
+  insightText: { fontSize: 13, lineHeight: 20, marginBottom: 6 },
   subtitlesCard: { borderRadius: 16, padding: 16, marginBottom: 16 },
   subtitlesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   subtitlesTitle: { fontSize: 14, fontWeight: '700' },
@@ -1274,6 +1507,23 @@ const styles = StyleSheet.create({
   chatRole: { fontSize: 11, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.6 },
   inputRow: { flexDirection: 'row', gap: 8, borderWidth: 1, borderRadius: 18, padding: 10, alignItems: 'flex-end' },
   input: { flex: 1, minHeight: 44, maxHeight: 92, borderWidth: 1, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 10 },
+  toolPanelCard: { flex: 1, borderWidth: 1, borderRadius: 22, padding: 16, minHeight: 0, gap: 14 },
+  toolPanelHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
+  toolPanelTitle: { fontSize: 18, fontWeight: '800' },
+  toolPanelSubtitle: { fontSize: 12, lineHeight: 18, marginTop: 4 },
+  toolPanelScrollContent: { paddingBottom: 4, gap: 12 },
+  quizPreviewCard: { borderWidth: 1, borderRadius: 18, padding: 14 },
+  quizPreviewLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
+  quizPreviewValue: { fontSize: 16, fontWeight: '800', marginBottom: 6 },
+  quizPreviewMeta: { fontSize: 13, lineHeight: 19 },
+  quizLoadingWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  quizQuestionPreview: { borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 10 },
+  quizQuestionIndex: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
+  quizQuestionText: { fontSize: 14, lineHeight: 21, fontWeight: '600' },
+  essentialsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  essentialsCard: { flexBasis: '48%', flexGrow: 1, borderRadius: 18, padding: 14, minHeight: 120 },
+  essentialsTitle: { color: '#fff', fontSize: 15, fontWeight: '800', marginTop: 10 },
+  essentialsMeta: { color: 'rgba(255,255,255,0.8)', fontSize: 12, lineHeight: 18, marginTop: 6 },
   actions: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   action: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', gap: 6 },
   actionText: { color: '#fff', fontSize: 12, fontWeight: '700' },
@@ -1296,10 +1546,6 @@ const styles = StyleSheet.create({
   sidebarItemText: { fontSize: 13, fontWeight: '600', marginBottom: 4 },
   sidebarItemDuration: { fontSize: 11, marginBottom: 4 },
   sidebarItemStatus: { fontSize: 11 },
-  modalOverlay: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(15,23,42,0.72)', padding: 20 },
-  modalCard: { borderRadius: 16, padding: 20, maxHeight: '85%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalTitle: { fontSize: 18, fontWeight: '700' },
   flashcard: { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 12 },
   flashcardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12 },
   flashcardLabel: { fontSize: 12, fontWeight: '700' },
