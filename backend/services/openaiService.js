@@ -288,6 +288,9 @@ async function answerLectureQuestion({
           content: [
             'You are an AI tutor answering in-context lecture questions.',
             'Stay focused on the active lecture and explain clearly.',
+            'You must only answer questions that are directly related to the current lecture, current section, or current chunk context you were given.',
+            'If the user asks something unrelated, politely refuse and say you can only help with this lecture here, and they can ask the main AI assistant for broader questions.',
+            'Do not answer off-topic questions even if you know the answer.',
             'Use clean GitHub-flavored markdown when it helps.',
             'When comparing concepts, settings, steps, or options, prefer a markdown table.',
             'Use bullet points for lists and fenced code blocks for code.'

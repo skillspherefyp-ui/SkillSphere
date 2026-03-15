@@ -162,6 +162,22 @@ export async function uploadFile(formData, authenticated = true) {
   return handleResponse(res);
 }
 
+export async function uploadMultipart(path, formData, authenticated = true) {
+  const headers = {};
+
+  if (authenticated) {
+    const token = await getAuthToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers,
+    body: formData
+  });
+  return handleResponse(res);
+}
+
 export const authAPI = {
   login: (email, password) => post('/auth/login', { email, password }, false),
   register: (data) => post('/auth/register', data, false),
@@ -389,6 +405,7 @@ export const aiTutorAPI = {
   getFlashcards: (lectureId) => get(`/ai-tutor/lectures/${lectureId}/flashcards`),
   getQuiz: (lectureId) => get(`/ai-tutor/lectures/${lectureId}/quiz`),
   submitQuiz: (lectureId, answers) => post(`/ai-tutor/lectures/${lectureId}/quiz/submit`, { answers }),
+  transcribeAudio: (formData) => uploadMultipart('/ai-tutor/audio/transcribe', formData),
   speakText: (data) => post('/ai-tutor/audio/speak', data),
   smokeTest: () => get('/ai-tutor/smoke-test'),
 };

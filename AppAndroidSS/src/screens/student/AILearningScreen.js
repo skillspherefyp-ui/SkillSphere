@@ -14,12 +14,14 @@ import {
 import Toast from 'react-native-toast-message';
 import Icon from 'react-native-vector-icons/Ionicons';
 import MaterialIcon from 'react-native-vector-icons/MaterialCommunityIcons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import MainLayout from '../../components/ui/MainLayout';
 import EmptyState from '../../components/ui/EmptyState';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import AppButton from '../../components/ui/AppButton';
 import { useData } from '../../context/DataContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { aiTutorAPI, API_BASE } from '../../services/apiClient';
 
@@ -29,6 +31,7 @@ const LearningScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { theme, isDark } = useTheme();
+  const { user } = useAuth();
   const { width } = useWindowDimensions();
   const sidebarItems = [
     { label: 'Dashboard', icon: 'grid-outline', iconActive: 'grid', route: 'Dashboard' },
@@ -65,10 +68,17 @@ const LearningScreen = () => {
   const [quizPreview, setQuizPreview] = useState(null);
   const [quizPreviewLoading, setQuizPreviewLoading] = useState(false);
   const [handRaised, setHandRaised] = useState(false);
+  const [studentNotes, setStudentNotes] = useState('');
+  const [notesSavedAt, setNotesSavedAt] = useState(null);
+  const [savingNotes, setSavingNotes] = useState(false);
 
   const recognitionRef = useRef(null);
   const playbackRef = useRef(null);
   const audioRef = useRef(null);
+  const handRaiseTimeoutRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const mediaChunksRef = useRef([]);
   const pulseAnim = useRef(new RNAnimated.Value(1)).current;
   const baseHost = API_BASE.replace(/\/api$/, '');
   const isMobile = width < 768;
@@ -123,6 +133,8 @@ const LearningScreen = () => {
   };
   const lectureDurationLabel = formatLectureDuration(lecture?.estimatedDurationMinutes);
   const isDrawerOpen = Boolean(activeToolPanel);
+  const studentName = user?.name || user?.fullName || user?.email?.split('@')[0] || 'student';
+  const notesStorageKey = lecture?.id && topicId ? `@skillsphere:lecture-notes:${user?.id || 'guest'}:${topicId}:${lecture.id}` : null;
   const tutorStatus = lectureCompleted
     ? { label: 'Lecture complete', detail: 'Open the stored quiz when you are ready to continue.', tone: '#10b981' }
     : showQuestionPanel
@@ -153,6 +165,40 @@ const LearningScreen = () => {
   useEffect(() => {
     setRevealedFlashcards({});
   }, [lecture?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadStoredNotes = async () => {
+      if (!notesStorageKey) {
+        setStudentNotes('');
+        setNotesSavedAt(null);
+        return;
+      }
+
+      try {
+        const stored = await AsyncStorage.getItem(notesStorageKey);
+        if (!cancelled && stored) {
+          const parsed = JSON.parse(stored);
+          setStudentNotes(parsed?.text || '');
+          setNotesSavedAt(parsed?.savedAt || null);
+        } else if (!cancelled) {
+          setStudentNotes('');
+          setNotesSavedAt(null);
+        }
+      } catch (_) {
+        if (!cancelled) {
+          setStudentNotes('');
+          setNotesSavedAt(null);
+        }
+      }
+    };
+
+    loadStoredNotes();
+    return () => {
+      cancelled = true;
+    };
+  }, [notesStorageKey]);
 
   useEffect(() => {
     if (activeToolPanel !== 'quiz' || !lecture?.id) {
@@ -199,6 +245,19 @@ const LearningScreen = () => {
   }, [currentChunk?.id]);
 
   useEffect(() => {
+    return () => {
+      if (handRaiseTimeoutRef.current) {
+        clearTimeout(handRaiseTimeoutRef.current);
+        handRaiseTimeoutRef.current = null;
+      }
+      mediaStreamRef.current?.getTracks?.().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+      mediaRecorderRef.current = null;
+      mediaChunksRef.current = [];
+    };
+  }, []);
+
+  useEffect(() => {
     if (!currentChunk || !isPlaying || showQuestionPanel || lectureCompleted) {
       return undefined;
     }
@@ -233,6 +292,14 @@ const LearningScreen = () => {
   const stopRecognition = () => {
     recognitionRef.current?.stop?.();
     recognitionRef.current = null;
+    setIsRecording(false);
+  };
+
+  const cleanupMediaRecorder = () => {
+    mediaStreamRef.current?.getTracks?.().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+    mediaRecorderRef.current = null;
+    mediaChunksRef.current = [];
     setIsRecording(false);
   };
 
@@ -363,29 +430,49 @@ const LearningScreen = () => {
     scheduleNext(recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)));
   };
 
+  const pauseLectureSession = async () => {
+    if (!session || !isPlaying) {
+      return true;
+    }
+
+    const response = await aiTutorAPI.pauseSession(session.id);
+    if (!response.success) {
+      throw new Error(response.error || 'Unable to pause tutor session');
+    }
+
+    stopPlayback();
+    setShowQuestionPanel(true);
+    setActiveToolPanel('chat');
+    setIsPlaying(false);
+    return true;
+  };
+
+  const resumeLectureSession = async () => {
+    if (!session || isPlaying) {
+      return true;
+    }
+
+    const response = await aiTutorAPI.resumeSession(session.id);
+    if (!response.success) {
+      throw new Error(response.error || 'Unable to resume tutor session');
+    }
+
+    setSession(response.session);
+    setCurrentChunk(response.chunk);
+    setShowQuestionPanel(false);
+    setActiveToolPanel(null);
+    setIsPlaying(true);
+    return true;
+  };
+
   const togglePause = async () => {
     if (!session) return;
 
     try {
       if (isPlaying) {
-        const response = await aiTutorAPI.pauseSession(session.id);
-        if (!response.success) {
-          throw new Error(response.error || 'Unable to pause tutor session');
-        }
-        stopPlayback();
-        setShowQuestionPanel(true);
-        setActiveToolPanel('chat');
-        setIsPlaying(false);
+        await pauseLectureSession();
       } else {
-        const response = await aiTutorAPI.resumeSession(session.id);
-        if (!response.success) {
-          throw new Error(response.error || 'Unable to resume tutor session');
-        }
-        setSession(response.session);
-        setCurrentChunk(response.chunk);
-        setShowQuestionPanel(false);
-        setActiveToolPanel(null);
-        setIsPlaying(true);
+        await resumeLectureSession();
       }
     } catch (error) {
       Toast.show({
@@ -396,9 +483,13 @@ const LearningScreen = () => {
     }
   };
 
-  const askQuestion = async () => {
-    if (!question.trim() || !session) return;
-    const prompt = question.trim();
+  const submitLectureQuestion = async (rawPrompt) => {
+    const prompt = `${rawPrompt || ''}`.trim();
+    if (!prompt || !session) return;
+    if (handRaiseTimeoutRef.current) {
+      clearTimeout(handRaiseTimeoutRef.current);
+      handRaiseTimeoutRef.current = null;
+    }
     setQuestion('');
     setSubmittingQuestion(true);
     setChatMessages((prev) => [...prev, { type: 'user', text: prompt }]);
@@ -409,11 +500,19 @@ const LearningScreen = () => {
         throw new Error(response.error || 'I could not answer that question right now.');
       }
       setChatMessages((prev) => [...prev, { type: 'ai', text: response.aiMessage.content }]);
+      setHandRaised(false);
+      setTimeout(() => {
+        resumeLectureSession().catch(() => {});
+      }, 2200);
     } catch (error) {
       setChatMessages((prev) => [...prev, { type: 'ai', text: error.message || 'I could not answer that question right now.' }]);
     } finally {
       setSubmittingQuestion(false);
     }
+  };
+
+  const askQuestion = async () => {
+    await submitLectureQuestion(question);
   };
 
   const startVoiceInput = async () => {
@@ -427,37 +526,115 @@ const LearningScreen = () => {
       Toast.show({
         type: 'info',
         text1: 'Voice Input',
-        text2: 'Voice input currently requires the web speech API.',
+        text2: 'Voice input currently works on web browsers with microphone access.',
       });
       return;
     }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      Toast.show({
-        type: 'error',
-        text1: 'Not Supported',
-        text2: 'Voice input is not supported in this browser.',
-      });
+
+    if (isRecording) {
+      if (recognitionRef.current) {
+        stopRecognition();
+      } else if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop();
+      }
       return;
     }
 
-    if (isRecording) {
-      stopRecognition();
-      return;
+    if (!SpeechRecognition) {
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+        Toast.show({
+          type: 'error',
+          text1: 'Not Supported',
+          text2: 'This browser does not support live mic capture for lecture questions.',
+        });
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaStreamRef.current = stream;
+        mediaChunksRef.current = [];
+
+        const recorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = recorder;
+        recorder.onstart = () => setIsRecording(true);
+        recorder.ondataavailable = (event) => {
+          if (event.data?.size) {
+            mediaChunksRef.current.push(event.data);
+          }
+        };
+        recorder.onerror = () => cleanupMediaRecorder();
+        recorder.onstop = async () => {
+          try {
+            const audioBlob = new Blob(mediaChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+            if (!audioBlob.size) {
+              cleanupMediaRecorder();
+              return;
+            }
+
+            const extension = (recorder.mimeType || 'audio/webm').includes('ogg') ? 'ogg' : 'webm';
+            const formData = new FormData();
+            formData.append('audio', audioBlob, `lecture-question.${extension}`);
+
+            const response = await aiTutorAPI.transcribeAudio(formData);
+            const transcript = `${response?.transcript || ''}`.trim();
+            if (transcript) {
+              setQuestion(transcript);
+              submitLectureQuestion(transcript).catch(() => {});
+            } else {
+              Toast.show({
+                type: 'info',
+                text1: 'No Speech Detected',
+                text2: 'Please try speaking a little closer to the microphone.',
+              });
+            }
+          } catch (error) {
+            Toast.show({
+              type: 'error',
+              text1: 'Mic Upload Failed',
+              text2: error.message || 'Unable to transcribe your lecture question right now.',
+            });
+          } finally {
+            cleanupMediaRecorder();
+          }
+        };
+        recorder.start();
+        Toast.show({
+          type: 'info',
+          text1: 'Recording Started',
+          text2: 'Speak your lecture question, then tap the mic again to submit.',
+        });
+        return;
+      } catch (error) {
+        Toast.show({
+          type: 'error',
+          text1: 'Microphone Unavailable',
+          text2: error.message || 'Unable to access microphone permissions.',
+        });
+        return;
+      }
     }
 
     const recognition = new SpeechRecognition();
     recognitionRef.current = recognition;
     recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.lang = 'en-US';
     recognition.onstart = () => setIsRecording(true);
     recognition.onresult = (event) => {
-      const transcript = event.results?.[0]?.[0]?.transcript || '';
-      setQuestion((prev) => `${prev}${prev ? ' ' : ''}${transcript}`.trim());
+      const transcript = Array.from(event.results || [])
+        .map((result) => result?.[0]?.transcript || '')
+        .join(' ')
+        .trim();
+      const finalResult = event.results?.[event.results.length - 1];
+      setQuestion(transcript);
       setShowQuestionPanel(true);
-      setIsRecording(false);
+      if (finalResult?.isFinal && transcript) {
+        setIsRecording(false);
+        submitLectureQuestion(transcript).catch(() => {});
+      }
     };
     recognition.onend = () => setIsRecording(false);
     recognition.onerror = () => setIsRecording(false);
@@ -544,11 +721,100 @@ const LearningScreen = () => {
     }
   };
 
+  const scheduleAutoResumeAfterRaiseHand = () => {
+    if (handRaiseTimeoutRef.current) {
+      clearTimeout(handRaiseTimeoutRef.current);
+    }
+
+    handRaiseTimeoutRef.current = setTimeout(async () => {
+      if (question.trim() || submittingQuestion || !showQuestionPanel) {
+        return;
+      }
+
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          type: 'ai',
+          text: `No problem ${studentName}, I will continue the lecture from the same point now.`,
+        },
+      ]);
+      setHandRaised(false);
+
+      try {
+        await resumeLectureSession();
+      } catch (_) {
+      }
+    }, 10000);
+  };
+
+  const handleRaiseHand = async () => {
+    try {
+      const nextRaised = !handRaised;
+      setHandRaised(nextRaised);
+
+      if (!nextRaised) {
+        if (handRaiseTimeoutRef.current) {
+          clearTimeout(handRaiseTimeoutRef.current);
+          handRaiseTimeoutRef.current = null;
+        }
+        return;
+      }
+
+      await pauseLectureSession();
+      setShowQuestionPanel(true);
+      setActiveToolPanel('chat');
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          type: 'ai',
+          text: `${studentName}, how can I help you? I have paused the lecture for your question.`,
+        },
+      ]);
+      scheduleAutoResumeAfterRaiseHand();
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Raise Hand Failed',
+        text2: error.message || 'Unable to pause the lecture right now.',
+      });
+    }
+  };
+
   const toggleFlashcardReveal = (cardId) => {
     setRevealedFlashcards((prev) => ({
       ...prev,
       [cardId]: !prev[cardId],
     }));
+  };
+
+  const saveStudentNotes = async () => {
+    if (!notesStorageKey) {
+      return;
+    }
+
+    setSavingNotes(true);
+    const savedAt = new Date().toISOString();
+
+    try {
+      await AsyncStorage.setItem(notesStorageKey, JSON.stringify({
+        text: studentNotes,
+        savedAt,
+      }));
+      setNotesSavedAt(savedAt);
+      Toast.show({
+        type: 'success',
+        text1: 'Notes Saved',
+        text2: 'Your lecture notes are saved on this device.',
+      });
+    } catch (_) {
+      Toast.show({
+        type: 'error',
+        text1: 'Save Failed',
+        text2: 'Unable to save notes on this device right now.',
+      });
+    } finally {
+      setSavingNotes(false);
+    }
   };
 
   const openQuiz = () => {
@@ -652,6 +918,42 @@ const LearningScreen = () => {
   };
 
   const liveNarration = getVisibleNarration();
+
+  const renderVisualDock = () => {
+    const slideBullets = (currentSlide?.bullets || []).slice(0, 4);
+    const visualTitle = currentVisual?.title || currentVisual?.visualType || 'Lesson visual';
+    const visualBody = currentVisual?.description || currentVisual?.prompt || currentVisual?.notes || panelContent.visualDirection;
+
+    return (
+      <View style={styles.boardVisualRail}>
+        <View style={styles.boardSideCard}>
+          <Text style={styles.boardSideEyebrow}>Live visual</Text>
+          <Text style={styles.boardSideTitle}>{visualTitle}</Text>
+          <Text style={styles.boardSideText} numberOfLines={5}>
+            {visualBody || currentChunk.learningObjective || currentChunk.summary}
+          </Text>
+        </View>
+
+        {!!slideBullets.length && (
+          <View style={styles.boardSideCard}>
+            <Text style={styles.boardSideEyebrow}>Key lecture points</Text>
+            {slideBullets.map((bullet, index) => (
+              <Text key={`${bullet}-${index}`} style={styles.boardSideBullet} numberOfLines={2}>
+                - {bullet}
+              </Text>
+            ))}
+          </View>
+        )}
+
+        {!!checkpointText && (
+          <View style={[styles.boardSideCard, styles.boardCheckpointCard]}>
+            <Text style={styles.boardSideEyebrow}>Checkpoint</Text>
+            <Text style={styles.boardCheckpointText} numberOfLines={4}>{checkpointText}</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   const renderBoardSurface = () => {
     if (!boardContent) {
@@ -848,26 +1150,34 @@ const LearningScreen = () => {
         <View style={[styles.toolPanelCard, { backgroundColor: isDark ? '#111827' : '#fff', borderColor: isDark ? 'rgba(148,163,184,0.12)' : theme.colors.border }]}>
           <View style={styles.toolPanelHeader}>
             <View>
-              <Text style={[styles.toolPanelTitle, { color: theme.colors.textPrimary }]}>Lecture Notes</Text>
-              <Text style={[styles.toolPanelSubtitle, { color: theme.colors.textSecondary }]}>Condensed notes for the current lecture package.</Text>
+              <Text style={[styles.toolPanelTitle, { color: theme.colors.textPrimary }]}>Class Notepad</Text>
+              <Text style={[styles.toolPanelSubtitle, { color: theme.colors.textSecondary }]}>Write your own notes during class and save them on this device.</Text>
             </View>
             <TouchableOpacity onPress={closeToolPanel} accessibilityRole="button" accessibilityLabel="Close notes panel">
               <Icon name="close" size={20} color={theme.colors.textSecondary} />
             </TouchableOpacity>
           </View>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.toolPanelScrollContent}>
-            <Text style={[styles.notesTitle, { color: theme.colors.textPrimary }]}>{lecture.title}</Text>
-            <Text style={[styles.notesBody, { color: theme.colors.textSecondary }]}>{lecture.summary}</Text>
-            {(currentSlides.length ? currentSlides : lecture.slideOutlines || []).map((slide, index) => (
-              <View key={slide.id || index} style={styles.noteSection}>
-                <Text style={[styles.noteSectionTitle, { color: theme.colors.primary }]}>{slide.title}</Text>
-                {(slide.bullets || []).map((bullet, bulletIndex) => (
-                  <Text key={`${slide.id || index}-${bulletIndex}`} style={[styles.notesBody, { color: theme.colors.textPrimary }]}>- {bullet}</Text>
-                ))}
-                {!!slide.notes && <Text style={[styles.notesBody, { color: theme.colors.textSecondary }]}>{slide.notes}</Text>}
-              </View>
-            ))}
-          </ScrollView>
+          <View style={[styles.notesReferenceCard, { backgroundColor: isDark ? '#0f172a' : '#f8fafc', borderColor: theme.colors.border }]}>
+            <Text style={[styles.notesReferenceTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>{lecture.title}</Text>
+            <Text style={[styles.notesReferenceMeta, { color: theme.colors.textSecondary }]} numberOfLines={3}>
+              {panelContent.learningObjective || currentChunk.learningObjective || lecture.summary}
+            </Text>
+          </View>
+          <TextInput
+            style={[styles.notesEditor, { color: theme.colors.textPrimary, backgroundColor: isDark ? '#0b1220' : '#f8fafc', borderColor: theme.colors.border }]}
+            value={studentNotes}
+            onChangeText={setStudentNotes}
+            multiline
+            textAlignVertical="top"
+            placeholder="Write your class notes here..."
+            placeholderTextColor={theme.colors.textTertiary}
+          />
+          <View style={styles.notesFooterRow}>
+            <Text style={[styles.notesSavedLabel, { color: theme.colors.textSecondary }]}>
+              {notesSavedAt ? `Saved ${new Date(notesSavedAt).toLocaleString()}` : 'Not saved yet'}
+            </Text>
+            <AppButton title={savingNotes ? 'Saving...' : 'Save Notes'} onPress={saveStudentNotes} variant="primary" disabled={savingNotes} />
+          </View>
         </View>
       );
     }
@@ -977,7 +1287,7 @@ const LearningScreen = () => {
             <Text style={styles.essentialsTitle}>{voiceMode ? 'Voice On' : 'Voice Off'}</Text>
             <Text style={styles.essentialsMeta}>Switch spoken delivery mode.</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.essentialsCard, { backgroundColor: handRaised ? '#f59e0b' : '#334155' }]} onPress={() => setHandRaised((prev) => !prev)}>
+          <TouchableOpacity style={[styles.essentialsCard, { backgroundColor: handRaised ? '#f59e0b' : '#334155' }]} onPress={handleRaiseHand}>
             <MaterialIcon name="hand-wave-outline" size={18} color="#fff" />
             <Text style={styles.essentialsTitle}>{handRaised ? 'Hand Raised' : 'Raise Hand'}</Text>
             <Text style={styles.essentialsMeta}>Mark attention for the current topic.</Text>
@@ -1043,9 +1353,13 @@ const LearningScreen = () => {
     >
       <View style={[styles.container, styles.sessionShell, { backgroundColor: isDark ? '#090b13' : '#eef2ff' }]}>
         {(() => {
-          const controlItems = [
+          const primaryControls = [
+            { key: 'pause', label: isPlaying ? 'Pause' : 'Resume', icon: isPlaying ? 'pause' : 'play', onPress: togglePause, active: !isPlaying, tone: isPlaying ? null : 'accent' },
+            { key: 'next', label: 'Next', icon: 'play-skip-forward-outline', onPress: goToNextChunk, disabled: lectureCompleted },
             { key: 'mic', label: isRecording ? 'Stop Mic' : 'Mic', icon: isRecording ? 'stop' : 'mic', onPress: startVoiceInput, active: isRecording },
-            { key: 'hand', label: handRaised ? 'Lower Hand' : 'Raise Hand', icon: 'hand-left-outline', onPress: () => setHandRaised((prev) => !prev), active: handRaised },
+            { key: 'hand', label: handRaised ? 'Lower Hand' : 'Raise Hand', icon: 'hand-left-outline', onPress: handleRaiseHand, active: handRaised },
+          ];
+          const panelControls = [
             { key: 'chat', label: 'AI Chat', icon: 'chatbubble-ellipses-outline', onPress: () => openToolPanel('chat'), active: activeToolPanel === 'chat' },
             { key: 'notes', label: 'Notes', icon: 'document-text-outline', onPress: () => openToolPanel('notes'), active: activeToolPanel === 'notes' },
             { key: 'flashcards', label: 'Flashcards', icon: 'albums-outline', onPress: () => openToolPanel('flashcards'), active: activeToolPanel === 'flashcards' },
@@ -1088,27 +1402,55 @@ const LearningScreen = () => {
           </View>
 
           <View style={styles.sessionToolbarRight}>
-            {controlItems.map((item) => (
-              <TouchableOpacity
-                key={item.key}
-                style={[
-                  styles.toolbarAction,
-                  {
-                    backgroundColor: item.active
-                      ? (isDark ? 'rgba(79,70,229,0.22)' : '#e0e7ff')
-                      : (isDark ? '#152033' : '#f8fafc'),
-                    borderColor: item.active ? 'rgba(99,102,241,0.45)' : 'transparent',
-                    borderWidth: 1,
-                  },
-                ]}
-                onPress={item.onPress}
-                accessibilityRole="button"
-                accessibilityLabel={item.label}
-              >
-                <Icon name={item.icon} size={16} color={item.active ? theme.colors.primary : theme.colors.textPrimary} />
-                <Text style={[styles.toolbarActionText, { color: item.active ? theme.colors.primary : theme.colors.textPrimary }]}>{item.label}</Text>
-              </TouchableOpacity>
-            ))}
+            <View style={[styles.toolbarControlGroup, { borderColor: isDark ? 'rgba(148,163,184,0.12)' : 'rgba(99,102,241,0.12)' }]}>
+              {primaryControls.map((item) => (
+                <TouchableOpacity
+                  key={item.key}
+                  style={[
+                    styles.toolbarActionCompact,
+                    {
+                      backgroundColor: item.active
+                        ? (item.tone === 'accent' ? (isDark ? 'rgba(16,185,129,0.18)' : '#dcfce7') : (isDark ? 'rgba(79,70,229,0.22)' : '#e0e7ff'))
+                        : (isDark ? '#152033' : '#f8fafc'),
+                      borderColor: item.active
+                        ? (item.tone === 'accent' ? 'rgba(16,185,129,0.4)' : 'rgba(99,102,241,0.45)')
+                        : 'transparent',
+                      opacity: item.disabled ? 0.45 : 1,
+                    },
+                  ]}
+                  onPress={item.onPress}
+                  disabled={item.disabled}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.label}
+                >
+                  <Icon name={item.icon} size={18} color={item.active ? (item.tone === 'accent' ? '#10b981' : theme.colors.primary) : theme.colors.textPrimary} />
+                  <Text style={[styles.toolbarActionCaption, { color: item.active ? (item.tone === 'accent' ? '#10b981' : theme.colors.primary) : theme.colors.textPrimary }]}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={[styles.toolbarDivider, { backgroundColor: isDark ? 'rgba(148,163,184,0.12)' : 'rgba(99,102,241,0.12)' }]} />
+            <View style={[styles.toolbarControlGroup, { borderColor: isDark ? 'rgba(148,163,184,0.12)' : 'rgba(99,102,241,0.12)' }]}>
+              {panelControls.map((item) => (
+                <TouchableOpacity
+                  key={item.key}
+                  style={[
+                    styles.toolbarActionCompact,
+                    {
+                      backgroundColor: item.active
+                        ? (isDark ? 'rgba(79,70,229,0.22)' : '#e0e7ff')
+                        : (isDark ? '#152033' : '#f8fafc'),
+                      borderColor: item.active ? 'rgba(99,102,241,0.45)' : 'transparent',
+                    },
+                  ]}
+                  onPress={item.onPress}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.label}
+                >
+                  <Icon name={item.icon} size={18} color={item.active ? theme.colors.primary : theme.colors.textPrimary} />
+                  <Text style={[styles.toolbarActionCaption, { color: item.active ? theme.colors.primary : theme.colors.textPrimary }]}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <View style={[styles.liveIndicator, { backgroundColor: isDark ? '#0f172a' : '#eef2ff', borderColor: isDark ? 'rgba(148,163,184,0.16)' : 'rgba(99,102,241,0.14)' }]}>
               <View style={[styles.liveIndicatorDot, { backgroundColor: voiceMode ? '#10b981' : '#f59e0b' }]} />
               <Text style={[styles.liveIndicatorText, { color: theme.colors.textPrimary }]}>{voiceMode ? 'Live Voice' : 'Text Live'}</Text>
@@ -1183,11 +1525,16 @@ const LearningScreen = () => {
 
                   <Text style={styles.whiteboardTitle}>{boardContent?.title || currentChunk.title}</Text>
 
-                  <View style={styles.boardSurface}>
-                    {renderBoardSurface()}
+                  <View style={[styles.boardSurface, isMobile && styles.boardSurfaceStack]}>
+                    <View style={styles.boardPrimaryColumn}>
+                      {renderBoardSurface()}
+                    </View>
+                    {!isMobile && renderVisualDock()}
                   </View>
                 </View>
               </View>
+
+              {isMobile && renderVisualDock()}
 
               {renderStageInsights()}
 
@@ -1219,27 +1566,6 @@ const LearningScreen = () => {
             </View>
           )}
         </View>
-
-        <View style={[styles.footer, styles.sessionFooter, { backgroundColor: isDark ? 'rgba(10,14,25,0.96)' : 'rgba(255,255,255,0.96)', borderColor: isDark ? 'rgba(148,163,184,0.12)' : 'rgba(99,102,241,0.12)' }]}>
-          <TouchableOpacity style={[styles.pauseButton, { backgroundColor: isPlaying ? '#10b981' : '#4f46e5' }]} onPress={togglePause}>
-            <Icon name={isPlaying ? 'pause' : 'play'} size={18} color="#fff" />
-            <Text style={styles.pauseText}>{isPlaying ? 'Pause Lecture' : 'Resume Lecture'}</Text>
-          </TouchableOpacity>
-          <View style={styles.footerControls}>
-            <TouchableOpacity style={[styles.iconButton, styles.footerIcon, { backgroundColor: isDark ? '#111827' : '#e2e8f0' }]} onPress={goToNextChunk} disabled={lectureCompleted}>
-              <Icon name="play-skip-forward" size={18} color={lectureCompleted ? theme.colors.textTertiary : theme.colors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.iconButton, styles.footerIcon, { backgroundColor: isDark ? '#111827' : '#e2e8f0' }]}
-              onPress={openQuestionPanel}
-            >
-              <Icon name="chatbubble-outline" size={18} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.iconButton, styles.footerIcon, { backgroundColor: isDark ? '#111827' : '#e2e8f0' }]} onPress={startVoiceInput}>
-              <Icon name={isRecording ? 'stop' : 'mic'} size={18} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        </View>
       </View>
 
       <ConfirmDialog
@@ -1259,13 +1585,13 @@ const LearningScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
-  sessionShell: { gap: 14 },
+  container: { flex: 1, padding: 16, minHeight: 0, overflow: 'hidden' },
+  sessionShell: { gap: 14, flex: 1, minHeight: 0, overflow: 'hidden' },
   sessionToolbar: {
     borderWidth: 1,
     borderRadius: 24,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
@@ -1288,7 +1614,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   toolbarBadgeText: { fontSize: 12, fontWeight: '700' },
-  sessionToolbarRight: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', flex: 1, flexWrap: 'wrap' },
+  sessionToolbarRight: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', flex: 1.4, flexWrap: 'nowrap', alignItems: 'center', minWidth: 0 },
   toolbarAction: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1298,6 +1624,28 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   toolbarActionText: { fontSize: 12, fontWeight: '700' },
+  toolbarControlGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+  },
+  toolbarDivider: { width: 1, alignSelf: 'stretch' },
+  toolbarActionCompact: {
+    width: 64,
+    minHeight: 54,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 8,
+  },
+  toolbarActionCaption: { fontSize: 10, fontWeight: '700', textAlign: 'center' },
   liveIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1316,8 +1664,8 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 28,
     borderWidth: 1,
-    padding: 16,
-    gap: 14,
+    padding: 14,
+    gap: 12,
     minHeight: 0,
   },
   stageHeroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
@@ -1359,9 +1707,9 @@ const styles = StyleSheet.create({
   inlineTransitionCard: { borderRadius: 16, padding: 12, borderWidth: 1 },
   stageCanvasFrame: {
     flex: 1,
-    minHeight: 420,
+    minHeight: 360,
     borderRadius: 24,
-    padding: 10,
+    padding: 8,
   },
   stageWhiteboard: {
     flex: 1,
@@ -1377,9 +1725,9 @@ const styles = StyleSheet.create({
   stageBoardSubtext: { color: '#cbd5e1', fontSize: 13, lineHeight: 20, marginTop: 4, maxWidth: 680 },
   stageBoardHeaderActions: { flexDirection: 'row', gap: 8 },
   stageMiniControl: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  subtitleDock: { borderRadius: 20, borderWidth: 1, padding: 16 },
+  subtitleDock: { borderRadius: 20, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12 },
   subtitleDockTitleWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  subtitleDockText: { fontSize: 14, lineHeight: 22, fontWeight: '500' },
+  subtitleDockText: { fontSize: 13, lineHeight: 20, fontWeight: '500' },
   contextDrawer: {
     width: 360,
     borderRadius: 28,
@@ -1416,8 +1764,8 @@ const styles = StyleSheet.create({
   transitionText: { fontSize: 14, lineHeight: 21, fontWeight: '600' },
   topRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
   topRowStack: { flexDirection: 'column' },
-  whiteboard: { flex: 1, borderRadius: 16, padding: 18 },
-  liveBoard: { minHeight: 360 },
+  whiteboard: { flex: 1, borderRadius: 16, padding: 16 },
+  liveBoard: { minHeight: 320 },
   sideStack: { width: 220, gap: 12 },
   tutorPanel: { width: 190, borderRadius: 16, padding: 16, alignItems: 'center' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
@@ -1428,7 +1776,17 @@ const styles = StyleSheet.create({
   boardObjective: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },
   whiteboardTitle: { color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: 8 },
   whiteboardSummary: { color: '#cbd5e1', fontSize: 14, lineHeight: 22, marginBottom: 12 },
-  boardSurface: { flex: 1, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.04)', padding: 16, gap: 10, justifyContent: 'center' },
+  boardSurface: { flex: 1, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.04)', padding: 16, gap: 14, flexDirection: 'row', alignItems: 'stretch', minHeight: 0 },
+  boardSurfaceStack: { flexDirection: 'column' },
+  boardPrimaryColumn: { flex: 1, justifyContent: 'center', minWidth: 0 },
+  boardVisualRail: { width: 260, gap: 10 },
+  boardSideCard: { borderWidth: 1, borderColor: 'rgba(148,163,184,0.14)', borderRadius: 14, padding: 12, backgroundColor: 'rgba(2,6,23,0.26)' },
+  boardSideEyebrow: { color: '#93c5fd', fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 6 },
+  boardSideTitle: { color: '#fff', fontSize: 14, fontWeight: '800', marginBottom: 8 },
+  boardSideText: { color: '#cbd5e1', fontSize: 12, lineHeight: 19 },
+  boardSideBullet: { color: '#e2e8f0', fontSize: 12, lineHeight: 18, marginBottom: 6 },
+  boardCheckpointCard: { backgroundColor: 'rgba(124,45,18,0.24)', borderColor: 'rgba(251,146,60,0.25)' },
+  boardCheckpointText: { color: '#ffedd5', fontSize: 13, lineHeight: 20, fontWeight: '700' },
   boardBodyText: { color: '#e2e8f0', fontSize: 15, lineHeight: 24 },
   boardBullet: { color: '#e2e8f0', fontSize: 15, lineHeight: 24, marginBottom: 8 },
   boardEmphasis: { color: '#93c5fd', fontSize: 14, lineHeight: 22, marginTop: 12, fontStyle: 'italic' },
@@ -1524,22 +1882,16 @@ const styles = StyleSheet.create({
   essentialsCard: { flexBasis: '48%', flexGrow: 1, borderRadius: 18, padding: 14, minHeight: 120 },
   essentialsTitle: { color: '#fff', fontSize: 15, fontWeight: '800', marginTop: 10 },
   essentialsMeta: { color: 'rgba(255,255,255,0.8)', fontSize: 12, lineHeight: 18, marginTop: 6 },
+  notesReferenceCard: { borderWidth: 1, borderRadius: 18, padding: 14 },
+  notesReferenceTitle: { fontSize: 16, fontWeight: '800', marginBottom: 6 },
+  notesReferenceMeta: { fontSize: 13, lineHeight: 19 },
+  notesEditor: { flex: 1, minHeight: 220, borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, lineHeight: 22 },
+  notesFooterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  notesSavedLabel: { fontSize: 12, flex: 1 },
   actions: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   action: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', gap: 6 },
   actionText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' },
-  sessionFooter: {
-    borderWidth: 1,
-    borderRadius: 24,
-    paddingHorizontal: 14,
-    paddingBottom: 0,
-    paddingTop: 14,
-  },
-  pauseButton: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingVertical: 14, borderRadius: 24 },
-  pauseText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  footerControls: { flexDirection: 'row', gap: 8 },
   iconButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  footerIcon: { borderRadius: 12 },
   sidebar: { flex: 1, paddingTop: 8, paddingHorizontal: 8 },
   sidebarTitle: { fontSize: 14, fontWeight: '700', padding: 16 },
   sidebarItem: { borderLeftWidth: 3, borderLeftColor: 'transparent', padding: 12, marginHorizontal: 8, marginBottom: 4, borderRadius: 10 },
