@@ -31,6 +31,15 @@ const LearningScreen = () => {
   const route = useRoute();
   const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
+  const sidebarItems = [
+    { label: 'Dashboard', icon: 'grid-outline', iconActive: 'grid', route: 'Dashboard' },
+    { label: 'Browse Courses', icon: 'library-outline', iconActive: 'library', route: 'Courses' },
+    { label: 'My Learning', icon: 'school-outline', iconActive: 'school', route: 'EnrolledCourses' },
+    { label: 'AI Assistant', icon: 'sparkles-outline', iconActive: 'sparkles', route: 'AITutor' },
+    { label: 'Certificates', icon: 'ribbon-outline', iconActive: 'ribbon', route: 'Certificates' },
+    { label: 'Reminders', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle', route: 'Todo' },
+  ];
+  const handleNavigate = (routeName) => navigation.navigate(routeName);
   const { courseId, topicId } = route.params || {};
   const { courses, checkEnrollment, fetchCourses } = useData();
   const course = courses.find((item) => item.id === courseId);
