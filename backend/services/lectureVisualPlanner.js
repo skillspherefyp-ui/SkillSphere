@@ -2,6 +2,23 @@ function cleanText(value) {
   return `${value || ''}`.replace(/\s+/g, ' ').trim();
 }
 
+function inferVisualIntent(...values) {
+  const joined = cleanText(values.filter(Boolean).join(' ')).toLowerCase();
+  if (/(flowchart|algorithm|decision|sequence|step|steps|workflow|process|procedure|pipeline|lifecycle)/.test(joined)) {
+    return 'flowchart';
+  }
+  if (/(compare|comparison|versus|difference|pros|cons|trade[- ]?off)/.test(joined)) {
+    return 'comparison_table';
+  }
+  if (/(diagram|architecture|structure|relationship|network|map|visuali[sz]e|node)/.test(joined)) {
+    return 'diagram';
+  }
+  if (/(example|worked example|sample)/.test(joined)) {
+    return 'example';
+  }
+  return '';
+}
+
 function dedupeStrings(values = []) {
   return Array.from(new Set((values || []).map(cleanText).filter(Boolean)));
 }
@@ -167,13 +184,22 @@ function ensureDiagramBoardAction({
   const example = scene?.example || scene?.example_instructions || null;
   const mode = cleanText(scene?.mode);
   const visualMode = cleanText(chunk?.visualMode || chunk?.visual_mode);
+  const inferredIntent = inferVisualIntent(
+    scene?.title,
+    scene?.narration,
+    scene?.subtitle,
+    boardTitle,
+    chunk?.title,
+    chunk?.whiteboardExplanation,
+    chunk?.learningObjective
+  );
   const desiredMode = mode === 'diagram_mode'
-    ? (cleanText(diagramInstruction?.type) || visualMode || 'diagram')
+    ? (cleanText(diagramInstruction?.type) || visualMode || inferredIntent || 'diagram')
     : mode === 'compare_mode'
       ? 'comparison_table'
       : mode === 'example_mode'
         ? 'example'
-        : '';
+        : inferredIntent;
 
   if (desiredMode === 'example' && example?.content) {
     return boardActions.concat([
@@ -207,6 +233,15 @@ function ensureDiagramBoardAction({
       });
 
   if (desiredMode === 'flowchart') {
+    const steps = Array.isArray(visualData.steps) && visualData.steps.length
+      ? visualData.steps.slice(0, 6)
+      : inferFlowchartSteps({
+          title: chunk?.title || boardTitle,
+          learningObjective: chunk?.learningObjective || '',
+          whiteboardExplanation: chunk?.whiteboardExplanation || scene?.narration || '',
+          slideBullets: chunk?.slideBullets || [],
+          examples: chunk?.examples || [],
+        }).slice(0, 6);
     return boardActions.concat([
       {
         type: 'draw_diagram',
@@ -214,7 +249,7 @@ function ensureDiagramBoardAction({
           id: 'auto-flow-diagram',
           title: boardTitle || chunk?.title || 'Process flow',
           diagramType: 'flowchart',
-          steps: Array.isArray(visualData.steps) ? visualData.steps.slice(0, 6) : [],
+          steps,
         },
       },
     ]);
@@ -242,7 +277,16 @@ function ensureDiagramBoardAction({
         id: 'auto-concept-diagram',
         title: cleanText(diagramInstruction?.prompt) || boardTitle || chunk?.title || 'Concept map',
         diagramType: 'concept_map',
-        nodes: Array.isArray(visualData.nodes) ? visualData.nodes.slice(0, 6) : [],
+        nodes: Array.isArray(visualData.nodes) && visualData.nodes.length
+          ? visualData.nodes.slice(0, 6)
+          : inferConceptNodes({
+              title: chunk?.title || boardTitle,
+              learningObjective: chunk?.learningObjective || '',
+              whiteboardExplanation: chunk?.whiteboardExplanation || scene?.narration || '',
+              slideBullets: chunk?.slideBullets || [],
+              examples: chunk?.examples || [],
+              analogyIfHelpful: chunk?.analogyIfHelpful || '',
+            }).slice(0, 6),
         caption: cleanText(visualData.caption) || cleanText(chunk?.visualCaption),
       },
     },

@@ -83,6 +83,7 @@ const AILearningScreen = () => {
   const isRecordingRef = useRef(isRecording);
   const subtitleIntervalRef = useRef(null);
   const subtitleBoundaryRef = useRef({ text: '', lastIndex: 0 });
+  const playbackTokenRef = useRef(0);
   const [liveSubtitleText, setLiveSubtitleText] = useState('');
 
   const baseHost = API_BASE.replace(/\/api$/, '');
@@ -332,6 +333,10 @@ const AILearningScreen = () => {
   const clearScheduledPlayback = () => {
     if (playbackRef.current) { clearTimeout(playbackRef.current); playbackRef.current = null; }
   };
+  const invalidatePlaybackToken = () => {
+    playbackTokenRef.current += 1;
+    return playbackTokenRef.current;
+  };
   const clearInterruptGreeting = () => {
     interruptAudioRef.current?.pause?.();
     interruptAudioRef.current = null;
@@ -349,6 +354,7 @@ const AILearningScreen = () => {
     }
   };
   const stopPlayback = () => {
+    invalidatePlaybackToken();
     clearScheduledPlayback();
     clearInterruptAutoResume();
     activePlaybackChunkIdRef.current = null;
@@ -455,6 +461,7 @@ const AILearningScreen = () => {
       }
       pausedPlaybackRef.current = null;
     }
+    const playbackToken = invalidatePlaybackToken();
     if (!voiceMode) {
       beginSubtitleSync(subtitleText || currentNarration, { durationMs: recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)) });
       scheduleNext(recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)));
@@ -475,18 +482,24 @@ const AILearningScreen = () => {
           }
           audioRef.current = audio;
           activePlaybackChunkIdRef.current = currentChunk?.id || null;
-          audio.onloadedmetadata = () => beginSubtitleSync(subtitleText || currentNarration, { durationMs: Math.max(1000, (audio.duration || 0) * 1000) });
+          audio.onloadedmetadata = () => {
+            if (playbackToken !== playbackTokenRef.current) return;
+            beginSubtitleSync(subtitleText || currentNarration, { durationMs: Math.max(1000, (audio.duration || 0) * 1000) });
+          };
           audio.ontimeupdate = () => {
+            if (playbackToken !== playbackTokenRef.current) return;
             if (audio.duration && Number.isFinite(audio.duration) && audio.duration > 0) {
               updateSubtitleFromRatio(subtitleText || currentNarration, audio.currentTime / audio.duration);
             }
           };
           audio.onended = () => {
+            if (playbackToken !== playbackTokenRef.current) return;
             activePlaybackChunkIdRef.current = null;
             setLiveSubtitleText(subtitleText || currentNarration);
             scheduleNext(MAX_CHUNK_GAP_MS);
           };
           audio.onerror = () => {
+            if (playbackToken !== playbackTokenRef.current) return;
             activePlaybackChunkIdRef.current = null;
             scheduleNext(ERROR_CHUNK_GAP_MS);
           };
@@ -503,6 +516,7 @@ const AILearningScreen = () => {
         subtitleBoundaryRef.current = { text: subtitleText || currentNarration, lastIndex: 0 };
         beginSubtitleSync(subtitleText || currentNarration, { durationMs: recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)) });
         utterance.onboundary = (event) => {
+          if (playbackToken !== playbackTokenRef.current) return;
           const sourceText = subtitleBoundaryRef.current.text;
           if (!sourceText || typeof event?.charIndex !== 'number') return;
           const nextIndex = Math.max(subtitleBoundaryRef.current.lastIndex, Math.min(sourceText.length, event.charIndex + 1));
@@ -510,11 +524,13 @@ const AILearningScreen = () => {
           setLiveSubtitleText(sourceText.slice(0, nextIndex).trim() || sourceText.split(/\s+/).slice(0, 1).join(' '));
         };
         utterance.onend = () => {
+          if (playbackToken !== playbackTokenRef.current) return;
           activePlaybackChunkIdRef.current = null;
           setLiveSubtitleText(subtitleText || currentNarration);
           scheduleNext(MAX_CHUNK_GAP_MS);
         };
         utterance.onerror = () => {
+          if (playbackToken !== playbackTokenRef.current) return;
           activePlaybackChunkIdRef.current = null;
           scheduleNext(ERROR_CHUNK_GAP_MS);
         };

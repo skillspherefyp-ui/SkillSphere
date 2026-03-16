@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "seed": "node scripts/seedSuperAdmin.js",
     "clear:lectures": "node scripts/clearGeneratedLectures.js",
+    "inspect:lecture": "node scripts/inspectGeneratedLecture.js",
     "migrate:permissions": "node scripts/addPermissionsColumn.js",
     "reset:db": "node scripts/resetDatabase.js"
   },

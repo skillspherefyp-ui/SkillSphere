@@ -73,7 +73,10 @@ exports.upsertOutline = async (req, res) => {
 
 exports.generateCoursePackage = async (req, res) => {
   try {
-    const generation = await aiTutorService.startCourseGeneration(req.params.courseId, req.user);
+    const replaceExisting = req.body?.replaceExisting === true;
+    const generation = await aiTutorService.startCourseGeneration(req.params.courseId, req.user, {
+      replaceExisting,
+    });
 
     res.status(202).json({
       success: true,
@@ -81,13 +84,17 @@ exports.generateCoursePackage = async (req, res) => {
       alreadyRunning: generation.alreadyRunning,
       courseId: generation.courseId,
       startedAt: generation.startedAt,
+      replaceExisting,
       message: generation.alreadyRunning
         ? 'AI lecture generation is already in progress for this course.'
-        : 'AI lecture generation has started. You can track progress from the admin screen.'
+        : replaceExisting
+          ? 'Previous AI lecture packages were cleared. Fresh AI generation has started.'
+          : 'AI lecture generation has started. You can track progress from the admin screen.'
     });
   } catch (error) {
     logBadRequest('generateCoursePackage', req, error, {
-      courseId: req.params.courseId
+      courseId: req.params.courseId,
+      replaceExisting: req.body?.replaceExisting === true,
     });
     res.status(error.message.includes('permission') ? 403 : 400).json({ error: error.message || 'Internal server error' });
   }
@@ -219,8 +226,8 @@ exports.resumeSession = async (req, res) => {
 };
 
 exports.submitQuestion = async (req, res) => {
+  const question = req.body.question?.trim();
   try {
-    const question = req.body.question?.trim();
     if (!question) {
       return res.status(400).json({ error: 'question is required' });
     }
@@ -230,7 +237,7 @@ exports.submitQuestion = async (req, res) => {
   } catch (error) {
     logBadRequest('submitQuestion', req, error, {
       sessionId: req.params.sessionId,
-      questionLength: question.length
+      questionLength: question?.length || 0
     });
     res.status(400).json({ error: error.message || 'Internal server error' });
   }

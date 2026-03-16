@@ -81,6 +81,7 @@ const AddTopicsScreen = () => {
   const [showGenerationReportModal, setShowGenerationReportModal] = useState(false);
   const [generationReport, setGenerationReport] = useState([]);
   const [lectureMetaByTopic, setLectureMetaByTopic] = useState({});
+  const [replaceExistingGeneration, setReplaceExistingGeneration] = useState(false);
 
   const topics = course?.topics || [];
 
@@ -135,6 +136,12 @@ const AddTopicsScreen = () => {
     const completedTopics = topics.filter(t => t.status === 'completed').length;
     return { totalTopics, totalMaterials, completedTopics };
   }, [topics]);
+
+  const generatedLectureCount = useMemo(() => (
+    Object.values(lectureMetaByTopic || {}).filter((lecture) => (
+      lecture && ['ready', 'processing', 'failed'].includes(`${lecture.status || ''}`.trim())
+    )).length
+  ), [lectureMetaByTopic]);
 
   // Get color for topic based on index
   const getTopicColor = (index) => {
@@ -382,6 +389,7 @@ const AddTopicsScreen = () => {
       });
       return;
     }
+    setReplaceExistingGeneration(generatedLectureCount > 0);
     setShowConfirmDialog(true);
   };
 
@@ -390,7 +398,9 @@ const AddTopicsScreen = () => {
     setIsGenerating(true);
 
     try {
-      const response = await aiTutorAPI.generateCoursePackage(courseId);
+      const response = await aiTutorAPI.generateCoursePackage(courseId, {
+        replaceExisting: replaceExistingGeneration,
+      });
       if (!response.success) {
         throw new Error(response.error || 'AI generation failed');
       }
@@ -489,6 +499,7 @@ const AddTopicsScreen = () => {
       });
     } finally {
       setIsGenerating(false);
+      setReplaceExistingGeneration(false);
     }
   };
 
@@ -1229,11 +1240,16 @@ const AddTopicsScreen = () => {
       <ConfirmDialog
         visible={showConfirmDialog}
         title="Generate with AI"
-        message="This will trigger AI content generation for all topics. Continue?"
-        confirmText="Generate"
+        message={replaceExistingGeneration
+          ? `This course already has ${generatedLectureCount} generated AI lecture${generatedLectureCount === 1 ? '' : 's'}. Do you want to remove the existing generated lectures from the database and generate a fresh AI lecture package?`
+          : 'This will trigger AI content generation for all topics. Continue?'}
+        confirmText={replaceExistingGeneration ? 'Replace & Generate' : 'Generate'}
         confirmVariant="primary"
         onConfirm={confirmSubmitForAI}
-        onCancel={() => setShowConfirmDialog(false)}
+        onCancel={() => {
+          setShowConfirmDialog(false);
+          setReplaceExistingGeneration(false);
+        }}
       />
     </MainLayout>
   );

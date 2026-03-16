@@ -40,6 +40,14 @@ function isValidAudioFile(storagePath) {
   }
 }
 
+function removeAudioFile(storagePath) {
+  try {
+    if (storagePath && fs.existsSync(storagePath)) {
+      fs.unlinkSync(storagePath);
+    }
+  } catch (_) {}
+}
+
 function dedupeStrings(values) {
   return Array.from(
     new Set(
@@ -1243,8 +1251,110 @@ async function persistLecturePackage({
   });
 }
 
-async function generateCoursePackage(courseId, adminUser) {
+async function purgeCourseGeneratedLectures(courseId, adminUser, options = {}) {
+  if (!options.skipPermissionCheck) {
+    await canManageCourse(adminUser, courseId);
+  }
+
+  const topics = await Topic.findAll({
+    where: { courseId },
+    attributes: ['id'],
+  });
+  const topicIds = topics.map((topic) => topic.id);
+
+  const lectures = await AILecture.findAll({
+    where: topicIds.length ? { topicId: topicIds } : { courseId },
+    attributes: ['id'],
+  });
+  const lectureIds = lectures.map((lecture) => lecture.id);
+
+  const sessions = lectureIds.length
+    ? await AITutorSession.findAll({
+        where: { lectureId: lectureIds },
+        attributes: ['id'],
+      })
+    : [];
+  const sessionIds = sessions.map((session) => session.id);
+
+  const audioWhere = [
+    lectureIds.length ? { lectureId: lectureIds } : null,
+    sessionIds.length ? { sessionId: sessionIds } : null,
+  ].filter(Boolean);
+  const audioAssets = audioWhere.length
+    ? await AIAudioAsset.findAll({
+        where: { [Op.or]: audioWhere },
+        attributes: ['id', 'storagePath'],
+      })
+    : [];
+
+  const quizzes = lectureIds.length
+    ? await AIQuiz.findAll({
+        where: { lectureId: lectureIds },
+        attributes: ['id'],
+      })
+    : [];
+  const quizIds = quizzes.map((quiz) => quiz.id);
+
+  const audioPaths = audioAssets.map((asset) => asset.storagePath).filter(Boolean);
+
+  await sequelize.transaction(async (transaction) => {
+    if (sessionIds.length) {
+      await AITutorMessage.destroy({ where: { sessionId: sessionIds }, transaction });
+      await AIStudentProgress.destroy({
+        where: {
+          [Op.or]: [
+            { lastSessionId: sessionIds },
+            lectureIds.length ? { lectureId: lectureIds } : null,
+          ].filter(Boolean),
+        },
+        transaction,
+      });
+    } else if (lectureIds.length) {
+      await AIStudentProgress.destroy({ where: { lectureId: lectureIds }, transaction });
+    }
+
+    if (audioAssets.length) {
+      await AIAudioAsset.destroy({ where: { id: audioAssets.map((asset) => asset.id) }, transaction });
+    }
+    if (sessionIds.length) {
+      await AITutorSession.destroy({ where: { id: sessionIds }, transaction });
+    }
+    if (quizIds.length) {
+      await AIQuizQuestion.destroy({ where: { quizId: quizIds }, transaction });
+      await AIQuiz.destroy({ where: { id: quizIds }, transaction });
+    }
+    if (lectureIds.length) {
+      await Promise.all([
+        AILectureSection.destroy({ where: { lectureId: lectureIds }, transaction }),
+        AISlideOutline.destroy({ where: { lectureId: lectureIds }, transaction }),
+        AIVisualSuggestion.destroy({ where: { lectureId: lectureIds }, transaction }),
+        AIFlashcard.destroy({ where: { lectureId: lectureIds }, transaction }),
+      ]);
+      await AILecture.destroy({ where: { id: lectureIds }, transaction });
+    }
+    if (topicIds.length) {
+      await AIOutline.destroy({ where: { topicId: topicIds }, transaction });
+    }
+  });
+
+  audioPaths.forEach(removeAudioFile);
+  generationJobs.delete(String(courseId));
+
+  return {
+    success: true,
+    courseId: Number(courseId),
+    removedTopics: topicIds.length,
+    removedLectures: lectureIds.length,
+    removedSessions: sessionIds.length,
+    removedAudioAssets: audioAssets.length,
+  };
+}
+
+async function generateCoursePackage(courseId, adminUser, options = {}) {
   const course = await canManageCourse(adminUser, courseId);
+  if (options.replaceExisting) {
+    await purgeCourseGeneratedLectures(courseId, adminUser, { skipPermissionCheck: true });
+  }
   const topics = await Topic.findAll({
     where: { courseId },
     include: [{ model: Material, as: 'materials' }],
@@ -1543,7 +1653,7 @@ async function getCourseGenerationStatus(courseId) {
   };
 }
 
-async function startCourseGeneration(courseId, adminUser) {
+async function startCourseGeneration(courseId, adminUser, options = {}) {
   await canManageCourse(adminUser, courseId);
 
   const topics = await Topic.findAll({
@@ -1576,7 +1686,7 @@ async function startCourseGeneration(courseId, adminUser) {
 
   setImmediate(async () => {
     try {
-      await generateCoursePackage(courseId, adminUser);
+      await generateCoursePackage(courseId, adminUser, options);
       jobState.status = 'completed';
       jobState.finishedAt = new Date().toISOString();
     } catch (error) {
@@ -1591,7 +1701,8 @@ async function startCourseGeneration(courseId, adminUser) {
     accepted: true,
     alreadyRunning: false,
     courseId: Number(courseId),
-    startedAt: jobState.startedAt
+    startedAt: jobState.startedAt,
+    replaceExisting: Boolean(options.replaceExisting),
   };
 }
 
@@ -2477,6 +2588,7 @@ async function getOrCreateAudioAsset({ lectureId, sessionId, assetType, text }) 
 
 module.exports = {
   generateCoursePackage,
+  purgeCourseGeneratedLectures,
   startCourseGeneration,
   getCourseGenerationStatus,
   getLectureByTopicId,
