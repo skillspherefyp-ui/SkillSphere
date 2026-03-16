@@ -194,7 +194,8 @@ const LearningScreen = () => {
   };
 
   const handleSendChatMessage = async (overrideText = '') => {
-    const text = `${overrideText || chatInput}`.trim();
+    const normalizedOverride = typeof overrideText === 'string' ? overrideText : '';
+    const text = `${normalizedOverride || chatInput}`.trim();
     if (!text || chatSending) return;
     const tempId = `temp-${Date.now()}`;
     setChatInput('');
@@ -521,7 +522,7 @@ const LearningScreen = () => {
                 }
                 renderItem={({ item }) => (
                   <View style={[chatStyles.bubble, item.sender === 'user' ? chatStyles.userBubble : [chatStyles.aiBubble, { borderColor: theme.colors.border }]]}>
-                    <Text style={[item.sender === 'user' ? chatStyles.userBubbleText : [chatStyles.aiBubbleText, { color: theme.colors.textPrimary }]]}>
+                    <Text style={item.sender === 'user' ? chatStyles.userBubbleText : chatStyles.aiBubbleText}>
                       {item.content}
                     </Text>
                   </View>
@@ -547,7 +548,7 @@ const LearningScreen = () => {
               />
               <TouchableOpacity
                 style={[chatStyles.sendButton, { backgroundColor: chatInput.trim() && !chatSending ? theme.colors.primary : theme.colors.border }]}
-                onPress={handleSendChatMessage}
+                onPress={() => handleSendChatMessage()}
                 disabled={!chatInput.trim() || chatSending}
               >
                 {chatSending ? <ActivityIndicator size="small" color="#fff" /> : <Icon name="send" size={16} color="#fff" />}
@@ -610,7 +611,7 @@ const chatStyles = StyleSheet.create({
   userBubble: { alignSelf: 'flex-end', backgroundColor: '#4f46e5' },
   aiBubble: { alignSelf: 'flex-start', backgroundColor: '#f8fafc', borderWidth: 1 },
   userBubbleText: { color: '#fff', fontSize: 14, lineHeight: 20 },
-  aiBubbleText: { fontSize: 14, lineHeight: 20 },
+  aiBubbleText: { color: '#0f172a', fontSize: 14, lineHeight: 20 },
   inputRow: { borderTopWidth: 1, padding: 12, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
   micButton: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   input: { flex: 1, minHeight: 46, maxHeight: 120, borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10 },
