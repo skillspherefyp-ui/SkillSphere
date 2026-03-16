@@ -1,4 +1,11 @@
 const openaiService = require('./openaiService');
+const {
+  buildVisualData,
+  ensureDiagramBoardAction,
+  inferFlowchartSteps,
+  inferConceptNodes,
+  inferComparisonRows,
+} = require('./lectureVisualPlanner');
 
 function dedupeStrings(values = []) {
   return Array.from(new Set((values || []).map((value) => `${value || ''}`.trim()).filter(Boolean)));
@@ -192,7 +199,20 @@ function buildBoardContent({ lecture, chunk, plan, classroomMode, snippetData, c
     chunk.whiteboardExplanation,
     [chunk.learningObjective, ...(chunk.slideBullets || []), ...(chunk.keyTerms || [])]
   );
-  const visualData = chunk.visualData || {};
+  const baseVisualData = chunk.visualData || {};
+  const visualData = {
+    ...buildVisualData({
+      visualMode: plan.visual_priority || chunk.visualMode || 'slide',
+      title: chunk.title,
+      learningObjective: chunk.learningObjective,
+      whiteboardExplanation: chunk.whiteboardExplanation,
+      slideBullets: chunk.slideBullets || [],
+      examples: chunk.examples || [],
+      analogyIfHelpful: chunk.analogyIfHelpful || '',
+      visualCaption: chunk.visualCaption || '',
+    }),
+    ...baseVisualData,
+  };
 
   switch (classroomMode) {
     case 'whiteboard_notes':
@@ -213,20 +233,43 @@ function buildBoardContent({ lecture, chunk, plan, classroomMode, snippetData, c
         type: 'diagram',
         title: chunk.title,
         caption: chunk.visualCaption || '',
-        nodes: Array.isArray(visualData.nodes) ? visualData.nodes.slice(0, 5) : [],
+        nodes: Array.isArray(visualData.nodes) && visualData.nodes.length
+          ? visualData.nodes.slice(0, 6)
+          : inferConceptNodes({
+              title: chunk.title,
+              learningObjective: chunk.learningObjective,
+              whiteboardExplanation: chunk.whiteboardExplanation,
+              slideBullets: chunk.slideBullets || [],
+              examples: chunk.examples || [],
+              analogyIfHelpful: chunk.analogyIfHelpful || '',
+            }).slice(0, 6),
       };
     case 'flowchart_explainer':
       return {
         type: 'flowchart',
         title: chunk.title,
-        steps: Array.isArray(visualData.steps) ? visualData.steps.slice(0, 6) : [],
+        steps: Array.isArray(visualData.steps) && visualData.steps.length
+          ? visualData.steps.slice(0, 6)
+          : inferFlowchartSteps({
+              title: chunk.title,
+              learningObjective: chunk.learningObjective,
+              whiteboardExplanation: chunk.whiteboardExplanation,
+              slideBullets: chunk.slideBullets || [],
+              examples: chunk.examples || [],
+            }).slice(0, 6),
       };
     case 'comparison_explainer':
       return {
         type: 'comparison_table',
         title: chunk.title,
         columns: visualData.columns || ['Concept', 'Teaching Note'],
-        rows: Array.isArray(visualData.rows) ? visualData.rows.slice(0, 5) : [],
+        rows: Array.isArray(visualData.rows) && visualData.rows.length
+          ? visualData.rows.slice(0, 5)
+          : inferComparisonRows({
+              slideBullets: chunk.slideBullets || [],
+              examples: chunk.examples || [],
+              learningObjective: chunk.learningObjective || '',
+            }).slice(0, 5),
       };
     case 'code_walkthrough':
       return {
@@ -400,6 +443,37 @@ function getStoredScenes(chunk, fallbackScenes) {
       : [];
 
   return storedScenes.length > 0 ? storedScenes : fallbackScenes;
+}
+
+function enrichScenesForWhiteboard({ scenes = [], chunk, boardContent, plan }) {
+  return (Array.isArray(scenes) ? scenes : []).map((scene, index) => {
+    const nextMode = `${scene?.mode || ''}`.trim();
+    const enrichedBoardActions = ensureDiagramBoardAction({
+      scene: {
+        ...scene,
+        mode: nextMode,
+        board_actions: Array.isArray(scene?.board_actions || scene?.boardActions)
+          ? (scene.board_actions || scene.boardActions)
+          : [],
+      },
+      chunk: {
+        title: chunk?.title,
+        learningObjective: chunk?.learningObjective,
+        whiteboardExplanation: chunk?.whiteboardExplanation,
+        slideBullets: chunk?.slideBullets || [],
+        examples: chunk?.examples || [],
+        analogyIfHelpful: chunk?.analogyIfHelpful || '',
+        visualCaption: chunk?.visualCaption || '',
+        visualMode: chunk?.visualMode || plan?.visual_priority || '',
+      },
+      boardTitle: scene?.title || boardContent?.title || chunk?.title || `Scene ${index + 1}`,
+    });
+
+    return {
+      ...scene,
+      board_actions: enrichedBoardActions,
+    };
+  });
 }
 
 function buildBoardActions({ boardContent, supportPanel, checkpointText, reinforcementPoints }) {
@@ -636,7 +710,7 @@ function buildLectureScenes({
       narration: checkpointText
         ? `Before we move on, ${checkpointText}`
         : `To summarize, ${(plan.reinforcement_points || []).slice(0, 3).join('. ')}`,
-      subtitle_text: checkpointText || (plan.reinforcement_points || []).slice(0, 3).join(' • '),
+      subtitle_text: checkpointText || (plan.reinforcement_points || []).slice(0, 3).join(' | '),
       timing: { start_ms: cursor, duration_ms: summaryDurationMs },
       board_actions: checkpointText
         ? [
@@ -820,7 +894,12 @@ async function getTeachingDecision({ lecture, chunk, session, visualSuggestion, 
     recommendedDurationSeconds: finalPlan.recommended_duration_seconds,
     plan: finalPlan,
   });
-  const scenes = getStoredScenes(chunk, generatedScenes);
+  const scenes = enrichScenesForWhiteboard({
+    scenes: getStoredScenes(chunk, generatedScenes),
+    chunk,
+    boardContent,
+    plan: finalPlan,
+  });
   const currentStepIndex = Number.isInteger(session?.teachingState?.currentStepIndex)
     ? Math.max(0, Math.min(session.teachingState.currentStepIndex, Math.max(scenes.length - 1, 0)))
     : 0;

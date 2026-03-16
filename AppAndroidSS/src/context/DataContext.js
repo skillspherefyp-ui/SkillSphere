@@ -262,14 +262,14 @@ export const DataProvider = ({ children }) => {
     }
   };
 
-  const checkEnrollment = async (courseId) => {
+  const checkEnrollment = useCallback(async (courseId) => {
     try {
       const response = await enrollmentAPI.checkEnrollment(courseId);
       return response;
     } catch (err) {
       return { success: false, error: err.message };
     }
-  };
+  }, []);
 
   // Progress
   const fetchMyProgress = useCallback(async () => {

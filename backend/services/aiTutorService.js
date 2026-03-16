@@ -23,6 +23,10 @@ const {
 } = require('../models');
 const openaiService = require('./openaiService');
 const aiTeachingOrchestrator = require('./aiTeachingOrchestrator');
+const {
+  buildVisualData: sharedBuildVisualData,
+  ensureDiagramBoardAction,
+} = require('./lectureVisualPlanner');
 
 const AUDIO_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'ai-audio');
 const generationJobs = new Map();
@@ -84,40 +88,24 @@ function buildTeachingSequence(visualMode) {
 }
 
 function buildVisualData(visualMode, title, slideBullets, examples, analogyIfHelpful) {
-  if (visualMode === 'flowchart') {
-    return {
-      type: 'flowchart',
-      steps: (slideBullets || []).map((bullet, index) => ({
-        id: `step-${index + 1}`,
-        label: bullet,
-      })),
-    };
-  }
-
-  if (visualMode === 'comparison_table') {
-    const rows = (slideBullets || []).slice(0, 4).map((bullet, index) => {
-      const parts = bullet.split(':');
-      return {
-        left: parts[0]?.trim() || `Point ${index + 1}`,
-        right: parts.slice(1).join(':').trim() || examples[index] || analogyIfHelpful || 'Key teaching note',
-      };
-    });
-
-    return {
-      type: 'comparison_table',
-      columns: ['Concept', 'Teaching Note'],
-      rows,
-    };
-  }
-
   return {
-    type: visualMode === 'whiteboard' ? 'whiteboard' : 'diagram',
-    nodes: (slideBullets || []).slice(0, 4).map((bullet, index) => ({
-      id: `node-${index + 1}`,
-      label: bullet,
-      emphasis: index === 0 ? 'primary' : 'secondary',
-    })),
-    caption: `${title} visual map`,
+    type: visualMode === 'flowchart'
+      ? 'flowchart'
+      : visualMode === 'comparison_table'
+        ? 'comparison_table'
+        : visualMode === 'whiteboard'
+          ? 'whiteboard'
+          : 'diagram',
+    ...sharedBuildVisualData({
+      visualMode,
+      title,
+      learningObjective: '',
+      whiteboardExplanation: '',
+      slideBullets,
+      examples,
+      analogyIfHelpful,
+      visualCaption: title,
+    }),
   };
 }
 
@@ -689,11 +677,24 @@ function normalizeScenes(rawScenes, fallbackContext) {
         }
       : null;
 
+    const mode = `${scene?.mode || inferSceneMode({ sceneType: scene?.type, visualMode: fallbackContext.visualMode, hasExample: Boolean(example) })}`.trim();
+    const enrichedBoardActions = ensureDiagramBoardAction({
+      scene: {
+        ...scene,
+        mode,
+        diagram_instruction: diagramInstruction,
+        example,
+        board_actions: Array.isArray(scene?.board_actions) ? scene.board_actions : [],
+      },
+      chunk: fallbackContext,
+      boardTitle: scene?.title || fallbackContext.title,
+    });
+
     return {
       id: `${scene?.id || `scene-${index + 1}`}`.trim(),
       title: `${scene?.title || `Scene ${index + 1}`}`.trim(),
       type: `${scene?.type || (index === 0 ? 'instruction' : example ? 'example' : 'summary')}`.trim(),
-      mode: `${scene?.mode || inferSceneMode({ sceneType: scene?.type, visualMode: fallbackContext.visualMode, hasExample: Boolean(example) })}`.trim(),
+      mode,
       narration,
       subtitle,
       timing_ms: Number.isInteger(scene?.timing_ms)
@@ -701,7 +702,7 @@ function normalizeScenes(rawScenes, fallbackContext) {
         : Number.isInteger(scene?.timing?.duration_ms)
           ? scene.timing.duration_ms
           : Math.max(1200, Math.round((fallbackContext.estimatedDurationSeconds || 50) * 1000 / Math.max(inputScenes.length, 1))),
-      board_actions: (Array.isArray(scene?.board_actions) ? scene.board_actions : []).map(normalizeBoardAction).filter(Boolean),
+      board_actions: enrichedBoardActions.map(normalizeBoardAction).filter(Boolean),
       diagram_instruction: diagramInstruction,
       example,
     };

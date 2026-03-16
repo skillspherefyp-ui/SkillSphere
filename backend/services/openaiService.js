@@ -227,6 +227,12 @@ Constraints:
 - Keep scenes short and well paced for TTS playback. Aim for 2 to 4 scenes per chunk, usually 1200ms to 6500ms each.
 - subtitle should be the exact learner-facing subtitle line for that scene.
 - board_actions must tell the whiteboard what to show inside the board area itself.
+- The whiteboard is the primary teaching surface. Do not leave diagram scenes visually empty.
+- If narration mentions an algorithm, process, sequence, decision path, or flow, output a real flowchart using draw_diagram with 3 to 6 concrete ordered steps.
+- If narration is in diagram_mode, include an actual diagram-oriented board action, not just add_title or plain paragraph text.
+- If narration introduces an example, include a matching show_example action or example object with the same concept.
+- If narration highlights a key concept, include highlight_element or focus_region for that same concept.
+- What the tutor says and what the whiteboard shows must be tightly aligned in the same scene.
 - Use diagram_instruction only when a diagram genuinely helps.
 - Use example only when a concrete example improves understanding.
 - Smoothly transition between scenes like a professional AI lecturer.
@@ -294,7 +300,8 @@ async function repairLecturePackage(rawJsonText, validationErrors) {
           content: [
             'Repair invalid JSON lecture packages.',
             'Return JSON only.',
-            'Preserve or reconstruct scene-based chunks with short scenes, subtitles, timing, and board_actions.'
+            'Preserve or reconstruct scene-based chunks with short scenes, subtitles, timing, and board_actions.',
+            'If a scene is in diagram mode or mentions a flowchart/algorithm/process, reconstruct a real draw_diagram payload with concrete steps or nodes.'
           ].join(' ')
         },
         {

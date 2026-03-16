@@ -52,6 +52,12 @@ const LearningScreen = () => {
   }, [topicMaterials, selectedMaterialId]);
 
   useEffect(() => {
+    if (!courseId) {
+      setLoading(false);
+      setIsEnrolled(false);
+      return undefined;
+    }
+
     let cancelled = false;
 
     const load = async () => {

@@ -14,10 +14,11 @@ import {
 import Toast from 'react-native-toast-message';
 import Icon from 'react-native-vector-icons/Ionicons';
 import MaterialIcon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import MainLayout from '../../components/ui/MainLayout';
 import EmptyState from '../../components/ui/EmptyState';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { useTheme } from '../../context/ThemeContext';
 import { aiTutorAPI, API_BASE } from '../../services/apiClient';
@@ -25,17 +26,18 @@ import WhiteboardStage from '../../features/lecture/WhiteboardStage';
 import { useLectureOrchestrator } from '../../features/lecture/useLectureOrchestrator';
 
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
-const PANEL_KEYS = { CHAT: 'chat', NOTES: 'notes', FLASHCARDS: 'flashcards', TOOLS: 'tools', TOPICS: 'topics' };
+const PANEL_KEYS = { CHAT: 'chat', NOTES: 'notes', FLASHCARDS: 'flashcards', TOPICS: 'topics' };
 const RUNTIME_STATES = { IDLE: 'idle', PLAYING: 'playing', PAUSED: 'paused', STUDENT_INTERRUPT: 'student_interrupt', RESUMING: 'resuming', ENDED: 'ended' };
 const MAX_CHUNK_GAP_MS = 180;
 const ERROR_CHUNK_GAP_MS = 850;
 const AUDIO_PREFETCH_TIMEOUT_MS = 900;
-const INTERRUPT_GREETING = 'Hello Danish, how can I help you?';
+const SILENT_INTERRUPT_RESUME_MS = 5000;
 
 const AILearningScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { theme, isDark } = useTheme();
+  const { user } = useAuth();
   const { width, height } = useWindowDimensions();
   const { courseId, topicId } = route.params || {};
   const { courses, checkEnrollment, fetchCourses } = useData();
@@ -51,6 +53,7 @@ const AILearningScreen = () => {
   const [currentChunk, setCurrentChunk] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [question, setQuestion] = useState('');
+  const [lectureNotes, setLectureNotes] = useState('');
   const [activePanel, setActivePanel] = useState(null);
   const [runtimeState, setRuntimeState] = useState(RUNTIME_STATES.IDLE);
   const [voiceMode, setVoiceMode] = useState(Platform.OS === 'web');
@@ -67,11 +70,22 @@ const AILearningScreen = () => {
   const interruptAudioRef = useRef(null);
   const pausedPlaybackRef = useRef(null);
   const audioAssetCacheRef = useRef(new Map());
+  const interruptResumeTimeoutRef = useRef(null);
+  const runtimeStateRef = useRef(runtimeState);
+  const activePanelRef = useRef(activePanel);
+  const questionRef = useRef(question);
+  const isRecordingRef = useRef(isRecording);
+  const subtitleIntervalRef = useRef(null);
+  const subtitleBoundaryRef = useRef({ text: '', lastIndex: 0 });
+  const [liveSubtitleText, setLiveSubtitleText] = useState('');
 
   const baseHost = API_BASE.replace(/\/api$/, '');
   const isMobile = width < 768;
   const viewportLockStyle = Platform.OS === 'web' ? { height, maxHeight: height } : null;
   const drawerWidth = isMobile ? Math.max(320, width - 24) : Math.min(420, Math.max(360, Math.round(width * 0.32)));
+  const studentName = `${user?.name || 'Student'}`.trim().split(/\s+/)[0] || 'Student';
+  const interruptGreeting = `Hello ${studentName}, how can I help you?`;
+  const microphoneGreeting = 'How can I help you?';
 
   const orderedChunks = useMemo(() => (
     (lecture?.sections || []).slice().sort((a, b) => {
@@ -88,12 +102,6 @@ const AILearningScreen = () => {
   const progress = orderedChunks.length ? Math.min(100, Math.round(((currentIndex + (lectureCompleted ? 1 : 0)) / orderedChunks.length) * 100)) : 0;
   const currentSlides = (lecture?.slideOutlines || []).filter((slide) => slide.slideIndex === currentChunk?.sectionIndex);
   const currentDelivery = currentChunk?.delivery || null;
-  const panelContent = currentDelivery?.panel_content || {};
-  const teachingPlan = currentDelivery?.teaching_plan || currentChunk?.teachingPlan || {};
-  const supportPanel = currentDelivery?.support_panel || panelContent.supportPanel || null;
-  const checkpointText = currentDelivery?.checkpoint_text || panelContent.checkpointQuestion || currentChunk?.checkpointQuestion || '';
-  const reinforcementPoints = panelContent.reinforcementPoints || teachingPlan.reinforcement_points || [];
-  const confusionPoints = panelContent.likelyConfusionPoints || teachingPlan.likely_confusion_points || [];
   const recommendedDurationMs = ((currentDelivery?.recommended_duration_seconds || currentChunk?.estimatedDurationSeconds || 0) > 0
     ? (currentDelivery?.recommended_duration_seconds || currentChunk?.estimatedDurationSeconds) * 1000
     : 0);
@@ -110,9 +118,8 @@ const AILearningScreen = () => {
 
   const currentNarration = lecturePlan.narrationText || orchestratedNarration;
   const upcomingChunk = orderedChunks[currentIndex + 1] || null;
-  const displaySubtitleText = runtimeState === RUNTIME_STATES.STUDENT_INTERRUPT ? INTERRUPT_GREETING : subtitleText;
+  const displaySubtitleText = liveSubtitleText || subtitleText || 'The lecture narration will appear here as the tutor teaches.';
   const whiteboardModeLabel = `${whiteboardMode || 'concept mode'}`.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
-  const sceneLabel = currentScene?.title || currentDelivery?.classroom_mode_label || whiteboardModeLabel;
   const tutorStatus = lectureCompleted
     ? { label: 'Lecture complete', tone: '#22c55e' }
     : runtimeState === RUNTIME_STATES.STUDENT_INTERRUPT
@@ -122,6 +129,11 @@ const AILearningScreen = () => {
         : isPlaying
           ? { label: voiceMode ? 'Live lecture' : 'Guided text', tone: '#60a5fa' }
           : { label: 'Paused', tone: '#94a3b8' };
+
+  useEffect(() => { runtimeStateRef.current = runtimeState; }, [runtimeState]);
+  useEffect(() => { activePanelRef.current = activePanel; }, [activePanel]);
+  useEffect(() => { questionRef.current = question; }, [question]);
+  useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
 
   useEffect(() => {
     const pulse = RNAnimated.loop(RNAnimated.sequence([
@@ -141,35 +153,37 @@ const AILearningScreen = () => {
     return () => { cancelled = true; };
   }, [fetchCourses, courseId, topicId]);
 
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof document === 'undefined') return undefined;
-    const html = document.documentElement;
-    const body = document.body;
-    const root = document.getElementById('root');
-    const previous = {
-      htmlOverflow: html.style.overflow, htmlHeight: html.style.height,
-      bodyOverflow: body.style.overflow, bodyHeight: body.style.height,
-      rootOverflow: root?.style.overflow || '', rootHeight: root?.style.height || '',
-    };
-    html.style.overflow = 'hidden';
-    html.style.height = '100%';
-    body.style.overflow = 'hidden';
-    body.style.height = '100%';
-    if (root) {
-      root.style.overflow = 'hidden';
-      root.style.height = '100%';
-    }
-    return () => {
-      html.style.overflow = previous.htmlOverflow;
-      html.style.height = previous.htmlHeight;
-      body.style.overflow = previous.bodyOverflow;
-      body.style.height = previous.bodyHeight;
+  useFocusEffect(
+    React.useCallback(() => {
+      if (Platform.OS !== 'web' || typeof document === 'undefined') return undefined;
+      const html = document.documentElement;
+      const body = document.body;
+      const root = document.getElementById('root');
+      const previous = {
+        htmlOverflow: html.style.overflow, htmlHeight: html.style.height,
+        bodyOverflow: body.style.overflow, bodyHeight: body.style.height,
+        rootOverflow: root?.style.overflow || '', rootHeight: root?.style.height || '',
+      };
+      html.style.overflow = 'hidden';
+      html.style.height = '100%';
+      body.style.overflow = 'hidden';
+      body.style.height = '100%';
       if (root) {
-        root.style.overflow = previous.rootOverflow;
-        root.style.height = previous.rootHeight;
+        root.style.overflow = 'hidden';
+        root.style.height = '100%';
       }
-    };
-  }, []);
+      return () => {
+        html.style.overflow = previous.htmlOverflow;
+        html.style.height = previous.htmlHeight;
+        body.style.overflow = previous.bodyOverflow;
+        body.style.height = previous.bodyHeight;
+        if (root) {
+          root.style.overflow = previous.rootOverflow;
+          root.style.height = previous.rootHeight;
+        }
+      };
+    }, [])
+  );
 
   useEffect(() => {
     loadLecture();
@@ -218,6 +232,71 @@ const AILearningScreen = () => {
     primeAudioAsset(upcomingNarration).catch(() => null);
   }, [voiceMode, currentNarration, upcomingNarration, lecture?.id, session?.id]);
 
+  const clearInterruptAutoResume = () => {
+    if (interruptResumeTimeoutRef.current) {
+      clearTimeout(interruptResumeTimeoutRef.current);
+      interruptResumeTimeoutRef.current = null;
+    }
+  };
+  const stopSubtitleSync = () => {
+    if (subtitleIntervalRef.current) {
+      clearInterval(subtitleIntervalRef.current);
+      subtitleIntervalRef.current = null;
+    }
+    subtitleBoundaryRef.current = { text: '', lastIndex: 0 };
+  };
+  const updateSubtitleFromRatio = (text, ratio) => {
+    const normalizedText = `${text || ''}`.trim();
+    if (!normalizedText) {
+      setLiveSubtitleText('');
+      return;
+    }
+    const words = normalizedText.split(/\s+/).filter(Boolean);
+    if (!words.length) {
+      setLiveSubtitleText(normalizedText);
+      return;
+    }
+    const targetCount = Math.max(1, Math.min(words.length, Math.round(words.length * Math.max(0, Math.min(1, ratio)))));
+    setLiveSubtitleText(words.slice(0, targetCount).join(' '));
+  };
+  const beginTimedSubtitleSync = (text, durationMs) => {
+    stopSubtitleSync();
+    const normalizedText = `${text || ''}`.trim();
+    if (!normalizedText) {
+      setLiveSubtitleText('');
+      return;
+    }
+    setLiveSubtitleText('');
+    const words = normalizedText.split(/\s+/).filter(Boolean);
+    if (!words.length) {
+      setLiveSubtitleText(normalizedText);
+      return;
+    }
+    const totalDurationMs = Math.max(1200, Number(durationMs) || Math.max(2200, words.length * 280));
+    const intervalMs = Math.max(70, Math.min(240, Math.round(totalDurationMs / words.length)));
+    let index = 0;
+    subtitleIntervalRef.current = setInterval(() => {
+      index += 1;
+      setLiveSubtitleText(words.slice(0, Math.min(index, words.length)).join(' '));
+      if (index >= words.length) {
+        stopSubtitleSync();
+      }
+    }, intervalMs);
+  };
+  const beginSubtitleSync = (text, options = {}) => {
+    const normalizedText = `${text || ''}`.trim();
+    if (!normalizedText) {
+      stopSubtitleSync();
+      setLiveSubtitleText('');
+      return;
+    }
+    if (options.immediate) {
+      stopSubtitleSync();
+      setLiveSubtitleText(normalizedText);
+      return;
+    }
+    beginTimedSubtitleSync(normalizedText, options.durationMs);
+  };
   const clearScheduledPlayback = () => {
     if (playbackRef.current) { clearTimeout(playbackRef.current); playbackRef.current = null; }
   };
@@ -228,6 +307,7 @@ const AILearningScreen = () => {
   };
   const pauseLecturePlayback = () => {
     clearScheduledPlayback();
+    stopSubtitleSync();
     if (audioRef.current && !audioRef.current.paused) {
       audioRef.current.pause?.();
       pausedPlaybackRef.current = { kind: 'audio', chunkId: currentChunk?.id || null };
@@ -238,9 +318,12 @@ const AILearningScreen = () => {
   };
   const stopPlayback = () => {
     clearScheduledPlayback();
+    clearInterruptAutoResume();
     if (audioRef.current) { audioRef.current.pause?.(); audioRef.current = null; }
     clearInterruptGreeting();
     pausedPlaybackRef.current = null;
+    stopSubtitleSync();
+    setLiveSubtitleText('');
     if (Platform.OS === 'web' && window?.speechSynthesis) window.speechSynthesis.cancel();
   };
   const stopRecognition = () => {
@@ -321,6 +404,7 @@ const AILearningScreen = () => {
       pausedPlaybackRef.current = null;
     }
     if (!voiceMode) {
+      beginSubtitleSync(subtitleText || currentNarration, { durationMs: recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)) });
       scheduleNext(recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)));
       return;
     }
@@ -332,44 +416,82 @@ const AILearningScreen = () => {
           audio.preload = 'auto';
           try { audio.currentTime = 0; } catch (_) {}
           audioRef.current = audio;
-          audio.onended = () => scheduleNext(MAX_CHUNK_GAP_MS);
+          audio.onloadedmetadata = () => beginSubtitleSync(subtitleText || currentNarration, { durationMs: Math.max(1000, (audio.duration || 0) * 1000) });
+          audio.ontimeupdate = () => {
+            if (audio.duration && Number.isFinite(audio.duration) && audio.duration > 0) {
+              updateSubtitleFromRatio(subtitleText || currentNarration, audio.currentTime / audio.duration);
+            }
+          };
+          audio.onended = () => {
+            setLiveSubtitleText(subtitleText || currentNarration);
+            scheduleNext(MAX_CHUNK_GAP_MS);
+          };
           audio.onerror = () => scheduleNext(ERROR_CHUNK_GAP_MS);
           await audio.play();
+          if (!(audio.duration && Number.isFinite(audio.duration) && audio.duration > 0)) {
+            beginSubtitleSync(subtitleText || currentNarration, { durationMs: recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)) });
+          }
           return;
         }
       } catch (_) {}
       if (window?.speechSynthesis) {
         const utterance = new SpeechSynthesisUtterance(currentNarration);
-        utterance.onend = () => scheduleNext(MAX_CHUNK_GAP_MS);
+        subtitleBoundaryRef.current = { text: subtitleText || currentNarration, lastIndex: 0 };
+        beginSubtitleSync(subtitleText || currentNarration, { durationMs: recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)) });
+        utterance.onboundary = (event) => {
+          const sourceText = subtitleBoundaryRef.current.text;
+          if (!sourceText || typeof event?.charIndex !== 'number') return;
+          const nextIndex = Math.max(subtitleBoundaryRef.current.lastIndex, Math.min(sourceText.length, event.charIndex + 1));
+          subtitleBoundaryRef.current.lastIndex = nextIndex;
+          setLiveSubtitleText(sourceText.slice(0, nextIndex).trim() || sourceText.split(/\s+/).slice(0, 1).join(' '));
+        };
+        utterance.onend = () => {
+          setLiveSubtitleText(subtitleText || currentNarration);
+          scheduleNext(MAX_CHUNK_GAP_MS);
+        };
         utterance.onerror = () => scheduleNext(ERROR_CHUNK_GAP_MS);
         window.speechSynthesis.cancel();
         window.speechSynthesis.speak(utterance);
         return;
       }
     }
+    beginSubtitleSync(subtitleText || currentNarration, { durationMs: recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)) });
     scheduleNext(recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)));
   };
 
-  const playInterruptGreeting = async () => {
+  const playInterruptGreeting = async (greetingText) => {
     clearInterruptGreeting();
     setChatMessages((prev) => {
       const lastMessage = prev[prev.length - 1];
-      return lastMessage?.type === 'ai' && lastMessage?.text === INTERRUPT_GREETING ? prev : [...prev, { type: 'ai', text: INTERRUPT_GREETING }];
+      return lastMessage?.type === 'ai' && lastMessage?.text === greetingText ? prev : [...prev, { type: 'ai', text: greetingText }];
     });
+    beginSubtitleSync(greetingText, { durationMs: 2200 });
     if (Platform.OS !== 'web') return;
     try {
-      const audioResponse = await Promise.race([primeAudioAsset(INTERRUPT_GREETING, 'qa_answer'), new Promise((resolve) => setTimeout(() => resolve(null), AUDIO_PREFETCH_TIMEOUT_MS))]);
+      const audioResponse = await Promise.race([primeAudioAsset(greetingText, 'qa_answer'), new Promise((resolve) => setTimeout(() => resolve(null), AUDIO_PREFETCH_TIMEOUT_MS))]);
       if (audioResponse?.asset?.urlPath) {
         const audio = new Audio(buildAudioUrl(audioResponse.asset));
         audio.preload = 'auto';
         interruptAudioRef.current = audio;
         try { audio.currentTime = 0; } catch (_) {}
+        audio.onloadedmetadata = () => beginSubtitleSync(greetingText, { durationMs: Math.max(1000, (audio.duration || 0) * 1000) });
+        audio.ontimeupdate = () => {
+          if (audio.duration && Number.isFinite(audio.duration) && audio.duration > 0) {
+            updateSubtitleFromRatio(greetingText, audio.currentTime / audio.duration);
+          }
+        };
+        audio.onended = () => setLiveSubtitleText(greetingText);
         await audio.play();
         return;
       }
     } catch (_) {}
     if (window?.speechSynthesis) {
-      const utterance = new SpeechSynthesisUtterance(INTERRUPT_GREETING);
+      const utterance = new SpeechSynthesisUtterance(greetingText);
+      utterance.onboundary = (event) => {
+        if (typeof event?.charIndex !== 'number') return;
+        setLiveSubtitleText(greetingText.slice(0, Math.min(greetingText.length, event.charIndex + 1)).trim() || greetingText);
+      };
+      utterance.onend = () => setLiveSubtitleText(greetingText);
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utterance);
     }
@@ -397,7 +519,21 @@ const AILearningScreen = () => {
     }
   };
 
-  const openChatPanel = async () => {
+  const scheduleSilentInterruptResume = () => {
+    clearInterruptAutoResume();
+    interruptResumeTimeoutRef.current = setTimeout(() => {
+      if (
+        runtimeStateRef.current === RUNTIME_STATES.STUDENT_INTERRUPT &&
+        activePanelRef.current === PANEL_KEYS.CHAT &&
+        !isRecordingRef.current &&
+        !`${questionRef.current || ''}`.trim()
+      ) {
+        resumeLectureFromInterrupt();
+      }
+    }, SILENT_INTERRUPT_RESUME_MS);
+  };
+
+  const enterInterruptMode = async ({ greetingText, autoResumeIfSilent = false }) => {
     if (session && (runtimeState === RUNTIME_STATES.PLAYING || runtimeState === RUNTIME_STATES.RESUMING)) {
       try {
         const response = await aiTutorAPI.pauseSession(session.id, { pauseReason: 'student_interrupt', resumeLeadIn: "Now that we've cleared that up, let's continue." });
@@ -410,12 +546,38 @@ const AILearningScreen = () => {
       }
     }
     setActivePanel(PANEL_KEYS.CHAT);
-    await playInterruptGreeting();
+    await playInterruptGreeting(greetingText);
+    if (autoResumeIfSilent) scheduleSilentInterruptResume();
+    else clearInterruptAutoResume();
+  };
+
+  const handleRaiseHandToggle = async () => {
+    if (runtimeState === RUNTIME_STATES.STUDENT_INTERRUPT && activePanel === PANEL_KEYS.CHAT) {
+      clearInterruptAutoResume();
+      await resumeLectureFromInterrupt();
+      return;
+    }
+    await enterInterruptMode({ greetingText: interruptGreeting, autoResumeIfSilent: true });
+  };
+
+  const openChatPanel = async () => {
+    await enterInterruptMode({ greetingText: interruptGreeting, autoResumeIfSilent: false });
+  };
+
+  const openAssistantPanel = async () => {
+    if (runtimeState === RUNTIME_STATES.STUDENT_INTERRUPT) {
+      setActivePanel(PANEL_KEYS.CHAT);
+      clearInterruptAutoResume();
+      return;
+    }
+    await enterInterruptMode({ greetingText: microphoneGreeting, autoResumeIfSilent: false });
   };
 
   const resumeLectureFromInterrupt = async () => {
     if (!session || runtimeState !== RUNTIME_STATES.STUDENT_INTERRUPT) { setActivePanel(null); return; }
     try {
+      clearInterruptAutoResume();
+      stopRecognition();
       const response = await aiTutorAPI.resumeSession(session.id);
       if (!response.success) throw new Error(response.error || 'Unable to resume tutor session');
       setSession(response.session);
@@ -434,9 +596,10 @@ const AILearningScreen = () => {
     setActivePanel(null);
   };
 
-  const askQuestion = async () => {
-    if (!question.trim() || !session) return;
-    const prompt = question.trim();
+  const askQuestionWithText = async (promptText) => {
+    if (!`${promptText || ''}`.trim() || !session) return;
+    const prompt = `${promptText}`.trim();
+    clearInterruptAutoResume();
     setQuestion('');
     setSubmittingQuestion(true);
     setChatMessages((prev) => [...prev, { type: 'user', text: prompt }]);
@@ -450,9 +613,10 @@ const AILearningScreen = () => {
       setSubmittingQuestion(false);
     }
   };
+  const askQuestion = async () => askQuestionWithText(question);
 
   const startVoiceInput = async () => {
-    await openChatPanel();
+    await openAssistantPanel();
     if (Platform.OS !== 'web') {
       Toast.show({ type: 'info', text1: 'Voice Input', text2: 'Voice input currently requires the web speech API.' });
       return;
@@ -463,17 +627,22 @@ const AILearningScreen = () => {
       return;
     }
     if (isRecording) { stopRecognition(); return; }
+    clearInterruptAutoResume();
     const recognition = new SpeechRecognition();
     recognitionRef.current = recognition;
     recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.lang = 'en-US';
     recognition.onstart = () => setIsRecording(true);
     recognition.onresult = (event) => {
-      const transcript = event.results?.[0]?.[0]?.transcript || '';
-      setQuestion((prev) => `${prev}${prev ? ' ' : ''}${transcript}`.trim());
+      const transcript = Array.from(event.results || []).map((result) => result?.[0]?.transcript || '').join(' ').trim();
+      const finalTranscript = Array.from(event.results || []).filter((result) => result.isFinal).map((result) => result?.[0]?.transcript || '').join(' ').trim();
+      setQuestion(transcript);
       setActivePanel(PANEL_KEYS.CHAT);
-      setIsRecording(false);
+      if (finalTranscript) {
+        setIsRecording(false);
+        askQuestionWithText(finalTranscript);
+      }
     };
     recognition.onend = () => setIsRecording(false);
     recognition.onerror = () => setIsRecording(false);
@@ -518,26 +687,6 @@ const AILearningScreen = () => {
     navigation.navigate('Quiz', { courseId, topicId, lectureId: lecture.id });
   };
 
-  const restartLecture = async () => {
-    if (!session?.id) return;
-    try {
-      stopPlayback();
-      stopRecognition();
-      setShowCompleteDialog(false);
-      const response = await aiTutorAPI.restartSession(session.id);
-      if (!response.success) throw new Error(response.error || 'Unable to restart this lecture');
-      setSession(response.session);
-      setLecture(response.lecture || lecture);
-      setCurrentChunk(response.chunk);
-      setLectureCompleted(false);
-      setActivePanel(null);
-      setRuntimeState(RUNTIME_STATES.PLAYING);
-      Toast.show({ type: 'success', text1: 'Lecture Restarted', text2: 'Starting again from the first scene.' });
-    } catch (error) {
-      Toast.show({ type: 'error', text1: 'Restart Failed', text2: error.message || 'Unable to restart this lecture right now.' });
-    }
-  };
-
   const renderDrawerHeader = (eyebrow, title) => (
     <View style={styles.drawerHeader}>
       <View style={styles.drawerHeaderCopy}>
@@ -575,7 +724,10 @@ const AILearningScreen = () => {
         <TextInput
           style={[styles.drawerInput, { color: theme.colors.textPrimary, borderColor: theme.colors.border, backgroundColor: isDark ? '#172332' : '#ffffff' }]}
           value={question}
-          onChangeText={setQuestion}
+          onChangeText={(value) => {
+            setQuestion(value);
+            if (`${value || ''}`.trim()) clearInterruptAutoResume();
+          }}
           onSubmitEditing={askQuestion}
           placeholder={isRecording ? 'Listening...' : 'Type your question...'}
           placeholderTextColor={theme.colors.textTertiary}
@@ -590,14 +742,26 @@ const AILearningScreen = () => {
 
   const renderNotesPanel = () => (
     <View style={styles.drawerShell}>
-      {renderDrawerHeader('Notes', lecture.title)}
+      {renderDrawerHeader('Notes', 'Lecture notepad')}
       <ScrollView style={styles.drawerScroll} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.notesLead, { color: theme.colors.textSecondary }]}>{lecture.summary}</Text>
+        <View style={[styles.sheetBlock, { borderColor: theme.colors.border, backgroundColor: isDark ? '#101827' : '#f8fafc' }]}>
+          <Text style={[styles.sheetBlockTitle, { color: theme.colors.textPrimary }]}>Your notes</Text>
+          <TextInput
+            style={[styles.notesInput, { color: theme.colors.textPrimary, borderColor: theme.colors.border, backgroundColor: isDark ? '#0f172a' : '#ffffff' }]}
+            multiline
+            value={lectureNotes}
+            onChangeText={setLectureNotes}
+            placeholder="Write key points, examples, or questions while the lecture is playing..."
+            placeholderTextColor={theme.colors.textTertiary}
+            textAlignVertical="top"
+          />
+        </View>
+        <Text style={[styles.notesLead, { color: theme.colors.textSecondary }]}>Quick lecture cues</Text>
         {(currentSlides.length ? currentSlides : lecture.slideOutlines || []).map((slide, index) => (
           <View key={slide.id || index} style={[styles.sheetBlock, { borderColor: theme.colors.border, backgroundColor: isDark ? '#101827' : '#f8fafc' }]}>
             <Text style={[styles.sheetBlockTitle, { color: theme.colors.textPrimary }]}>{slide.title}</Text>
             {(slide.bullets || []).map((bullet, bulletIndex) => (
-              <Text key={`${slide.id || index}-${bulletIndex}`} style={[styles.sheetBody, { color: theme.colors.textSecondary }]}>• {bullet}</Text>
+              <Text key={`${slide.id || index}-${bulletIndex}`} style={[styles.sheetBody, { color: theme.colors.textSecondary }]}>- {bullet}</Text>
             ))}
           </View>
         ))}
@@ -627,39 +791,6 @@ const AILearningScreen = () => {
         <Icon name="download-outline" size={18} color={theme.colors.textPrimary} />
         <Text style={[styles.footerButtonText, { color: theme.colors.textPrimary }]}>Export flashcards</Text>
       </TouchableOpacity>
-    </View>
-  );
-
-  const renderToolsPanel = () => (
-    <View style={styles.drawerShell}>
-      {renderDrawerHeader('Essentials', 'Lecture tools')}
-      <ScrollView style={styles.drawerScroll} showsVerticalScrollIndicator={false}>
-        <View style={[styles.sheetBlock, { borderColor: theme.colors.border, backgroundColor: isDark ? '#101827' : '#f8fafc' }]}>
-          <Text style={[styles.sheetBlockTitle, { color: theme.colors.textPrimary }]}>Lecture state</Text>
-          <Text style={[styles.sheetBody, { color: theme.colors.textSecondary }]}>Progress: {progress}%</Text>
-          <Text style={[styles.sheetBody, { color: theme.colors.textSecondary }]}>Scene: {sceneLabel}</Text>
-        </View>
-        {(supportPanel || checkpointText || reinforcementPoints.length || confusionPoints.length) ? (
-          <View style={[styles.sheetBlock, { borderColor: theme.colors.border, backgroundColor: isDark ? '#101827' : '#f8fafc' }]}>
-            <Text style={[styles.sheetBlockTitle, { color: theme.colors.textPrimary }]}>Teaching guidance</Text>
-            {supportPanel?.title ? <Text style={[styles.sheetBodyStrong, { color: theme.colors.textPrimary }]}>{supportPanel.title}</Text> : null}
-            {supportPanel?.text ? <Text style={[styles.sheetBody, { color: theme.colors.textSecondary }]}>{supportPanel.text}</Text> : null}
-            {checkpointText ? <Text style={[styles.sheetCallout, { color: theme.colors.textPrimary, borderColor: theme.colors.border }]}>Checkpoint: {checkpointText}</Text> : null}
-            {reinforcementPoints.slice(0, 3).map((point, index) => <Text key={`${point}-${index}`} style={[styles.sheetBody, { color: theme.colors.textSecondary }]}>• {point}</Text>)}
-            {confusionPoints.slice(0, 3).map((point, index) => <Text key={`${point}-${index}`} style={[styles.sheetNote, { color: theme.colors.textTertiary }]}>Watch: {point}</Text>)}
-          </View>
-        ) : null}
-      </ScrollView>
-      <View style={styles.footerRow}>
-        <TouchableOpacity style={[styles.footerButton, styles.footerHalf, { borderColor: theme.colors.border, backgroundColor: isDark ? '#101827' : '#ffffff' }]} onPress={restartLecture}>
-          <Icon name="refresh" size={18} color={theme.colors.textPrimary} />
-          <Text style={[styles.footerButtonText, { color: theme.colors.textPrimary }]}>Restart</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.footerButton, styles.footerHalf, { borderColor: theme.colors.border, backgroundColor: isDark ? '#101827' : '#ffffff' }]} onPress={exportFlashcards}>
-          <Icon name="download-outline" size={18} color={theme.colors.textPrimary} />
-          <Text style={[styles.footerButtonText, { color: theme.colors.textPrimary }]}>Export</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 
@@ -696,7 +827,6 @@ const AILearningScreen = () => {
       case PANEL_KEYS.CHAT: return renderChatPanel();
       case PANEL_KEYS.NOTES: return renderNotesPanel();
       case PANEL_KEYS.FLASHCARDS: return renderFlashcardsPanel();
-      case PANEL_KEYS.TOOLS: return renderToolsPanel();
       case PANEL_KEYS.TOPICS: return renderTopicsPanel();
       default: return null;
     }
@@ -720,13 +850,12 @@ const AILearningScreen = () => {
 
   const controls = [
     { key: 'pause', icon: isPlaying ? 'pause' : 'play', label: isPlaying ? 'Pause' : 'Resume', onPress: togglePause, active: false, disabled: false },
-    { key: 'raise', icon: 'hand-right-outline', label: 'Raise Hand', onPress: openChatPanel, active: runtimeState === RUNTIME_STATES.STUDENT_INTERRUPT, disabled: false, tone: 'attention' },
+    { key: 'raise', icon: runtimeState === RUNTIME_STATES.STUDENT_INTERRUPT ? 'hand-left-outline' : 'hand-right-outline', label: runtimeState === RUNTIME_STATES.STUDENT_INTERRUPT ? 'Lower Hand' : 'Raise Hand', onPress: handleRaiseHandToggle, active: runtimeState === RUNTIME_STATES.STUDENT_INTERRUPT, disabled: false, tone: 'attention' },
     { key: 'mic', icon: isRecording ? 'stop' : 'mic-outline', label: isRecording ? 'Stop Mic' : 'Mic', onPress: startVoiceInput, active: isRecording, disabled: false },
     { key: 'chat', icon: 'chatbubble-ellipses-outline', label: 'AI Chat', onPress: openChatPanel, active: activePanel === PANEL_KEYS.CHAT, disabled: false },
     { key: 'notes', icon: 'document-text-outline', label: 'Notes', onPress: () => setActivePanel(PANEL_KEYS.NOTES), active: activePanel === PANEL_KEYS.NOTES, disabled: false },
     { key: 'cards', icon: 'cards-outline', label: 'Flashcards', onPress: () => setActivePanel(PANEL_KEYS.FLASHCARDS), active: activePanel === PANEL_KEYS.FLASHCARDS, disabled: !(lecture.flashcards || []).length, iconSet: 'material' },
     { key: 'quiz', icon: 'help-circle-outline', label: 'Quiz', onPress: openQuiz, active: false, disabled: false, iconSet: 'material' },
-    { key: 'tools', icon: 'grid-outline', label: 'Essentials', onPress: () => setActivePanel(PANEL_KEYS.TOOLS), active: activePanel === PANEL_KEYS.TOOLS, disabled: false },
     { key: 'topics', icon: 'library-outline', label: 'Topics', onPress: () => setActivePanel(PANEL_KEYS.TOPICS), active: activePanel === PANEL_KEYS.TOPICS, disabled: false },
     { key: 'next', icon: 'play-skip-forward', label: 'Next', onPress: goToNextChunk, active: false, disabled: lectureCompleted },
   ];
@@ -785,7 +914,6 @@ const AILearningScreen = () => {
 
           <View style={styles.subtitleStrip}>
             <View style={[styles.subtitleDot, { backgroundColor: tutorStatus.tone }]} />
-            <Text style={styles.subtitleScene} numberOfLines={1}>{runtimeState === RUNTIME_STATES.STUDENT_INTERRUPT ? 'Help mode' : sceneLabel}</Text>
             <Text style={styles.subtitleText} numberOfLines={isMobile ? 2 : 1}>{displaySubtitleText || 'The lecture narration will appear here as the tutor teaches.'}</Text>
           </View>
         </View>
@@ -838,7 +966,6 @@ const styles = StyleSheet.create({
   stageFrame: { flex: 1, borderRadius: 28, borderWidth: 1, borderColor: 'rgba(148,163,184,0.16)', backgroundColor: '#08111d', overflow: 'hidden', shadowColor: '#020617', shadowOpacity: 0.26, shadowRadius: 18, shadowOffset: { width: 0, height: 14 }, elevation: 10 },
   subtitleStrip: { minHeight: 48, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(148,163,184,0.16)', backgroundColor: 'rgba(7,12,22,0.84)', paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 0 },
   subtitleDot: { width: 8, height: 8, borderRadius: 999, flexShrink: 0 },
-  subtitleScene: { color: '#7dd3fc', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.7, maxWidth: 180 },
   subtitleText: { flex: 1, color: '#e2e8f0', fontSize: 13, lineHeight: 18, fontWeight: '500' },
   overlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(2,6,23,0.58)' },
   drawer: { position: 'absolute', borderWidth: 1, borderColor: 'rgba(148,163,184,0.16)', borderRadius: 24, backgroundColor: 'rgba(6,10,18,0.98)', overflow: 'hidden', maxHeight: '100%' },
@@ -862,6 +989,7 @@ const styles = StyleSheet.create({
   composerIcon: { width: 40, height: 40, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   drawerInput: { flex: 1, minHeight: 44, maxHeight: 120, borderRadius: 16, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 10 },
   notesLead: { fontSize: 14, lineHeight: 22, marginBottom: 14 },
+  notesInput: { minHeight: 220, borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, lineHeight: 22 },
   sheetBlock: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 },
   sheetBlockTitle: { fontSize: 15, fontWeight: '800', marginBottom: 8 },
   sheetBody: { fontSize: 13, lineHeight: 21, marginBottom: 4 },
