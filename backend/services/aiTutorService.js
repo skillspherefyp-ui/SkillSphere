@@ -1601,12 +1601,28 @@ async function getCourseGenerationStatus(courseId) {
     ? await AILecture.findAll({ where: { topicId: topicIds } })
     : [];
   const lectureByTopicId = new Map(lectures.map((lecture) => [lecture.topicId, lecture]));
+  const job = generationJobs.get(String(courseId));
+  const startedAtMs = job?.startedAt ? new Date(job.startedAt).getTime() : 0;
+
+  const completedTopicDurationsMs = topics
+    .map((topic) => {
+      const outline = outlineByTopicId.get(topic.id);
+      const lecture = lectureByTopicId.get(topic.id);
+      const finishedAtMs = lecture?.updatedAt ? new Date(lecture.updatedAt).getTime() : outline?.updatedAt ? new Date(outline.updatedAt).getTime() : 0;
+      const status = lecture?.status || outline?.status || 'pending';
+      if (!startedAtMs || !finishedAtMs || !['ready', 'failed'].includes(status)) {
+        return null;
+      }
+      return Math.max(45000, finishedAtMs - startedAtMs);
+    })
+    .filter(Boolean);
+  const averageTopicDurationMs = completedTopicDurationsMs.length
+    ? Math.max(45000, Math.round(completedTopicDurationsMs.reduce((sum, value) => sum + value, 0) / completedTopicDurationsMs.length))
+    : 120000;
 
   const topicStatuses = topics.map((topic) => {
     const outline = outlineByTopicId.get(topic.id);
     const lecture = lectureByTopicId.get(topic.id);
-    const job = generationJobs.get(String(courseId));
-    const startedAtMs = job?.startedAt ? new Date(job.startedAt).getTime() : 0;
     const outlineUpdatedAtMs = outline?.updatedAt ? new Date(outline.updatedAt).getTime() : 0;
     const lectureUpdatedAtMs = lecture?.updatedAt ? new Date(lecture.updatedAt).getTime() : 0;
     const lectureStatus = lecture?.status || null;
@@ -1625,11 +1641,49 @@ async function getCourseGenerationStatus(courseId) {
       status,
       generationModel: lecture?.generationModel || null,
       errorMessage: lecture?.errorMessage || outline?.errorMessage || null,
-      updatedAt: lecture?.updatedAt || outline?.updatedAt || null
+      updatedAt: lecture?.updatedAt || outline?.updatedAt || null,
+      outlineUpdatedAtMs,
     };
   });
 
-  const summary = topicStatuses.reduce((acc, item) => {
+  const processingIndex = topicStatuses.findIndex((item) => item.status === 'processing');
+  const now = Date.now();
+  const topicsWithTiming = topicStatuses.map((item, index) => {
+    const queueOffset = processingIndex >= 0
+      ? index - processingIndex
+      : index - topicStatuses.findIndex((topic) => topic.status === 'pending');
+    const processingElapsedMs = item.status === 'processing'
+      ? Math.max(0, now - (item.outlineUpdatedAtMs || startedAtMs || now))
+      : 0;
+    const expectedWaitMs = item.status === 'ready' || item.status === 'failed'
+      ? 0
+      : item.status === 'processing'
+        ? Math.max(15000, averageTopicDurationMs - processingElapsedMs)
+        : processingIndex >= 0
+          ? Math.max(15000, (Math.max(queueOffset, 1) * averageTopicDurationMs) - processingElapsedMs)
+          : Math.max(15000, (index + 1) * averageTopicDurationMs);
+    const expectedReadyAt = item.status === 'ready' || item.status === 'failed'
+      ? item.updatedAt || null
+      : new Date(now + expectedWaitMs).toISOString();
+
+    return {
+      topicId: item.topicId,
+      topicTitle: item.topicTitle,
+      status: item.status,
+      generationModel: item.generationModel,
+      errorMessage: item.errorMessage,
+      updatedAt: item.updatedAt,
+      expectedWaitMs,
+      expectedReadyAt,
+      queuePosition: item.status === 'pending'
+        ? processingIndex >= 0
+          ? Math.max(1, queueOffset)
+          : index + 1
+        : 0,
+    };
+  });
+
+  const summary = topicsWithTiming.reduce((acc, item) => {
     if (item.status === 'ready') acc.ready += 1;
     else if (item.status === 'failed') acc.failed += 1;
     else if (item.status === 'processing') acc.processing += 1;
@@ -1637,9 +1691,10 @@ async function getCourseGenerationStatus(courseId) {
     return acc;
   }, { total: topicStatuses.length, ready: 0, failed: 0, processing: 0, pending: 0 });
 
-  const job = generationJobs.get(String(courseId));
   const isRunning = job?.status === 'running' || summary.processing > 0;
   const isCompleted = !isRunning && summary.total > 0 && summary.ready + summary.failed === summary.total;
+  const remainingTopic = topicsWithTiming.find((item) => item.status === 'processing') || topicsWithTiming.find((item) => item.status === 'pending');
+  const estimatedCompletionAt = remainingTopic?.expectedReadyAt || null;
 
   return {
     success: true,
@@ -1648,8 +1703,10 @@ async function getCourseGenerationStatus(courseId) {
     isCompleted,
     lastStartedAt: job?.startedAt || null,
     lastFinishedAt: job?.finishedAt || null,
+    averageTopicDurationMs,
+    estimatedCompletionAt,
     summary,
-    topics: topicStatuses
+    topics: topicsWithTiming
   };
 }
 
