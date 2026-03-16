@@ -29,10 +29,19 @@ const slugify = (value, fallback) => {
 };
 
 const cloneLayer = (items = []) => items.map((item) => ({ ...item }));
+const MAX_WINDOW_UNITS = 10.5;
+const MAX_LIST_ITEMS_PER_BLOCK = 3;
+const MAX_FLOW_STEPS_PER_BLOCK = 3;
+const MAX_COMPARE_ROWS_PER_BLOCK = 2;
+const MAX_NODE_ITEMS_PER_BLOCK = 4;
 
 export const createEmptyBoardState = () => ({
   mode: WHITEBOARD_MODES.CONCEPT,
   focusRegion: null,
+  layout: {
+    windows: [{ id: 'window-1', rows: [] }],
+    totalWindows: 1,
+  },
   layers: {
     background: { tone: 'clean', accent: '#dbeafe' },
     static: [],
@@ -96,6 +105,222 @@ const normalizeScene = (scene, index, recommendedDurationMs) => {
     diagramInstructions: scene?.diagram_instructions || scene?.diagramInstructions || scene?.diagram_instruction || null,
     exampleInstructions: scene?.example_instructions || scene?.exampleInstructions || scene?.example || null,
     boardActions: ensureArray(scene?.board_actions || scene?.boardActions).map(normalizeAction).filter(Boolean),
+  };
+};
+
+const chunkItems = (items, size) => {
+  const safeItems = ensureArray(items);
+  if (!safeItems.length || size <= 0) return [];
+  const chunks = [];
+  for (let index = 0; index < safeItems.length; index += size) {
+    chunks.push(safeItems.slice(index, index + size));
+  }
+  return chunks;
+};
+
+const estimateTextUnits = (text = '', base = 1.35) => {
+  const normalized = `${text || ''}`.trim();
+  if (!normalized) return base;
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  return Math.min(3.2, base + wordCount * 0.045);
+};
+
+const estimateBlockUnits = (block) => {
+  switch (block.type) {
+    case 'title':
+      return 1.1;
+    case 'paragraph':
+      return estimateTextUnits(block.text, block.title ? 1.65 : 1.5);
+    case 'bullet_list':
+      return Math.min(3, 1.2 + (block.items?.length || 0) * 0.55 + (block.title ? 0.2 : 0));
+    case 'equation':
+      return 1.8;
+    case 'example':
+      return estimateTextUnits(block.content, 1.8) + (block.note ? 0.35 : 0);
+    case 'flowchart':
+      return Math.min(3.1, 1.5 + (block.steps?.length || 0) * 0.6);
+    case 'comparison':
+      return Math.min(2.8, 1.5 + (block.rows?.length || 0) * 0.55);
+    case 'diagram_nodes':
+      return Math.min(2.8, 1.4 + (block.nodes?.length || 0) * 0.35 + (block.caption ? 0.25 : 0));
+    default:
+      return 1.6;
+  }
+};
+
+const toDisplayBlocks = (boardState) => {
+  const blocks = [];
+
+  ensureArray(boardState?.layers?.static).forEach((item, index) => {
+    blocks.push({
+      id: item.id || `static-${index}`,
+      type: 'title',
+      priority: 100,
+      compact: false,
+      persistent: true,
+      text: item.text,
+    });
+  });
+
+  ensureArray(boardState?.layers?.dynamic).forEach((item, index) => {
+    if (item.kind === 'bullet_list') {
+      chunkItems(item.items, MAX_LIST_ITEMS_PER_BLOCK).forEach((group, groupIndex) => {
+        blocks.push({
+          id: `${item.id || `bullet-${index}`}-group-${groupIndex + 1}`,
+          type: 'bullet_list',
+          priority: 70,
+          compact: false,
+          title: groupIndex === 0 ? item.title : null,
+          items: group,
+        });
+      });
+      return;
+    }
+
+    if (item.kind === 'paragraph') {
+      blocks.push({
+        id: item.id || `paragraph-${index}`,
+        type: 'paragraph',
+        priority: item.role === 'checkpoint' ? 92 : item.tone === 'focus' ? 88 : 68,
+        compact: false,
+        title: item.title || null,
+        text: item.text || '',
+        tone: item.tone || 'neutral',
+      });
+      return;
+    }
+
+    if (item.kind === 'example') {
+      blocks.push({
+        id: item.id || `example-${index}`,
+        type: 'example',
+        priority: 82,
+        compact: false,
+        title: item.title || 'Example',
+        content: item.content || '',
+        note: item.note || '',
+        format: item.format || 'text',
+      });
+      return;
+    }
+
+    if (item.kind === 'equation') {
+      blocks.push({
+        id: item.id || `equation-${index}`,
+        type: 'equation',
+        priority: 86,
+        compact: false,
+        expression: item.expression || '',
+        note: item.note || '',
+      });
+    }
+  });
+
+  ensureArray(boardState?.layers?.diagram).forEach((item, index) => {
+    if (item.diagramType === 'flowchart') {
+      chunkItems(item.steps, MAX_FLOW_STEPS_PER_BLOCK).forEach((group, groupIndex) => {
+        blocks.push({
+          id: `${item.id || `flow-${index}`}-group-${groupIndex + 1}`,
+          type: 'flowchart',
+          priority: 84,
+          compact: false,
+          title: groupIndex === 0 ? item.title : null,
+          steps: group,
+        });
+      });
+      return;
+    }
+
+    if (item.diagramType === 'comparison_table') {
+      chunkItems(item.rows, MAX_COMPARE_ROWS_PER_BLOCK).forEach((group, groupIndex) => {
+        blocks.push({
+          id: `${item.id || `compare-${index}`}-group-${groupIndex + 1}`,
+          type: 'comparison',
+          priority: 78,
+          compact: true,
+          title: groupIndex === 0 ? item.title : null,
+          rows: group,
+        });
+      });
+      return;
+    }
+
+    chunkItems(item.nodes, MAX_NODE_ITEMS_PER_BLOCK).forEach((group, groupIndex) => {
+      blocks.push({
+        id: `${item.id || `diagram-${index}`}-group-${groupIndex + 1}`,
+        type: 'diagram_nodes',
+        priority: 76,
+        compact: true,
+        title: groupIndex === 0 ? item.title : null,
+        nodes: group,
+        caption: groupIndex === 0 ? item.caption : '',
+      });
+    });
+  });
+
+  return blocks.map((block) => ({
+    ...block,
+    estimatedUnits: estimateBlockUnits(block),
+  }));
+};
+
+export const composeBoardLayout = (boardState) => {
+  const contentBlocks = toDisplayBlocks(boardState);
+  const anchoredBlocks = contentBlocks.filter((block) => block.persistent);
+  const flowBlocks = contentBlocks.filter((block) => !block.persistent);
+  const windows = [];
+
+  if (!flowBlocks.length) {
+    return {
+      windows: [{ id: 'window-1', rows: anchoredBlocks.length ? anchoredBlocks.map((block) => ({ id: `row-${block.id}`, blocks: [block] })) : [] }],
+      totalWindows: 1,
+      anchoredBlocks,
+      flowBlocks,
+    };
+  }
+
+  let queue = [...flowBlocks];
+  while (queue.length) {
+    let usedUnits = anchoredBlocks.reduce((sum, block) => sum + Math.min(1.2, block.estimatedUnits), 0);
+    const rows = anchoredBlocks.map((block) => ({ id: `row-${block.id}`, blocks: [block] }));
+
+    while (queue.length) {
+      const first = queue[0];
+      const second = queue[1];
+      const canPair = Boolean(first?.compact && second?.compact);
+      const pairedUnits = canPair ? Math.max(first.estimatedUnits, second.estimatedUnits) : 0;
+      const nextUnits = canPair ? pairedUnits : first.estimatedUnits;
+
+      if (rows.length && usedUnits + nextUnits > MAX_WINDOW_UNITS) {
+        break;
+      }
+
+      if (canPair) {
+        rows.push({
+          id: `row-${first.id}-${second.id}`,
+          blocks: [queue.shift(), queue.shift()],
+        });
+        usedUnits += pairedUnits;
+      } else {
+        rows.push({
+          id: `row-${first.id}`,
+          blocks: [queue.shift()],
+        });
+        usedUnits += nextUnits;
+      }
+    }
+
+    windows.push({
+      id: `window-${windows.length + 1}`,
+      rows,
+    });
+  }
+
+  return {
+    windows: windows.length ? windows : [{ id: 'window-1', rows: [] }],
+    totalWindows: Math.max(1, windows.length),
+    anchoredBlocks,
+    flowBlocks,
   };
 };
 
@@ -493,9 +718,11 @@ const applyBoardAction = (state, action) => {
 
 export const reduceBoardState = (scenes, sceneIndex) => {
   const safeScenes = ensureArray(scenes);
-  return safeScenes.slice(0, sceneIndex + 1).reduce((boardState, scene) => {
+  const reduced = safeScenes.slice(0, sceneIndex + 1).reduce((boardState, scene) => {
     const nextState = scene.boardActions.reduce(applyBoardAction, boardState);
     nextState.mode = scene.mode || nextState.mode;
     return nextState;
   }, createEmptyBoardState());
+  reduced.layout = composeBoardLayout(reduced);
+  return reduced;
 };

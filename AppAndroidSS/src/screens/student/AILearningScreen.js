@@ -122,6 +122,8 @@ const AILearningScreen = () => {
     narrationText: orchestratedNarration,
     whiteboardMode,
     boardState,
+    boardWindowIndex,
+    boardWindowCount,
   } = useLectureOrchestrator({ lecture, chunk: currentChunk, runtimeState, lectureCompleted });
 
   const currentNarration = lecturePlan.narrationText || orchestratedNarration;
@@ -1112,7 +1114,7 @@ const AILearningScreen = () => {
 
           <View style={styles.stageWrap}>
             <View style={styles.stageFrame}>
-              <WhiteboardStage boardState={boardState} currentScene={currentScene} objectiveText={lecturePlan.objectiveText} status={tutorStatus} modeLabel={whiteboardModeLabel} />
+              <WhiteboardStage boardState={boardState} currentScene={currentScene} objectiveText={lecturePlan.objectiveText} status={tutorStatus} modeLabel={whiteboardModeLabel} boardWindowIndex={boardWindowIndex} boardWindowCount={boardWindowCount} />
             </View>
           </View>
 
