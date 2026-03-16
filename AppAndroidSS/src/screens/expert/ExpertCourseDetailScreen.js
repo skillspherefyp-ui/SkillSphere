@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { resolveFileUrl } from '../../utils/urlHelpers';
+import { aiTutorAPI } from '../../services/apiClient';
 
 const ORANGE = '#FF8C42';
 
@@ -44,6 +45,7 @@ const ExpertCourseDetailScreen = () => {
   const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const course = courses.find(c => c.id === courseId);
+  const [lectureMetaByTopic, setLectureMetaByTopic] = useState({});
 
   const isWeb = Platform.OS === 'web';
   const isLargeScreen = width > 1024;
@@ -58,6 +60,26 @@ const ExpertCourseDetailScreen = () => {
   const handleNavigate = (routeName) => {
     navigation.navigate(routeName);
   };
+
+  useEffect(() => {
+    let active = true;
+    const loadLectureMeta = async () => {
+      try {
+        const response = await aiTutorAPI.listLectures(courseId);
+        if (!active || !response?.success) return;
+        setLectureMetaByTopic(
+          (response.lectures || []).reduce((acc, lecture) => {
+            acc[lecture.topicId] = lecture;
+            return acc;
+          }, {})
+        );
+      } catch (_) {}
+    };
+    loadLectureMeta();
+    return () => {
+      active = false;
+    };
+  }, [courseId]);
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
@@ -370,6 +392,7 @@ const ExpertCourseDetailScreen = () => {
                 <View style={styles.topicsList}>
                   {course.topics.map((topic, index) => {
                     const topicColor = TOPIC_COLORS[index % TOPIC_COLORS.length];
+                    const lectureMeta = lectureMetaByTopic[topic.id];
                     return (
                       <View
                         key={topic.id}
@@ -393,6 +416,18 @@ const ExpertCourseDetailScreen = () => {
                         >
                           {topic.title}
                         </Text>
+                        {lectureMeta?.status === 'ready' ? (
+                          <TouchableOpacity
+                            style={[
+                              styles.topicReviewButton,
+                              { backgroundColor: ORANGE + '18', borderColor: ORANGE + '30' },
+                            ]}
+                            onPress={() => navigation.navigate('AILectureReview', { courseId, topicId: topic.id })}
+                          >
+                            <Icon name="eye-outline" size={12} color={ORANGE} />
+                            <Text style={[styles.topicReviewButtonText, { color: ORANGE }]}>View AI Lecture</Text>
+                          </TouchableOpacity>
+                        ) : null}
 
                         {/* Materials shown as chips */}
                         {topic.materials?.length > 0 && (
@@ -860,6 +895,19 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       fontSize: 14,
       fontWeight: '500',
       fontFamily: theme.typography.fontFamily.regular,
+    },
+    topicReviewButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    topicReviewButtonText: {
+      fontSize: 11,
+      fontWeight: '700',
     },
     topicChipsRow: {
       flexDirection: 'row',

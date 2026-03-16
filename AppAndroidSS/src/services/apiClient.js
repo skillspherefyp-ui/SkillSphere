@@ -363,7 +363,7 @@ export const streakAPI = {
 };
 
 export const feedbackAPI = {
-  getAll: () => get('/feedback'),
+  getAll: (params) => get(`/feedback${params ? `?${new URLSearchParams(params)}` : ''}`),
   getById: (id) => get(`/feedback/${id}`),
   create: (data) => post('/feedback', data),
   update: (id, data) => put(`/feedback/${id}`, data),
@@ -392,6 +392,7 @@ export const aiChatAPI = {
 export const aiTutorAPI = {
   updateOutline: (topicId, outlineText) => put(`/ai-tutor/topics/${topicId}/outline`, { outlineText }),
   generateCoursePackage: (courseId, data) => post(`/ai-tutor/courses/${courseId}/generate`, data || {}),
+  regenerateTopicPackage: (topicId, data) => post(`/ai-tutor/topics/${topicId}/regenerate`, data || {}),
   getGenerationStatus: (courseId) => get(`/ai-tutor/courses/${courseId}/generate-status`),
   listLectures: (courseId, params) => get(`/ai-tutor/courses/${courseId}/lectures${params ? `?${new URLSearchParams(params)}` : ''}`),
   getLecturePackage: (topicId) => get(`/ai-tutor/topics/${topicId}/package`),

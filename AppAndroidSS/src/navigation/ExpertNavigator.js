@@ -6,6 +6,7 @@ import ExpertCourseDetailScreen from '../screens/expert/ExpertCourseDetailScreen
 import FeedbackFormScreen from '../screens/expert/FeedbackFormScreen';
 import ExpertSettingsScreen from '../screens/expert/ExpertSettingsScreen';
 import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
+import AILectureReviewScreen from '../screens/shared/AILectureReviewScreen';
 
 const Stack = createStackNavigator();
 
@@ -21,6 +22,7 @@ const ExpertNavigator = () => {
       <Stack.Screen name="Courses" component={ExpertCourseListScreen} />
       <Stack.Screen name="CourseDetail" component={ExpertCourseDetailScreen} />
       <Stack.Screen name="FeedbackForm" component={FeedbackFormScreen} />
+      <Stack.Screen name="AILectureReview" component={AILectureReviewScreen} />
       <Stack.Screen name="Settings" component={ExpertSettingsScreen} />
       <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
     </Stack.Navigator>

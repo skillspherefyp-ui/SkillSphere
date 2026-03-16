@@ -600,12 +600,23 @@ const AddTopicsScreen = () => {
           </Text>
 
           {!isManualMode && lectureMeta?.status === 'ready' && (
-            <View style={[styles.viewMaterialsBtn, { backgroundColor: color + '10', borderColor: color + '30', marginBottom: 10 }]}>
-              <Icon name="sparkles-outline" size={16} color={color} />
-              <Text style={[styles.viewMaterialsText, { color }]}>
-                {`${lectureMeta.estimatedDurationMinutes || 0} min AI lecture`}
-              </Text>
-            </View>
+            <>
+              <View style={[styles.viewMaterialsBtn, { backgroundColor: color + '10', borderColor: color + '30', marginBottom: 10 }]}>
+                <Icon name="sparkles-outline" size={16} color={color} />
+                <Text style={[styles.viewMaterialsText, { color }]}>
+                  {`${lectureMeta.estimatedDurationMinutes || 0} min AI lecture`}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.viewMaterialsBtn, { backgroundColor: theme.colors.primary + '10', borderColor: theme.colors.primary + '30', marginTop: 0 }]}
+                onPress={() => navigation.navigate('AILectureReview', { courseId, topicId: topic.id })}
+              >
+                <Icon name="eye-outline" size={16} color={theme.colors.primary} />
+                <Text style={[styles.viewMaterialsText, { color: theme.colors.primary }]}>
+                  View AI Lecture
+                </Text>
+              </TouchableOpacity>
+            </>
           )}
 
           {!isManualMode && lectureMeta?.status && (

@@ -35,6 +35,43 @@ const Feedback = sequelize.define('Feedback', {
       key: 'id'
     }
   },
+  topicId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'topics',
+      key: 'id'
+    }
+  },
+  topicTitle: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  lectureId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'ai_lectures',
+      key: 'id'
+    }
+  },
+  expertId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
+  feedbackType: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'general_course_feedback'
+  },
+  regenerateCommand: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
   createdAt: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW

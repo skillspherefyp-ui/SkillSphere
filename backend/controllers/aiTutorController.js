@@ -100,6 +100,35 @@ exports.generateCoursePackage = async (req, res) => {
   }
 };
 
+exports.regenerateTopicPackage = async (req, res) => {
+  try {
+    const generation = await aiTutorService.regenerateTopicLecture(
+      req.params.topicId,
+      req.user,
+      req.body?.regenerateCommand || ''
+    );
+
+    res.status(202).json({
+      success: true,
+      accepted: true,
+      alreadyRunning: generation.alreadyRunning,
+      courseId: generation.courseId,
+      startedAt: generation.startedAt,
+      replaceExisting: true,
+      onlyTopicId: Number(req.params.topicId),
+      message: generation.alreadyRunning
+        ? 'AI lecture regeneration is already running for this course.'
+        : 'The previous AI lecture for this topic was cleared. Fresh regeneration has started.',
+    });
+  } catch (error) {
+    logBadRequest('regenerateTopicPackage', req, error, {
+      topicId: req.params.topicId,
+      regenerateCommandLength: `${req.body?.regenerateCommand || ''}`.trim().length,
+    });
+    res.status(error.message.includes('permission') ? 403 : 400).json({ error: error.message || 'Internal server error' });
+  }
+};
+
 exports.getGenerationStatus = async (req, res) => {
   try {
     await aiTutorService.canManageCourse(req.user, req.params.courseId);

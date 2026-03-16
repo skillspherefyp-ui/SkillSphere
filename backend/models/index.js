@@ -56,6 +56,12 @@ Topic.hasMany(Material, { foreignKey: 'topicId', as: 'materials', onDelete: 'CAS
 // Course - Feedback
 Feedback.belongsTo(Course, { foreignKey: 'courseId', as: 'course', onDelete: 'CASCADE' });
 Course.hasMany(Feedback, { foreignKey: 'courseId', as: 'feedbacks', onDelete: 'CASCADE' });
+Feedback.belongsTo(Topic, { foreignKey: 'topicId', as: 'topic', onDelete: 'CASCADE' });
+Topic.hasMany(Feedback, { foreignKey: 'topicId', as: 'feedbacks', onDelete: 'CASCADE' });
+Feedback.belongsTo(User, { foreignKey: 'expertId', as: 'expert', onDelete: 'SET NULL' });
+User.hasMany(Feedback, { foreignKey: 'expertId', as: 'submittedFeedbacks', onDelete: 'SET NULL' });
+Feedback.belongsTo(AILecture, { foreignKey: 'lectureId', as: 'lecture', onDelete: 'SET NULL' });
+AILecture.hasMany(Feedback, { foreignKey: 'lectureId', as: 'feedbackEntries', onDelete: 'SET NULL' });
 
 // User - Enrollment
 User.hasMany(Enrollment, { foreignKey: 'userId', as: 'enrollments', onDelete: 'CASCADE' });

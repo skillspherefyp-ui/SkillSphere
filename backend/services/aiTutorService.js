@@ -48,6 +48,21 @@ function removeAudioFile(storagePath) {
   } catch (_) {}
 }
 
+function mergeOutlineWithRegenerateCommand(baseOutlineText, regenerateCommand) {
+  const base = `${baseOutlineText || ''}`
+    .replace(/\n\nRegeneration instructions:\n\n[\s\S]*$/i, '')
+    .trim();
+  const command = `${regenerateCommand || ''}`.trim();
+  if (!command) {
+    return base;
+  }
+  return [
+    base,
+    'Regeneration instructions:',
+    command,
+  ].filter(Boolean).join('\n\n');
+}
+
 function dedupeStrings(values) {
   return Array.from(
     new Set(
@@ -1350,27 +1365,138 @@ async function purgeCourseGeneratedLectures(courseId, adminUser, options = {}) {
   };
 }
 
+async function purgeTopicGeneratedLecture(topicId, adminUser, options = {}) {
+  const topic = await Topic.findByPk(topicId);
+  if (!topic) {
+    throw new Error('Topic not found');
+  }
+
+  if (!options.skipPermissionCheck) {
+    await canManageCourse(adminUser, topic.courseId);
+  }
+
+  const lecture = await AILecture.findOne({
+    where: { topicId },
+    attributes: ['id'],
+  });
+  const lectureId = lecture?.id || null;
+
+  const sessions = lectureId
+    ? await AITutorSession.findAll({
+        where: { lectureId },
+        attributes: ['id'],
+      })
+    : [];
+  const sessionIds = sessions.map((session) => session.id);
+
+  const audioWhere = [
+    lectureId ? { lectureId } : null,
+    sessionIds.length ? { sessionId: sessionIds } : null,
+  ].filter(Boolean);
+  const audioAssets = audioWhere.length
+    ? await AIAudioAsset.findAll({
+        where: { [Op.or]: audioWhere },
+        attributes: ['id', 'storagePath'],
+      })
+    : [];
+
+  const quiz = lectureId
+    ? await AIQuiz.findOne({
+        where: { lectureId },
+        attributes: ['id'],
+      })
+    : null;
+
+  const audioPaths = audioAssets.map((asset) => asset.storagePath).filter(Boolean);
+
+  await sequelize.transaction(async (transaction) => {
+    if (sessionIds.length) {
+      await AITutorMessage.destroy({ where: { sessionId: sessionIds }, transaction });
+      await AIStudentProgress.destroy({
+        where: {
+          [Op.or]: [
+            { lastSessionId: sessionIds },
+            lectureId ? { lectureId } : null,
+          ].filter(Boolean),
+        },
+        transaction,
+      });
+    } else if (lectureId) {
+      await AIStudentProgress.destroy({ where: { lectureId }, transaction });
+    }
+
+    if (audioAssets.length) {
+      await AIAudioAsset.destroy({ where: { id: audioAssets.map((asset) => asset.id) }, transaction });
+    }
+    if (sessionIds.length) {
+      await AITutorSession.destroy({ where: { id: sessionIds }, transaction });
+    }
+    if (quiz?.id) {
+      await AIQuizQuestion.destroy({ where: { quizId: quiz.id }, transaction });
+      await AIQuiz.destroy({ where: { id: quiz.id }, transaction });
+    }
+    if (lectureId) {
+      await Promise.all([
+        AILectureSection.destroy({ where: { lectureId }, transaction }),
+        AISlideOutline.destroy({ where: { lectureId }, transaction }),
+        AIVisualSuggestion.destroy({ where: { lectureId }, transaction }),
+        AIFlashcard.destroy({ where: { lectureId }, transaction }),
+      ]);
+      await AILecture.destroy({ where: { id: lectureId }, transaction });
+    }
+    if (!options.keepOutline) {
+      await AIOutline.destroy({ where: { topicId }, transaction });
+    }
+  });
+
+  audioPaths.forEach(removeAudioFile);
+
+  return {
+    success: true,
+    topicId: Number(topicId),
+    courseId: topic.courseId,
+    removedLecture: Boolean(lectureId),
+    removedSessions: sessionIds.length,
+    removedAudioAssets: audioAssets.length,
+  };
+}
+
 async function generateCoursePackage(courseId, adminUser, options = {}) {
   const course = await canManageCourse(adminUser, courseId);
-  if (options.replaceExisting) {
+  if (options.replaceExisting && !options.onlyTopicId) {
     await purgeCourseGeneratedLectures(courseId, adminUser, { skipPermissionCheck: true });
   }
-  const topics = await Topic.findAll({
+  const allTopics = await Topic.findAll({
     where: { courseId },
     include: [{ model: Material, as: 'materials' }],
     order: [['order', 'ASC']]
   });
 
-  if (topics.length === 0) {
+  if (allTopics.length === 0) {
     throw new Error('Add at least one topic before generating AI lecture content');
+  }
+
+  let topics = allTopics;
+  if (options.onlyTopicId) {
+    topics = allTopics.filter((topic) => Number(topic.id) === Number(options.onlyTopicId));
+    if (!topics.length) {
+      throw new Error('The selected topic does not belong to this course');
+    }
+    if (options.replaceExisting) {
+      await purgeTopicGeneratedLecture(options.onlyTopicId, adminUser, {
+        skipPermissionCheck: true,
+        keepOutline: true,
+      });
+    }
   }
 
   const results = [];
 
   for (let index = 0; index < topics.length; index += 1) {
     const topic = topics[index];
-    const priorTopics = topics.slice(0, index).map((item) => item.title);
-    const nextTopicTitle = topics[index + 1]?.title || null;
+    const topicPosition = allTopics.findIndex((item) => item.id === topic.id);
+    const priorTopics = topicPosition > 0 ? allTopics.slice(0, topicPosition).map((item) => item.title) : [];
+    const nextTopicTitle = topicPosition >= 0 ? allTopics[topicPosition + 1]?.title || null : null;
     const defaultOutlineText = getOutlineText(topic, topic.materials);
 
     const [outline] = await AIOutline.findOrCreate({
@@ -1385,7 +1511,10 @@ async function generateCoursePackage(courseId, adminUser, options = {}) {
       }
     });
 
-    const outlineText = outline.outlineText || defaultOutlineText;
+    const outlineText = mergeOutlineWithRegenerateCommand(
+      outline.outlineText || defaultOutlineText,
+      Number(options.onlyTopicId) === Number(topic.id) ? options.regenerateCommand : ''
+    );
 
     await outline.update({
       courseId,
@@ -1546,7 +1675,7 @@ async function generateCoursePackage(courseId, adminUser, options = {}) {
         outline,
         normalizedPackage: normalized,
         modelName,
-        nextTopicId: topics[index + 1]?.id || null
+        nextTopicId: topicPosition >= 0 ? allTopics[topicPosition + 1]?.id || null : null
       });
 
       const usedFallback = modelName === 'fallback-template';
@@ -1761,6 +1890,18 @@ async function startCourseGeneration(courseId, adminUser, options = {}) {
     startedAt: jobState.startedAt,
     replaceExisting: Boolean(options.replaceExisting),
   };
+}
+
+async function regenerateTopicLecture(topicId, adminUser, regenerateCommand = '') {
+  const topic = await Topic.findByPk(topicId);
+  if (!topic) {
+    throw new Error('Topic not found');
+  }
+  return startCourseGeneration(topic.courseId, adminUser, {
+    replaceExisting: true,
+    onlyTopicId: topic.id,
+    regenerateCommand,
+  });
 }
 
 async function getLectureByTopicId(topicId) {
@@ -2646,6 +2787,8 @@ async function getOrCreateAudioAsset({ lectureId, sessionId, assetType, text }) 
 module.exports = {
   generateCoursePackage,
   purgeCourseGeneratedLectures,
+  purgeTopicGeneratedLecture,
+  regenerateTopicLecture,
   startCourseGeneration,
   getCourseGenerationStatus,
   getLectureByTopicId,

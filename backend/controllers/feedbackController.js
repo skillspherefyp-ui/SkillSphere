@@ -1,4 +1,4 @@
-const { Feedback, Course } = require('../models');
+const { Feedback, Course, Topic, AILecture } = require('../models');
 
 exports.createFeedback = async (req, res) => {
   try {
@@ -6,7 +6,18 @@ exports.createFeedback = async (req, res) => {
       return res.status(403).json({ error: 'Only experts can submit feedback' });
     }
 
-    const { courseName, expertName, feedback, rating, courseId } = req.body;
+    const {
+      courseName,
+      expertName,
+      feedback,
+      rating,
+      courseId,
+      topicId,
+      topicTitle,
+      lectureId,
+      feedbackType,
+      regenerateCommand,
+    } = req.body;
 
     if (!courseName || !expertName || !feedback || !rating) {
       return res.status(400).json({ error: 'All required fields must be provided' });
@@ -23,13 +34,31 @@ exports.createFeedback = async (req, res) => {
         return res.status(404).json({ error: 'Course not found' });
       }
     }
+    if (topicId) {
+      const topic = await Topic.findByPk(topicId);
+      if (!topic) {
+        return res.status(404).json({ error: 'Topic not found' });
+      }
+    }
+    if (lectureId) {
+      const lecture = await AILecture.findByPk(lectureId);
+      if (!lecture) {
+        return res.status(404).json({ error: 'Lecture not found' });
+      }
+    }
 
     const feedbackRecord = await Feedback.create({
       courseName,
       expertName,
       feedback,
       rating,
-      courseId
+      courseId,
+      topicId: topicId || null,
+      topicTitle: topicTitle || null,
+      lectureId: lectureId || null,
+      expertId: req.user.id,
+      feedbackType: feedbackType || 'general_course_feedback',
+      regenerateCommand: `${regenerateCommand || ''}`.trim() || null,
     });
 
     res.status(201).json({ success: true, feedback: feedbackRecord });
@@ -41,12 +70,26 @@ exports.createFeedback = async (req, res) => {
 
 exports.getAllFeedback = async (req, res) => {
   try {
-    if (!['admin', 'superadmin'].includes(req.user.role)) {
-      return res.status(403).json({ error: 'Only admins can view feedback' });
+    if (!['admin', 'superadmin', 'expert'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only admins, superadmins, or experts can view feedback' });
+    }
+
+    const where = {};
+    if (req.query.courseId) where.courseId = req.query.courseId;
+    if (req.query.topicId) where.topicId = req.query.topicId;
+    if (req.query.lectureId) where.lectureId = req.query.lectureId;
+    if (req.query.feedbackType) where.feedbackType = req.query.feedbackType;
+    if (req.user.role === 'expert') {
+      where.expertId = req.user.id;
     }
 
     const feedbacks = await Feedback.findAll({
-      include: [{ model: Course, as: 'course', attributes: ['id', 'name'] }],
+      where,
+      include: [
+        { model: Course, as: 'course', attributes: ['id', 'name'] },
+        { model: Topic, as: 'topic', attributes: ['id', 'title'] },
+        { model: AILecture, as: 'lecture', attributes: ['id', 'title', 'status'] },
+      ],
       order: [['createdAt', 'DESC']]
     });
 
@@ -59,18 +102,25 @@ exports.getAllFeedback = async (req, res) => {
 
 exports.getFeedbackById = async (req, res) => {
   try {
-    if (!['admin', 'superadmin'].includes(req.user.role)) {
-      return res.status(403).json({ error: 'Only admins can view feedback' });
+    if (!['admin', 'superadmin', 'expert'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only admins, superadmins, or experts can view feedback' });
     }
 
     const { id } = req.params;
 
     const feedback = await Feedback.findByPk(id, {
-      include: [{ model: Course, as: 'course' }]
+      include: [
+        { model: Course, as: 'course' },
+        { model: Topic, as: 'topic' },
+        { model: AILecture, as: 'lecture' },
+      ]
     });
 
     if (!feedback) {
       return res.status(404).json({ error: 'Feedback not found' });
+    }
+    if (req.user.role === 'expert' && feedback.expertId !== req.user.id) {
+      return res.status(403).json({ error: 'You can only view your own feedback' });
     }
 
     res.json({ success: true, feedback });
@@ -87,7 +137,7 @@ exports.updateFeedback = async (req, res) => {
     }
 
     const { id } = req.params;
-    const { courseName, expertName, feedback, rating } = req.body;
+    const { courseName, expertName, feedback, rating, regenerateCommand } = req.body;
 
     const feedbackRecord = await Feedback.findByPk(id);
 
@@ -99,6 +149,7 @@ exports.updateFeedback = async (req, res) => {
     if (expertName) feedbackRecord.expertName = expertName;
     if (feedback) feedbackRecord.feedback = feedback;
     if (rating && rating >= 1 && rating <= 5) feedbackRecord.rating = rating;
+    if (regenerateCommand !== undefined) feedbackRecord.regenerateCommand = `${regenerateCommand || ''}`.trim() || null;
 
     await feedbackRecord.save();
 
