@@ -151,6 +151,28 @@ const AddTopicsScreen = () => {
     return targetLabel ? `Expected by ${targetLabel} (~${waitMinutes} min)` : `Expected in ~${waitMinutes} min`;
   };
 
+  const buildGenerationReport = (statusResponse) => (
+    (statusResponse?.topics || []).map((item) => ({
+      ...item,
+      displayStatus: item.status === 'ready'
+        ? item.generationModel === 'fallback-template'
+          ? 'fallback used'
+          : 'ready'
+        : item.status,
+      displayMessage: item.errorMessage
+        || (item.status === 'ready'
+          ? item.generationModel === 'fallback-template'
+            ? 'Fallback lecture package stored successfully.'
+            : 'Lecture package generated successfully.'
+          : item.status === 'processing'
+            ? 'Generation is still running for this topic.'
+            : item.status === 'pending'
+              ? 'This topic has not started generation yet.'
+              : 'Generation failed for this topic.'),
+      expectedTimeLabel: formatExpectedTime(item.expectedReadyAt, item.expectedWaitMs),
+    }))
+  );
+
   const refreshLectureGenerationData = async (active = true) => {
     if (!courseId || isManualMode) return null;
     const [statusResponse, lectureResponse] = await Promise.all([
@@ -170,6 +192,7 @@ const AddTopicsScreen = () => {
     }, {});
 
     setGenerationStatus(statusResponse?.success ? statusResponse : null);
+    setGenerationReport(buildGenerationReport(statusResponse));
     setLectureMetaByTopic(
       topics.reduce((acc, topic) => {
         acc[topic.id] = {
@@ -471,26 +494,7 @@ const AddTopicsScreen = () => {
         throw new Error('AI generation started, but progress could not be checked automatically. Please refresh in a moment.');
       }
 
-      const reportItems = (statusResponse.topics || []).map((item) => ({
-        ...item,
-        displayStatus: item.status === 'ready'
-          ? item.generationModel === 'fallback-template'
-            ? 'fallback used'
-            : 'ready'
-          : item.status,
-        displayMessage: item.errorMessage
-          || (item.status === 'ready'
-            ? item.generationModel === 'fallback-template'
-              ? 'Fallback lecture package stored successfully.'
-              : 'Lecture package generated successfully.'
-            : item.status === 'processing'
-              ? 'Generation is still running for this topic.'
-              : item.status === 'pending'
-                ? 'This topic has not started generation yet.'
-                : 'Generation failed for this topic.'),
-        expectedTimeLabel: formatExpectedTime(item.expectedReadyAt, item.expectedWaitMs),
-      }));
-
+      const reportItems = buildGenerationReport(statusResponse);
       setGenerationReport(reportItems);
       setShowGenerationReportModal(true);
 
@@ -873,7 +877,7 @@ const AddTopicsScreen = () => {
                     variant="ghost"
                     style={styles.secondaryAiButton}
                     leftIcon="document-text-outline"
-                    disabled={!generationReport.length}
+                    disabled={!generationReport.length && !generationStatus?.topics?.length}
                   />
                 </View>
                 {!isManualMode && generationStatus ? (

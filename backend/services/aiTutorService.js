@@ -1732,6 +1732,7 @@ async function getCourseGenerationStatus(courseId) {
   const lectureByTopicId = new Map(lectures.map((lecture) => [lecture.topicId, lecture]));
   const job = generationJobs.get(String(courseId));
   const startedAtMs = job?.startedAt ? new Date(job.startedAt).getTime() : 0;
+  const jobIsRunning = job?.status === 'running';
 
   const completedTopicDurationsMs = topics
     .map((topic) => {
@@ -1757,7 +1758,8 @@ async function getCourseGenerationStatus(courseId) {
     const lectureStatus = lecture?.status || null;
     const hasFinalLectureState = lectureStatus === 'ready' || lectureStatus === 'failed';
     const outlineIsNewerThanLecture = outlineUpdatedAtMs > lectureUpdatedAtMs;
-    const outlineRepresentsActiveGeneration = outline?.status === 'processing'
+    const outlineRepresentsActiveGeneration = jobIsRunning
+      && outline?.status === 'processing'
       && outlineUpdatedAtMs >= startedAtMs
       && (!hasFinalLectureState || outlineIsNewerThanLecture);
     const status = outlineRepresentsActiveGeneration
@@ -1820,7 +1822,7 @@ async function getCourseGenerationStatus(courseId) {
     return acc;
   }, { total: topicStatuses.length, ready: 0, failed: 0, processing: 0, pending: 0 });
 
-  const isRunning = job?.status === 'running' || summary.processing > 0;
+  const isRunning = jobIsRunning;
   const isCompleted = !isRunning && summary.total > 0 && summary.ready + summary.failed === summary.total;
   const remainingTopic = topicsWithTiming.find((item) => item.status === 'processing') || topicsWithTiming.find((item) => item.status === 'pending');
   const estimatedCompletionAt = remainingTopic?.expectedReadyAt || null;
