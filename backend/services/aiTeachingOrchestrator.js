@@ -114,6 +114,11 @@ function splitIntoTeachingNotes(text = '', fallbackItems = []) {
   return (fallbackItems || []).filter(Boolean).slice(0, 4);
 }
 
+function getChunkResearchContext(chunk) {
+  const context = chunk?.visualData?.researchContext;
+  return context && typeof context === 'object' ? context : null;
+}
+
 function getSnippetData(chunk) {
   const snippetData = chunk.visualData?.snippetData || {};
   const snippet = `${snippetData.codeSnippet || ''}`.trim();
@@ -199,6 +204,7 @@ function buildBoardContent({ lecture, chunk, plan, classroomMode, snippetData, c
     chunk.whiteboardExplanation,
     [chunk.learningObjective, ...(chunk.slideBullets || []), ...(chunk.keyTerms || [])]
   );
+  const researchContext = getChunkResearchContext(chunk);
   const baseVisualData = chunk.visualData || {};
   const visualData = {
     ...buildVisualData({
@@ -219,8 +225,8 @@ function buildBoardContent({ lecture, chunk, plan, classroomMode, snippetData, c
       return {
         type: 'whiteboard_notes',
         title: chunk.title,
-        notes: whiteboardNotes,
-        emphasis: plan.use_analogy && chunk.analogyIfHelpful ? chunk.analogyIfHelpful : '',
+        notes: whiteboardNotes.length ? whiteboardNotes : (researchContext?.process_steps || []).slice(0, 4),
+        emphasis: plan.use_analogy && chunk.analogyIfHelpful ? chunk.analogyIfHelpful : (researchContext?.visual_focus || ''),
       };
     case 'slide_summary':
       return {
@@ -232,7 +238,7 @@ function buildBoardContent({ lecture, chunk, plan, classroomMode, snippetData, c
       return {
         type: 'diagram',
         title: chunk.title,
-        caption: chunk.visualCaption || '',
+        caption: chunk.visualCaption || researchContext?.diagram_hint || '',
         nodes: Array.isArray(visualData.nodes) && visualData.nodes.length
           ? visualData.nodes.slice(0, 6)
           : inferConceptNodes({
@@ -250,13 +256,15 @@ function buildBoardContent({ lecture, chunk, plan, classroomMode, snippetData, c
         title: chunk.title,
         steps: Array.isArray(visualData.steps) && visualData.steps.length
           ? visualData.steps.slice(0, 6)
-          : inferFlowchartSteps({
+          : ((researchContext?.process_steps || []).length
+            ? researchContext.process_steps.map((step, index) => ({ id: `step-${index + 1}`, label: step })).slice(0, 6)
+            : inferFlowchartSteps({
               title: chunk.title,
               learningObjective: chunk.learningObjective,
               whiteboardExplanation: chunk.whiteboardExplanation,
               slideBullets: chunk.slideBullets || [],
               examples: chunk.examples || [],
-            }).slice(0, 6),
+            }).slice(0, 6)),
       };
     case 'comparison_explainer':
       return {
@@ -277,7 +285,7 @@ function buildBoardContent({ lecture, chunk, plan, classroomMode, snippetData, c
         title: chunk.title,
         snippetLanguage: snippetData?.snippetLanguage || 'text',
         snippet: snippetData?.codeSnippet || snippetData?.commandExample || '',
-        snippetExplanation: snippetData?.snippetExplanation || chunk.learningObjective || '',
+        snippetExplanation: snippetData?.snippetExplanation || researchContext?.summary || chunk.learningObjective || '',
       };
     case 'checkpoint':
       return {
@@ -295,12 +303,13 @@ function buildBoardContent({ lecture, chunk, plan, classroomMode, snippetData, c
       return {
         type: 'narration',
         title: chunk.title || lecture?.title || 'Explanation',
-        notes: splitIntoTeachingNotes(chunk.learningObjective, (plan.reinforcement_points || []).slice(0, 2)),
+        notes: splitIntoTeachingNotes(chunk.learningObjective, dedupeStrings([...(plan.reinforcement_points || []).slice(0, 2), researchContext?.summary]).filter(Boolean)),
       };
   }
 }
 
 function buildSupportPanel({ chunk, plan, classroomMode, checkpointText }) {
+  const researchContext = getChunkResearchContext(chunk);
   if (classroomMode !== 'checkpoint' && checkpointText) {
     return {
       type: 'checkpoint',
@@ -325,10 +334,19 @@ function buildSupportPanel({ chunk, plan, classroomMode, checkpointText }) {
     };
   }
 
+  if (researchContext?.source_titles?.[0]) {
+    return {
+      type: 'source_anchor',
+      title: 'Trusted source anchor',
+      text: `${researchContext.source_titles[0]}${researchContext.source_urls?.[0] ? ` - ${researchContext.source_urls[0]}` : ''}`,
+    };
+  }
+
   return null;
 }
 
 function buildPanelContent(chunk, visualSuggestion, plan, checkpointText, classroomMode, boardContent, supportPanel) {
+  const researchContext = getChunkResearchContext(chunk);
   return {
     learningObjective: chunk.learningObjective || chunk.summary,
     visualType: plan.visual_priority || chunk.visualMode || visualSuggestion?.visualMode || 'none',
@@ -346,6 +364,7 @@ function buildPanelContent(chunk, visualSuggestion, plan, checkpointText, classr
     classroomModeLabel: getModeLabel(classroomMode),
     boardContent,
     supportPanel,
+    researchContext,
   };
 }
 
@@ -771,6 +790,7 @@ function buildPlannerTutorContext({ chunk, session, plan }) {
     : Array.isArray(chunk?.visualData?.scenes) ? chunk.visualData.scenes : [];
   const sceneIndex = Number.isInteger(session?.teachingState?.currentStepIndex) ? session.teachingState.currentStepIndex : 0;
   const currentScene = storedScenes[Math.min(sceneIndex, Math.max(storedScenes.length - 1, 0))] || null;
+  const researchContext = getChunkResearchContext(chunk);
 
   return {
     current_scene: currentScene ? {
@@ -786,6 +806,7 @@ function buildPlannerTutorContext({ chunk, session, plan }) {
       examples: (chunk?.examples || []).slice(0, 2),
       visual_mode: chunk?.visualMode || plan.visual_priority || 'none',
       checkpoint: chunk?.checkpointQuestion || '',
+      research_context: researchContext,
     },
     current_highlight: currentScene?.board_actions
       ?.filter((action) => action.type === 'highlight_element' || action.type === 'focus_region')

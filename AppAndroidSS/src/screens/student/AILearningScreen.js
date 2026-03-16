@@ -14,6 +14,7 @@ import {
 import Toast from 'react-native-toast-message';
 import Icon from 'react-native-vector-icons/Ionicons';
 import MaterialIcon from 'react-native-vector-icons/MaterialCommunityIcons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import MainLayout from '../../components/ui/MainLayout';
 import EmptyState from '../../components/ui/EmptyState';
@@ -24,6 +25,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { aiTutorAPI, API_BASE } from '../../services/apiClient';
 import WhiteboardStage from '../../features/lecture/WhiteboardStage';
 import { useLectureOrchestrator } from '../../features/lecture/useLectureOrchestrator';
+import { createSimplePdfBlob, downloadPdfBlob } from '../../utils/pdfExport';
 
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 const PANEL_KEYS = { CHAT: 'chat', NOTES: 'notes', FLASHCARDS: 'flashcards', TOPICS: 'topics' };
@@ -71,6 +73,10 @@ const AILearningScreen = () => {
   const pausedPlaybackRef = useRef(null);
   const audioAssetCacheRef = useRef(new Map());
   const interruptResumeTimeoutRef = useRef(null);
+  const activePlaybackChunkIdRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const recordedChunksRef = useRef([]);
   const runtimeStateRef = useRef(runtimeState);
   const activePanelRef = useRef(activePanel);
   const questionRef = useRef(question);
@@ -86,6 +92,7 @@ const AILearningScreen = () => {
   const studentName = `${user?.name || 'Student'}`.trim().split(/\s+/)[0] || 'Student';
   const interruptGreeting = `Hello ${studentName}, how can I help you?`;
   const microphoneGreeting = 'How can I help you?';
+  const notesStorageKey = lecture?.id ? `@skillsphere:lecture-notes:${lecture.id}` : null;
 
   const orderedChunks = useMemo(() => (
     (lecture?.sections || []).slice().sort((a, b) => {
@@ -191,6 +198,31 @@ const AILearningScreen = () => {
   }, [topicId, voiceMode]);
 
   useEffect(() => { setRevealedFlashcards({}); }, [lecture?.id]);
+  useEffect(() => {
+    let cancelled = false;
+    const loadSavedNotes = async () => {
+      if (!notesStorageKey) {
+        if (!cancelled) setLectureNotes('');
+        return;
+      }
+      try {
+        const saved = await AsyncStorage.getItem(notesStorageKey);
+        if (!cancelled) setLectureNotes(saved || '');
+      } catch (_) {
+        if (!cancelled) setLectureNotes('');
+      }
+    };
+    loadSavedNotes();
+    return () => { cancelled = true; };
+  }, [notesStorageKey]);
+
+  useEffect(() => {
+    if (!notesStorageKey) return undefined;
+    const timeout = setTimeout(() => {
+      AsyncStorage.setItem(notesStorageKey, lectureNotes || '').catch(() => null);
+    }, 160);
+    return () => clearTimeout(timeout);
+  }, [lectureNotes, notesStorageKey]);
 
   useEffect(() => {
     if (session && currentChunk && runtimeState === RUNTIME_STATES.PLAYING && !lectureCompleted) playChunk();
@@ -319,6 +351,7 @@ const AILearningScreen = () => {
   const stopPlayback = () => {
     clearScheduledPlayback();
     clearInterruptAutoResume();
+    activePlaybackChunkIdRef.current = null;
     if (audioRef.current) { audioRef.current.pause?.(); audioRef.current = null; }
     clearInterruptGreeting();
     pausedPlaybackRef.current = null;
@@ -327,8 +360,17 @@ const AILearningScreen = () => {
     if (Platform.OS === 'web' && window?.speechSynthesis) window.speechSynthesis.cancel();
   };
   const stopRecognition = () => {
-    recognitionRef.current?.stop?.();
+    try { recognitionRef.current?.stop?.(); } catch (_) {}
     recognitionRef.current = null;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch (_) {}
+    }
+    mediaRecorderRef.current = null;
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks?.().forEach((track) => track.stop?.());
+      mediaStreamRef.current = null;
+    }
+    recordedChunksRef.current = [];
     setIsRecording(false);
   };
 
@@ -389,13 +431,23 @@ const AILearningScreen = () => {
 
   const playChunk = async () => {
     if (!currentNarration) return;
+    if (activePlaybackChunkIdRef.current === currentChunk?.id && ((audioRef.current && !audioRef.current.paused) || (Platform.OS === 'web' && window?.speechSynthesis?.speaking))) {
+      return;
+    }
     if (pausedPlaybackRef.current?.chunkId === currentChunk?.id) {
       if (pausedPlaybackRef.current.kind === 'audio' && audioRef.current) {
         clearInterruptGreeting();
-        try { await audioRef.current.play(); pausedPlaybackRef.current = null; setRuntimeState(RUNTIME_STATES.PLAYING); return; } catch (_) {}
+        try {
+          activePlaybackChunkIdRef.current = currentChunk?.id || null;
+          await audioRef.current.play();
+          pausedPlaybackRef.current = null;
+          setRuntimeState(RUNTIME_STATES.PLAYING);
+          return;
+        } catch (_) {}
       }
       if (pausedPlaybackRef.current.kind === 'speech' && Platform.OS === 'web' && window?.speechSynthesis?.paused) {
         clearInterruptGreeting();
+        activePlaybackChunkIdRef.current = currentChunk?.id || null;
         window.speechSynthesis.resume();
         pausedPlaybackRef.current = null;
         setRuntimeState(RUNTIME_STATES.PLAYING);
@@ -415,7 +467,14 @@ const AILearningScreen = () => {
           const audio = new Audio(buildAudioUrl(audioResponse.asset));
           audio.preload = 'auto';
           try { audio.currentTime = 0; } catch (_) {}
+          if (audioRef.current && audioRef.current !== audio) {
+            audioRef.current.onended = null;
+            audioRef.current.onerror = null;
+            audioRef.current.ontimeupdate = null;
+            audioRef.current.pause?.();
+          }
           audioRef.current = audio;
+          activePlaybackChunkIdRef.current = currentChunk?.id || null;
           audio.onloadedmetadata = () => beginSubtitleSync(subtitleText || currentNarration, { durationMs: Math.max(1000, (audio.duration || 0) * 1000) });
           audio.ontimeupdate = () => {
             if (audio.duration && Number.isFinite(audio.duration) && audio.duration > 0) {
@@ -423,10 +482,14 @@ const AILearningScreen = () => {
             }
           };
           audio.onended = () => {
+            activePlaybackChunkIdRef.current = null;
             setLiveSubtitleText(subtitleText || currentNarration);
             scheduleNext(MAX_CHUNK_GAP_MS);
           };
-          audio.onerror = () => scheduleNext(ERROR_CHUNK_GAP_MS);
+          audio.onerror = () => {
+            activePlaybackChunkIdRef.current = null;
+            scheduleNext(ERROR_CHUNK_GAP_MS);
+          };
           await audio.play();
           if (!(audio.duration && Number.isFinite(audio.duration) && audio.duration > 0)) {
             beginSubtitleSync(subtitleText || currentNarration, { durationMs: recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)) });
@@ -436,6 +499,7 @@ const AILearningScreen = () => {
       } catch (_) {}
       if (window?.speechSynthesis) {
         const utterance = new SpeechSynthesisUtterance(currentNarration);
+        activePlaybackChunkIdRef.current = currentChunk?.id || null;
         subtitleBoundaryRef.current = { text: subtitleText || currentNarration, lastIndex: 0 };
         beginSubtitleSync(subtitleText || currentNarration, { durationMs: recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)) });
         utterance.onboundary = (event) => {
@@ -446,15 +510,20 @@ const AILearningScreen = () => {
           setLiveSubtitleText(sourceText.slice(0, nextIndex).trim() || sourceText.split(/\s+/).slice(0, 1).join(' '));
         };
         utterance.onend = () => {
+          activePlaybackChunkIdRef.current = null;
           setLiveSubtitleText(subtitleText || currentNarration);
           scheduleNext(MAX_CHUNK_GAP_MS);
         };
-        utterance.onerror = () => scheduleNext(ERROR_CHUNK_GAP_MS);
+        utterance.onerror = () => {
+          activePlaybackChunkIdRef.current = null;
+          scheduleNext(ERROR_CHUNK_GAP_MS);
+        };
         window.speechSynthesis.cancel();
         window.speechSynthesis.speak(utterance);
         return;
       }
     }
+    activePlaybackChunkIdRef.current = currentChunk?.id || null;
     beginSubtitleSync(subtitleText || currentNarration, { durationMs: recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)) });
     scheduleNext(recommendedDurationMs || Math.min(12000, Math.max(3600, currentNarration.length * 28)));
   };
@@ -615,15 +684,72 @@ const AILearningScreen = () => {
   };
   const askQuestion = async () => askQuestionWithText(question);
 
+  const transcribeRecordedAudio = async () => {
+    if (Platform.OS !== 'web' || !recordedChunksRef.current.length) return;
+    try {
+      const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
+      const formData = new FormData();
+      formData.append('audio', blob, 'lecture-question.webm');
+      const response = await aiTutorAPI.transcribeAudio(formData);
+      const transcript = `${response?.transcript?.text || response?.transcript || ''}`.trim();
+      if (transcript) {
+        setQuestion(transcript);
+        await askQuestionWithText(transcript);
+      } else {
+        Toast.show({ type: 'info', text1: 'No Speech Detected', text2: 'Please try speaking a little louder or closer to the microphone.' });
+      }
+    } catch (error) {
+      Toast.show({ type: 'error', text1: 'Voice Input Failed', text2: error.message || 'Unable to process your voice right now.' });
+    } finally {
+      recordedChunksRef.current = [];
+    }
+  };
+
+  const startRecordedVoiceCapture = async () => {
+    if (Platform.OS !== 'web' || !navigator?.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      Toast.show({ type: 'error', text1: 'Voice Input Unsupported', text2: 'This browser does not support microphone recording.' });
+      return;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      recordedChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      recorder.onstart = () => setIsRecording(true);
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) recordedChunksRef.current.push(event.data);
+      };
+      recorder.onerror = () => {
+        setIsRecording(false);
+        Toast.show({ type: 'error', text1: 'Recording Error', text2: 'Unable to record your question.' });
+      };
+      recorder.onstop = async () => {
+        setIsRecording(false);
+        stream.getTracks?.().forEach((track) => track.stop?.());
+        mediaStreamRef.current = null;
+        mediaRecorderRef.current = null;
+        await transcribeRecordedAudio();
+      };
+      recorder.start();
+    } catch (error) {
+      Toast.show({ type: 'error', text1: 'Microphone Permission', text2: error.message || 'Allow microphone access to ask a question.' });
+    }
+  };
+
   const startVoiceInput = async () => {
     await openAssistantPanel();
     if (Platform.OS !== 'web') {
-      Toast.show({ type: 'info', text1: 'Voice Input', text2: 'Voice input currently requires the web speech API.' });
+      Toast.show({ type: 'info', text1: 'Voice Input', text2: 'Voice input is currently optimized for web browsers.' });
       return;
     }
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      Toast.show({ type: 'error', text1: 'Not Supported', text2: 'Voice input is not supported in this browser.' });
+      await startRecordedVoiceCapture();
       return;
     }
     if (isRecording) { stopRecognition(); return; }
@@ -645,7 +771,11 @@ const AILearningScreen = () => {
       }
     };
     recognition.onend = () => setIsRecording(false);
-    recognition.onerror = () => setIsRecording(false);
+    recognition.onerror = async () => {
+      setIsRecording(false);
+      recognitionRef.current = null;
+      await startRecordedVoiceCapture();
+    };
     recognition.start();
   };
 
@@ -655,13 +785,39 @@ const AILearningScreen = () => {
       Toast.show({ type: 'info', text1: 'Export Unavailable', text2: cards.length ? 'Flashcard export is available on web.' : 'No flashcards available for this lecture.' });
       return;
     }
-    const blob = new Blob([JSON.stringify(cards.map((card) => ({ front: card.frontText, back: card.backText })), null, 2)], { type: 'application/json' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${lecture.title.replace(/\s+/g, '-').toLowerCase()}-flashcards.json`;
-    link.click();
-    window.URL.revokeObjectURL(url);
+    const pdfBlob = createSimplePdfBlob({
+      title: `${lecture.title} Flashcards`,
+      sections: cards.map((card, index) => ({
+        heading: `Flashcard ${index + 1}`,
+        lines: [`Front: ${card.frontText}`, `Back: ${card.backText}`],
+      })),
+    });
+    downloadPdfBlob({
+      blob: pdfBlob,
+      filename: `${lecture.title.replace(/\s+/g, '-').toLowerCase()}-flashcards.pdf`,
+    });
+  };
+
+  const exportNotes = () => {
+    if (Platform.OS !== 'web') {
+      Toast.show({ type: 'info', text1: 'Export Unavailable', text2: 'Notes PDF export is available on web.' });
+      return;
+    }
+    if (!lectureNotes.trim()) {
+      Toast.show({ type: 'info', text1: 'No Notes Yet', text2: 'Write some notes during the lecture first.' });
+      return;
+    }
+    const pdfBlob = createSimplePdfBlob({
+      title: `${lecture.title} Notes`,
+      sections: [
+        { heading: 'Topic', lines: [topic?.title || lecture.title] },
+        { heading: 'Student Notes', lines: lectureNotes.split(/\n+/).filter(Boolean) },
+      ],
+    });
+    downloadPdfBlob({
+      blob: pdfBlob,
+      filename: `${lecture.title.replace(/\s+/g, '-').toLowerCase()}-notes.pdf`,
+    });
   };
 
   const goToNextChunk = async () => {
@@ -766,6 +922,10 @@ const AILearningScreen = () => {
           </View>
         ))}
       </ScrollView>
+      <TouchableOpacity style={[styles.footerButton, { borderColor: theme.colors.border, backgroundColor: isDark ? '#101827' : '#ffffff' }]} onPress={exportNotes}>
+        <Icon name="download-outline" size={18} color={theme.colors.textPrimary} />
+        <Text style={[styles.footerButtonText, { color: theme.colors.textPrimary }]}>Export notes PDF</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -789,7 +949,7 @@ const AILearningScreen = () => {
       </ScrollView>
       <TouchableOpacity style={[styles.footerButton, { borderColor: theme.colors.border, backgroundColor: isDark ? '#101827' : '#ffffff' }]} onPress={exportFlashcards}>
         <Icon name="download-outline" size={18} color={theme.colors.textPrimary} />
-        <Text style={[styles.footerButtonText, { color: theme.colors.textPrimary }]}>Export flashcards</Text>
+        <Text style={[styles.footerButtonText, { color: theme.colors.textPrimary }]}>Export flashcards PDF</Text>
       </TouchableOpacity>
     </View>
   );

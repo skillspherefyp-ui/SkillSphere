@@ -50,6 +50,29 @@ function dedupeStrings(values) {
   );
 }
 
+function buildChunkResearchContext(chunk, researchBrief) {
+  if (!researchBrief || typeof researchBrief !== 'object') {
+    return null;
+  }
+
+  const sourceNotes = Array.isArray(researchBrief.source_notes) ? researchBrief.source_notes : [];
+  const sourceTitles = sourceNotes.map((item) => `${item?.title || ''}`.trim()).filter(Boolean).slice(0, 4);
+  const sourceUrls = sourceNotes.map((item) => `${item?.url || ''}`.trim()).filter(Boolean).slice(0, 4);
+  const processSteps = Array.isArray(researchBrief.process_steps) ? researchBrief.process_steps.map(String).filter(Boolean) : [];
+  const diagramHint = Array.isArray(researchBrief.diagram_opportunities) ? researchBrief.diagram_opportunities[0] : '';
+  const exampleHint = Array.isArray(researchBrief.worked_examples) ? researchBrief.worked_examples[0] : '';
+
+  return {
+    summary: `${researchBrief.summary || chunk?.learningObjective || chunk?.title || ''}`.trim(),
+    visual_focus: `${diagramHint || chunk?.visualCaption || chunk?.title || ''}`.trim(),
+    diagram_hint: `${diagramHint || ''}`.trim(),
+    example_hint: `${exampleHint || ''}`.trim(),
+    process_steps: processSteps.slice(0, 6),
+    source_titles: sourceTitles,
+    source_urls: sourceUrls,
+  };
+}
+
 function splitOutlineIntoPoints(outlineText) {
   return dedupeStrings(
     `${outlineText || ''}`
@@ -751,7 +774,7 @@ function validateLecturePackage(candidate) {
   return errors;
 }
 
-function normalizeLecturePackage(rawPackage, topicTitle) {
+function normalizeLecturePackage(rawPackage, topicTitle, researchBrief = null) {
   const sections = Array.isArray(rawPackage.sections) ? rawPackage.sections : [];
   const normalizedSections = sections.map((section, sectionIndex) => {
     const explanation = `${section?.explanation || ''}`.trim();
@@ -785,6 +808,11 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
         });
         const chunkTitle = `${section?.title || `${topicTitle} Section ${sectionIndex + 1}`} - Step ${chunkIndex + 1}`.trim();
         const estimatedDurationSeconds = Math.min(90, Math.max(40, chunk.length / 3));
+        const researchContext = buildChunkResearchContext({
+          title: chunkTitle,
+          learningObjective: `${section?.summary || explanation || topicTitle}`.trim(),
+          visualCaption: `${section?.visualSuggestion || section?.summary || topicTitle}`.trim(),
+        }, researchBrief);
         const synthesizedScenes = normalizeScenes([], {
           title: chunkTitle,
           learningObjective: `${section?.summary || explanation || topicTitle}`.trim(),
@@ -834,6 +862,7 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
             {
               ...buildVisualData(visualMode, section?.title || topicTitle, slideBullets, examples, ''),
               snippetData: snippetData || undefined,
+              researchContext: researchContext || undefined,
               scenes: synthesizedScenes,
               sceneVersion: 'scene_v1',
             },
@@ -860,6 +889,15 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
         rawChunk: chunk
       });
       const baseSpokenExplanation = `${chunk?.spoken_explanation || chunk?.spokenExplanation || chunk?.chunkText || chunk?.text || explanation || topicTitle}`.trim();
+      const researchContext = chunk?.research_context && typeof chunk.research_context === 'object'
+        ? chunk.research_context
+        : chunk?.researchContext && typeof chunk.researchContext === 'object'
+          ? chunk.researchContext
+          : buildChunkResearchContext({
+              title: `${chunk?.title || section?.title || `${topicTitle} Section ${sectionIndex + 1}`}`.trim(),
+              learningObjective: `${chunk?.learning_objective || chunk?.learningObjective || section?.learningObjective || section?.summary || topicTitle}`.trim(),
+              visualCaption: `${chunk?.visual_caption || chunk?.visualCaption || section?.visualSuggestion || section?.summary || topicTitle}`.trim(),
+            }, researchBrief);
       const normalizedChunk = {
         title: `${chunk?.title || section?.title || `${topicTitle} Section ${sectionIndex + 1}`}`.trim(),
         learningObjective: `${chunk?.learning_objective || chunk?.learningObjective || section?.learningObjective || section?.summary || topicTitle}`.trim(),
@@ -882,6 +920,7 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
         checkpointQuestion: `${chunk?.checkpoint_question_if_any || chunk?.checkpointQuestionIfAny || chunk?.checkpointQuestion || ''}`.trim(),
         visualData: {
           ...(chunk?.visual_data || chunk?.visualData || buildVisualData(visualMode, chunk?.title || section?.title || topicTitle, slideBullets, examples, analogy)),
+          ...(researchContext ? { researchContext } : {}),
           ...(snippetData ? { snippetData } : {})
         },
         snippetData,
@@ -934,7 +973,17 @@ function normalizeLecturePackage(rawPackage, topicTitle) {
           difficultyLevel: 'intermediate',
           estimatedDurationSeconds: 50,
           checkpointQuestion: '',
-          visualData: {},
+          visualData: {
+            ...(buildChunkResearchContext({
+              title: `${section?.title || topicTitle} overview`,
+              learningObjective: `${section?.summary || topicTitle}`.trim(),
+              visualCaption: `${section?.visualSuggestion || section?.summary || topicTitle}`.trim(),
+            }, researchBrief) ? { researchContext: buildChunkResearchContext({
+              title: `${section?.title || topicTitle} overview`,
+              learningObjective: `${section?.summary || topicTitle}`.trim(),
+              visualCaption: `${section?.visualSuggestion || section?.summary || topicTitle}`.trim(),
+            }, researchBrief) } : {}),
+          },
         };
         const fallbackScenes = normalizeScenes([], fallbackChunk);
         const teachingPlan = deriveTeachingPlan({
@@ -1257,6 +1306,25 @@ async function generateCoursePackage(courseId, adminUser) {
         description: material.description,
         type: material.type
       }));
+      let researchBrief = null;
+      let researchModel = null;
+
+      try {
+        if (process.env.ENABLE_LECTURE_WEB_RESEARCH !== 'false') {
+          const researchResult = await openaiService.researchLectureTopic({
+            course,
+            topic,
+            materials: sourceMaterials,
+            priorTopics,
+            nextTopicTitle,
+            outlineText
+          });
+          researchBrief = researchResult.research;
+          researchModel = researchResult.model;
+        }
+      } catch (researchError) {
+        console.error(`Lecture research fetch failed for topic ${topic.id}, continuing without research layer:`, researchError);
+      }
 
       let normalized;
       let modelName;
@@ -1268,7 +1336,8 @@ async function generateCoursePackage(courseId, adminUser) {
           materials: sourceMaterials,
           priorTopics,
           nextTopicTitle,
-          outlineText
+          outlineText,
+          researchBrief
         });
 
         let rawPackage = generation.package;
@@ -1277,13 +1346,13 @@ async function generateCoursePackage(courseId, adminUser) {
           rawPackage = await openaiService.repairLecturePackage(JSON.stringify(rawPackage), validationErrors);
         }
 
-        normalized = normalizeLecturePackage(rawPackage, topic.title);
+        normalized = normalizeLecturePackage(rawPackage, topic.title, researchBrief);
         const finalValidationErrors = validateLecturePackage(normalized);
         if (finalValidationErrors.length > 0) {
           throw new Error(`Generated lecture package is invalid: ${finalValidationErrors.join(', ')}`);
         }
 
-        modelName = generation.model;
+        modelName = researchModel ? `${generation.model}+${researchModel}` : generation.model;
       } catch (generationError) {
         console.error(`Primary AI generation failed for topic ${topic.id}, attempting compact retry:`, generationError);
 
@@ -1295,6 +1364,7 @@ async function generateCoursePackage(courseId, adminUser) {
             priorTopics,
             nextTopicTitle,
             outlineText,
+            researchBrief,
             compactMode: true
           });
 
@@ -1304,13 +1374,13 @@ async function generateCoursePackage(courseId, adminUser) {
             compactRawPackage = await openaiService.repairLecturePackage(JSON.stringify(compactRawPackage), compactValidationErrors);
           }
 
-          normalized = normalizeLecturePackage(compactRawPackage, topic.title);
+          normalized = normalizeLecturePackage(compactRawPackage, topic.title, researchBrief);
           const compactFinalValidationErrors = validateLecturePackage(normalized);
           if (compactFinalValidationErrors.length > 0) {
             throw new Error(`Compact lecture package is invalid: ${compactFinalValidationErrors.join(', ')}`);
           }
 
-          modelName = compactGeneration.model;
+          modelName = researchModel ? `${compactGeneration.model}+${researchModel}` : compactGeneration.model;
         } catch (compactGenerationError) {
           console.error(`Compact AI generation failed for topic ${topic.id}, attempting minimal retry:`, compactGenerationError);
 
@@ -1322,6 +1392,7 @@ async function generateCoursePackage(courseId, adminUser) {
               priorTopics,
               nextTopicTitle,
               outlineText,
+              researchBrief,
               compactMode: true,
               minimalMode: true
             });
@@ -1332,13 +1403,13 @@ async function generateCoursePackage(courseId, adminUser) {
               minimalRawPackage = await openaiService.repairLecturePackage(JSON.stringify(minimalRawPackage), minimalValidationErrors);
             }
 
-            normalized = normalizeLecturePackage(minimalRawPackage, topic.title);
+            normalized = normalizeLecturePackage(minimalRawPackage, topic.title, researchBrief);
             const minimalFinalValidationErrors = validateLecturePackage(normalized);
             if (minimalFinalValidationErrors.length > 0) {
               throw new Error(`Minimal lecture package is invalid: ${minimalFinalValidationErrors.join(', ')}`);
             }
 
-            modelName = minimalGeneration.model;
+            modelName = researchModel ? `${minimalGeneration.model}+${researchModel}` : minimalGeneration.model;
           } catch (minimalGenerationError) {
             console.error(`Minimal AI generation failed for topic ${topic.id}, falling back to template package:`, minimalGenerationError);
             normalized = normalizeLecturePackage(
@@ -1351,9 +1422,10 @@ async function generateCoursePackage(courseId, adminUser) {
                 outlineText,
                 failureReason: `${generationError.message}; compact retry failed: ${compactGenerationError.message}; minimal retry failed: ${minimalGenerationError.message}`
               }),
-              topic.title
+              topic.title,
+              researchBrief
             );
-            modelName = 'fallback-template';
+            modelName = researchModel ? `fallback-template+${researchModel}` : 'fallback-template';
           }
         }
       }

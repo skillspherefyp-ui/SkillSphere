@@ -49,6 +49,19 @@ function getJsonFromCompletion(completion) {
   }
 }
 
+function getJsonFromResponseOutput(response) {
+  const content = `${response?.output_text || ''}`.trim();
+  if (!content) {
+    throw new Error('OpenAI returned an empty responses output');
+  }
+
+  try {
+    return JSON.parse(content);
+  } catch (error) {
+    throw new Error(`Failed to parse OpenAI responses JSON output: ${error.message}`);
+  }
+}
+
 function getLectureSchemaDescription() {
   return {
     lecture_version: 'scene_v1',
@@ -90,6 +103,14 @@ function getLectureSchemaDescription() {
             difficulty_level: 'introductory | intermediate | advanced',
             estimated_duration_seconds: 'integer',
             checkpoint_question_if_any: 'string',
+            research_context: {
+              summary: 'string',
+              visual_focus: 'string',
+              diagram_hint: 'string',
+              example_hint: 'string',
+              source_titles: ['string'],
+              source_urls: ['string']
+            },
             scenes: [
               {
                 id: 'string',
@@ -142,6 +163,85 @@ function getLectureSchemaDescription() {
   };
 }
 
+function getResearchSchemaDescription() {
+  return {
+    summary: 'string',
+    key_concepts: ['string'],
+    process_steps: ['string'],
+    diagram_opportunities: ['string'],
+    worked_examples: ['string'],
+    teaching_cautions: ['string'],
+    source_notes: [
+      {
+        title: 'string',
+        url: 'string',
+        reason: 'string'
+      }
+    ]
+  };
+}
+
+async function researchLectureTopic({
+  course,
+  topic,
+  materials,
+  priorTopics,
+  nextTopicTitle,
+  outlineText,
+}) {
+  const client = getClient();
+  const model = process.env.OPENAI_MODEL_RESEARCH || 'gpt-4o-mini-search-preview';
+  const schema = getResearchSchemaDescription();
+  const allowedDomains = `${process.env.OPENAI_RESEARCH_ALLOWED_DOMAINS || ''}`
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const prompt = [
+    'Prepare trusted lecture research for a topic in an educational platform.',
+    'Return valid JSON only.',
+    'Use web search when helpful and prioritize authoritative educational or technical sources.',
+    'Focus on information that helps a teacher decide what to say, what to draw, and what example to show.',
+    'If the topic involves a process, algorithm, workflow, or decision sequence, include concrete process_steps for a whiteboard flowchart.',
+    'If the topic benefits from a diagram, include diagram_opportunities that are drawable on a classroom whiteboard.',
+    `Required JSON schema: ${JSON.stringify(schema)}`,
+    `Course context: ${JSON.stringify({
+      name: course?.name || '',
+      description: course?.description || '',
+      level: course?.level || '',
+    })}`,
+    `Topic context: ${JSON.stringify({
+      title: topic?.title || '',
+      outlineText: `${outlineText || ''}`.trim().slice(0, 2400),
+      priorTopics: priorTopics || [],
+      nextTopicTitle: nextTopicTitle || null,
+      materials: (materials || []).slice(0, 6),
+    })}`,
+  ].join('\n\n');
+
+  const response = await withOpenAITimeout(
+    () => client.responses.create({
+      model,
+      tools: [{
+        type: 'web_search',
+        search_context_size: 'medium',
+        ...(allowedDomains.length ? { filters: { allowed_domains: allowedDomains } } : {}),
+      }],
+      include: ['web_search_call.action.sources'],
+      instructions: 'You create trusted, source-aware lecture research in strict JSON.',
+      input: prompt,
+    }),
+    'lecture research',
+    process.env.OPENAI_RESEARCH_REQUEST_TIMEOUT_MS,
+    90000
+  );
+
+  return {
+    model,
+    research: getJsonFromResponseOutput(response),
+  };
+}
+
 async function generateLecturePackage({
   course,
   topic,
@@ -149,6 +249,7 @@ async function generateLecturePackage({
   priorTopics,
   nextTopicTitle,
   outlineText,
+  researchBrief,
   compactMode = false,
   minimalMode = false
 }) {
@@ -240,6 +341,7 @@ Constraints:
 - Use teaching_sequence to decide the order of teaching actions for that chunk.
 - Include examples, key terms, and analogy_if_helpful when they make the explanation stronger.
 - Include checkpoint_question_if_any whenever the learner should pause and self-check.
+- Use research_context inside chunks when the trusted research suggests a particularly useful visual, example, or source-backed explanation.
 - Generate ${generationProfile.flashcardRange} flashcards.
 - Generate ${generationProfile.quizRange} multiple choice questions with exactly 4 options each.
 - Ensure correctAnswer is a zero-based option index.
@@ -252,6 +354,9 @@ ${JSON.stringify(compactCourseContext, null, 2)}
 
 Topic:
 ${JSON.stringify(compactTopicContext, null, 2)}
+
+Trusted lecture research:
+${JSON.stringify(researchBrief || {}, null, 2)}
 `;
 
   const completion = await withOpenAITimeout(
@@ -419,6 +524,7 @@ async function planChunkTeaching({
             'Do not regenerate the lesson.',
             'Only decide how the current chunk should be taught like a real teacher.',
             'Use the active scene and visible whiteboard context to decide whether to show a diagram, example, highlight, or plain explanation.',
+            'If research-backed process steps or diagram hints are available in context, use them to prefer concrete visuals over generic text.',
             'Keep the plan concise, student-friendly, and aligned with what is visible on the board.'
           ].join(' ')
         },
@@ -613,6 +719,7 @@ function createAudioCacheKey(parts) {
 }
 
 module.exports = {
+  researchLectureTopic,
   generateLecturePackage,
   repairLecturePackage,
   planChunkTeaching,
