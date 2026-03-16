@@ -115,19 +115,16 @@ const getStyles = (theme, isDark, isWeb, isTablet) =>
     safeArea: {
       flex: 1,
       minHeight: 0,
-      overflow: 'hidden',
     },
     container: {
       flex: 1,
       flexDirection: 'column',
       minHeight: 0,
-      overflow: 'hidden',
     },
     bodyRow: {
       flex: 1,
       flexDirection: 'row',
       minHeight: 0,
-      overflow: 'hidden',
     },
 
     // Sidebar panel — fixed width, sits to the left of content
@@ -147,7 +144,6 @@ const getStyles = (theme, isDark, isWeb, isTablet) =>
       flex: 1,
       backgroundColor: theme.colors.background,
       minHeight: 0,
-      overflow: 'hidden',
     },
 
     // Sidebar toggle button in header
