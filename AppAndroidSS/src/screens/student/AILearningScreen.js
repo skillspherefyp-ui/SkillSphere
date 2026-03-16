@@ -39,18 +39,20 @@ const ERROR_CHUNK_GAP_MS = 850;
 const AUDIO_PREFETCH_TIMEOUT_MS = 900;
 const INTERRUPT_GREETING = 'Hello Danish, how can I help you?';
 
-const LearningScreen = () => {
+const AILearningScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { theme, isDark } = useTheme();
   const { width, height } = useWindowDimensions();
   const { courseId, topicId } = route.params || {};
   const { courses, checkEnrollment, fetchCourses } = useData();
-  const course = courses.find((item) => item.id === courseId);
+  const safeCourses = Array.isArray(courses) ? courses : [];
+  const course = safeCourses.find((item) => item.id === courseId);
   const topic = course?.topics?.find((item) => item.id === topicId);
 
   const [loading, setLoading] = useState(true);
   const [isEnrolled, setIsEnrolled] = useState(false);
+  const [catalogReady, setCatalogReady] = useState(false);
   const [lecture, setLecture] = useState(null);
   const [session, setSession] = useState(null);
   const [currentChunk, setCurrentChunk] = useState(null);
@@ -72,13 +74,11 @@ const LearningScreen = () => {
   const interruptAudioRef = useRef(null);
   const pausedPlaybackRef = useRef(null);
   const audioAssetCacheRef = useRef(new Map());
-  const audioElementCacheRef = useRef(new Map());
   const baseHost = API_BASE.replace(/\/api$/, '');
   const isCompact = width < 1180;
   const isMobile = width < 768;
   const panelWidth = Math.min(380, Math.max(320, Math.round(width * (isMobile ? 0.92 : 0.3))));
-  const classroomHeight = Math.max(360, Math.min(height - (isMobile ? 136 : 164), height * 0.74));
-  const stageHeight = Math.max(260, Math.min(height * (isMobile ? 0.42 : 0.5), 520));
+  const viewportLockStyle = Platform.OS === 'web' ? { height, maxHeight: height } : null;
 
   const orderedChunks = useMemo(() => {
     return (lecture?.sections || []).slice().sort((a, b) => {
@@ -166,6 +166,57 @@ const LearningScreen = () => {
   }, [activePanel, isRecording, raisedHandPulse]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    setCatalogReady(false);
+    fetchCourses()
+      .catch(() => null)
+      .finally(() => {
+        if (!cancelled) setCatalogReady(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchCourses, courseId, topicId]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return undefined;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById('root');
+    const previous = {
+      htmlOverflow: html.style.overflow,
+      htmlHeight: html.style.height,
+      bodyOverflow: body.style.overflow,
+      bodyHeight: body.style.height,
+      rootOverflow: root?.style.overflow || '',
+      rootHeight: root?.style.height || '',
+    };
+
+    html.style.overflow = 'hidden';
+    html.style.height = '100%';
+    body.style.overflow = 'hidden';
+    body.style.height = '100%';
+    if (root) {
+      root.style.overflow = 'hidden';
+      root.style.height = '100%';
+    }
+
+    return () => {
+      html.style.overflow = previous.htmlOverflow;
+      html.style.height = previous.htmlHeight;
+      body.style.overflow = previous.bodyOverflow;
+      body.style.height = previous.bodyHeight;
+      if (root) {
+        root.style.overflow = previous.rootOverflow;
+        root.style.height = previous.rootHeight;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     loadLecture();
     return () => {
       stopPlayback();
@@ -202,6 +253,14 @@ const LearningScreen = () => {
 
   const upcomingNarration = getChunkNarrationText(upcomingChunk);
 
+  const buildAudioUrl = (asset) => {
+    const urlPath = `${asset?.urlPath || ''}`.trim();
+    if (!urlPath) return '';
+    const versionSeed = asset?.id || asset?.updatedAt || asset?.cacheKey || Date.now();
+    const separator = urlPath.includes('?') ? '&' : '?';
+    return `${baseHost}${urlPath}${separator}v=${encodeURIComponent(versionSeed)}`;
+  };
+
   const primeAudioAsset = async (text, assetType = 'lecture_chunk') => {
     const normalizedText = `${text || ''}`.trim();
     if (!normalizedText || !voiceMode || Platform.OS !== 'web') return null;
@@ -216,15 +275,6 @@ const LearningScreen = () => {
       sessionId: session?.id,
       assetType,
       text: normalizedText,
-    }).then((audioResponse) => {
-      const urlPath = audioResponse?.asset?.urlPath;
-      if (urlPath && !audioElementCacheRef.current.has(cacheKey)) {
-        const audio = new Audio(`${baseHost}${urlPath}`);
-        audio.preload = 'auto';
-        audio.load?.();
-        audioElementCacheRef.current.set(cacheKey, audio);
-      }
-      return audioResponse;
     }).catch((error) => {
       audioAssetCacheRef.current.delete(cacheKey);
       throw error;
@@ -254,12 +304,12 @@ const LearningScreen = () => {
 
     try {
       const audioResponse = await Promise.race([
-        primeAudioAsset(INTERRUPT_GREETING, 'classroom_help'),
+        primeAudioAsset(INTERRUPT_GREETING, 'qa_answer'),
         new Promise((resolve) => setTimeout(() => resolve(null), AUDIO_PREFETCH_TIMEOUT_MS)),
       ]);
       if (audioResponse?.asset?.urlPath) {
-        const cacheKey = `classroom_help:${INTERRUPT_GREETING}`;
-        const audio = audioElementCacheRef.current.get(cacheKey) || new Audio(`${baseHost}${audioResponse.asset.urlPath}`);
+        const audio = new Audio(buildAudioUrl(audioResponse.asset));
+        audio.preload = 'auto';
         interruptAudioRef.current = audio;
         try { audio.currentTime = 0; } catch (_) {}
         await audio.play();
@@ -420,9 +470,7 @@ const LearningScreen = () => {
           new Promise((resolve) => setTimeout(() => resolve(null), AUDIO_PREFETCH_TIMEOUT_MS)),
         ]);
         if (audioResponse?.asset?.urlPath) {
-          const cacheKey = `lecture_chunk:${currentNarration}`;
-          const audio = audioElementCacheRef.current.get(cacheKey) || new Audio(`${baseHost}${audioResponse.asset.urlPath}`);
-          audioElementCacheRef.current.delete(cacheKey);
+          const audio = new Audio(buildAudioUrl(audioResponse.asset));
           audio.preload = 'auto';
           try { audio.currentTime = 0; } catch (_) {}
           audioRef.current = audio;
@@ -910,6 +958,17 @@ const LearningScreen = () => {
     );
   };
 
+  if ((!catalogReady && !course) || (!catalogReady && course && !topic)) {
+    return (
+      <MainLayout showSidebar={false} showHeader={false}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Opening AI lecture classroom...</Text>
+        </View>
+      </MainLayout>
+    );
+  }
+
   if (!course || !topic) {
     return (
       <MainLayout showSidebar={false} showHeader={false}>
@@ -970,11 +1029,11 @@ const LearningScreen = () => {
 
   return (
     <MainLayout showSidebar={false} showHeader={false}>
-      <View style={[styles.screen, { backgroundColor: isDark ? '#08111d' : '#eef4fb' }]}>
+      <View style={[styles.screen, viewportLockStyle, { backgroundColor: isDark ? '#08111d' : '#eef4fb' }]}>
         <View style={[styles.backgroundGlow, styles.backgroundGlowTop, { backgroundColor: isDark ? 'rgba(59, 130, 246, 0.16)' : 'rgba(96, 165, 250, 0.18)' }]} />
         <View style={[styles.backgroundGlow, styles.backgroundGlowBottom, { backgroundColor: isDark ? 'rgba(14, 165, 233, 0.12)' : 'rgba(14, 165, 233, 0.14)' }]} />
 
-        <View style={[styles.shell, { padding: isMobile ? 12 : 20 }]}>
+        <View style={[styles.shell, viewportLockStyle, { padding: isMobile ? 12 : 20 }]}>
           <View style={[styles.topBar, isCompact && styles.topBarStack, { backgroundColor: isDark ? 'rgba(8,17,29,0.9)' : 'rgba(255,255,255,0.9)', borderColor: isDark ? 'rgba(148,163,184,0.16)' : 'rgba(148,163,184,0.22)' }]}>
             <View style={styles.topBarLeft}>
               <TouchableOpacity style={[styles.backButton, { backgroundColor: isDark ? '#0f1a2a' : '#ffffff', borderColor: theme.colors.border }]} onPress={() => navigation.goBack()}>
@@ -1029,9 +1088,9 @@ const LearningScreen = () => {
             </View>
           </View>
 
-          <View style={[styles.mainRow, { flexDirection: isCompact ? 'column' : 'row', height: classroomHeight }]}>
+          <View style={[styles.mainRow, { flexDirection: isCompact ? 'column' : 'row' }]}>
             <View style={styles.stageColumn}>
-              <View style={[styles.stageFrame, { height: stageHeight, backgroundColor: isDark ? '#f8fbff' : '#ffffff', borderColor: isDark ? 'rgba(148,163,184,0.16)' : 'rgba(148,163,184,0.20)' }]}>
+              <View style={[styles.stageFrame, { backgroundColor: isDark ? '#f8fbff' : '#ffffff', borderColor: isDark ? 'rgba(148,163,184,0.16)' : 'rgba(148,163,184,0.20)' }]}>
                 <WhiteboardStage
                   boardState={boardState}
                   currentScene={currentScene}
@@ -1085,14 +1144,14 @@ const LearningScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, overflow: 'hidden' },
+  screen: { flex: 1, overflow: 'hidden', minHeight: 0 },
   backgroundGlow: { position: 'absolute', width: 420, height: 420, borderRadius: 210, opacity: 0.9 },
   backgroundGlowTop: { top: -140, right: -60 },
   backgroundGlowBottom: { left: -120, bottom: -180 },
-  shell: { flex: 1, gap: 14, overflow: 'hidden' },
+  shell: { flex: 1, gap: 14, overflow: 'hidden', minHeight: 0 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   loadingText: { marginTop: 16, fontSize: 16 },
-  topBar: { borderWidth: 1, borderRadius: 24, padding: 14, flexDirection: 'row', justifyContent: 'space-between', gap: 16, overflow: 'hidden' },
+  topBar: { borderWidth: 1, borderRadius: 24, padding: 14, flexDirection: 'row', justifyContent: 'space-between', gap: 16, overflow: 'hidden', flexShrink: 0 },
   topBarStack: { flexDirection: 'column' },
   topBarLeft: { flex: 1, flexDirection: 'row', gap: 12, minWidth: 0 },
   backButton: { width: 46, height: 46, borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
@@ -1132,8 +1191,8 @@ const styles = StyleSheet.create({
   topActionLabel: { fontSize: 12, fontWeight: '800' },
   mainRow: { flex: 1, gap: 14, overflow: 'hidden', minHeight: 0, maxHeight: '100%' },
   stageColumn: { flex: 1, gap: 12, minHeight: 0, maxHeight: '100%', overflow: 'hidden' },
-  stageFrame: { borderRadius: 28, borderWidth: 1, overflow: 'hidden', flexShrink: 0 },
-  subtitleStrip: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 18, paddingVertical: 10, minHeight: 72, justifyContent: 'center' },
+  stageFrame: { borderRadius: 28, borderWidth: 1, overflow: 'hidden', flex: 1, minHeight: 280, maxHeight: '100%' },
+  subtitleStrip: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 18, paddingVertical: 10, minHeight: 72, justifyContent: 'center', flexShrink: 0 },
   subtitleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   subtitleLabel: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8 },
   subtitleMeta: { fontSize: 12, fontWeight: '600' },
@@ -1192,4 +1251,4 @@ const styles = StyleSheet.create({
   compactDrawer: { position: 'absolute', top: 12, right: 12, bottom: 12, borderWidth: 1, borderRadius: 24, overflow: 'hidden', maxHeight: '100%' },
 });
 
-export default LearningScreen;
+export default AILearningScreen;

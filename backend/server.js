@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const { sequelize, testConnection } = require('./config/database');
@@ -33,6 +34,43 @@ const { initScheduledReminders } = require('./controllers/todoController');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+function parseByteRange(rangeHeader, fileSize) {
+  const match = /bytes=(\d*)-(\d*)/.exec(`${rangeHeader || ''}`);
+  if (!match) {
+    return null;
+  }
+
+  const hasStart = match[1] !== '';
+  const hasEnd = match[2] !== '';
+
+  if (!hasStart && !hasEnd) {
+    return null;
+  }
+
+  if (!hasStart && hasEnd) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isFinite(suffixLength) || suffixLength <= 0) {
+      return null;
+    }
+    const start = Math.max(fileSize - suffixLength, 0);
+    return {
+      start,
+      end: fileSize - 1
+    };
+  }
+
+  const start = Number(match[1]);
+  const end = hasEnd ? Number(match[2]) : fileSize - 1;
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return null;
+  }
+
+  return {
+    start,
+    end: Math.min(end, fileSize - 1)
+  };
+}
 
 function normalizeOrigin(origin) {
   return `${origin || ''}`
@@ -157,6 +195,45 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.get('/uploads/ai-audio/:filename', (req, res, next) => {
+  const requested = path.basename(req.params.filename || '');
+  const filePath = path.join(__dirname, 'uploads', 'ai-audio', requested);
+
+  if (!requested || !fs.existsSync(filePath)) {
+    return next();
+  }
+
+  const stat = fs.statSync(filePath);
+  const fileSize = stat.size;
+  const range = req.headers.range;
+
+  res.setHeader('Content-Type', 'audio/mpeg');
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+
+  if (!range || fileSize <= 0) {
+    res.setHeader('Content-Length', fileSize);
+    fs.createReadStream(filePath).pipe(res);
+    return;
+  }
+
+  const parsedRange = parseByteRange(range, fileSize);
+  const start = parsedRange?.start;
+  const end = parsedRange?.end;
+
+  if (!parsedRange || start < 0 || start >= fileSize || end < start) {
+    res.status(200);
+    res.setHeader('Content-Length', fileSize);
+    fs.createReadStream(filePath).pipe(res);
+    return;
+  }
+
+  res.status(206);
+  res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+  res.setHeader('Content-Length', end - start + 1);
+  fs.createReadStream(filePath, { start, end }).pipe(res);
+});
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/assets', express.static(path.join(__dirname, 'assets')));

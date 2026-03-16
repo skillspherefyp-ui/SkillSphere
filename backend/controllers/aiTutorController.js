@@ -7,6 +7,26 @@ const aiTutorService = require('../services/aiTutorService');
 const openaiService = require('../services/openaiService');
 
 const upload = multer({ storage: multer.memoryStorage() });
+const VALID_AUDIO_ASSET_TYPES = new Set(['lecture_chunk', 'qa_answer']);
+
+function parseOptionalInteger(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function logBadRequest(scope, req, error, extra = {}) {
+  console.error(`[AI Tutor] ${scope} failed`, {
+    userId: req.user?.id || null,
+    route: req.originalUrl,
+    method: req.method,
+    message: error?.message || error,
+    ...extra
+  });
+}
 
 exports.audioUploadMiddleware = upload.single('audio');
 
@@ -66,7 +86,9 @@ exports.generateCoursePackage = async (req, res) => {
         : 'AI lecture generation has started. You can track progress from the admin screen.'
     });
   } catch (error) {
-    console.error('Generate AI course package error:', error);
+    logBadRequest('generateCoursePackage', req, error, {
+      courseId: req.params.courseId
+    });
     res.status(error.message.includes('permission') ? 403 : 400).json({ error: error.message || 'Internal server error' });
   }
 };
@@ -129,7 +151,10 @@ exports.startSession = async (req, res) => {
       chunk: payload.chunk
     });
   } catch (error) {
-    console.error('Start AI tutor session error:', error);
+    logBadRequest('startSession', req, error, {
+      topicId: req.params.topicId,
+      voiceModeEnabled: Boolean(req.body?.voiceModeEnabled)
+    });
     res.status(error.message.includes('enrolled') ? 403 : 400).json({ error: error.message || 'Internal server error' });
   }
 };
@@ -149,7 +174,9 @@ exports.getNextChunk = async (req, res) => {
     const result = await aiTutorService.getNextLectureChunk(req.params.sessionId, req.user.id);
     res.json({ success: true, ...result });
   } catch (error) {
-    console.error('Get next AI lecture chunk error:', error);
+    logBadRequest('getNextChunk', req, error, {
+      sessionId: req.params.sessionId
+    });
     res.status(400).json({ error: error.message || 'Internal server error' });
   }
 };
@@ -172,7 +199,10 @@ exports.pauseSession = async (req, res) => {
     });
     res.json({ success: true, session });
   } catch (error) {
-    console.error('Pause AI tutor session error:', error);
+    logBadRequest('pauseSession', req, error, {
+      sessionId: req.params.sessionId,
+      pauseReason: req.body?.pauseReason || null
+    });
     res.status(404).json({ error: error.message || 'Internal server error' });
   }
 };
@@ -198,7 +228,10 @@ exports.submitQuestion = async (req, res) => {
     const result = await aiTutorService.submitQuestion(req.params.sessionId, req.user.id, question);
     res.json({ success: true, ...result });
   } catch (error) {
-    console.error('Submit AI tutor question error:', error);
+    logBadRequest('submitQuestion', req, error, {
+      sessionId: req.params.sessionId,
+      questionLength: question.length
+    });
     res.status(400).json({ error: error.message || 'Internal server error' });
   }
 };
@@ -265,7 +298,11 @@ exports.transcribeAudio = async (req, res) => {
     const transcript = await openaiService.transcribeAudio(tempFilePath);
     res.json({ success: true, transcript });
   } catch (error) {
-    console.error('Transcribe AI audio error:', error);
+    logBadRequest('transcribeAudio', req, error, {
+      originalName: req.file?.originalname || null,
+      mimeType: req.file?.mimetype || null,
+      size: req.file?.size || 0
+    });
     res.status(400).json({ error: error.message || 'Internal server error' });
   } finally {
     if (tempFilePath && fs.existsSync(tempFilePath)) {
@@ -281,16 +318,32 @@ exports.speakText = async (req, res) => {
       return res.status(400).json({ error: 'text is required' });
     }
 
+    const requestedAssetType = `${req.body.assetType || 'lecture_chunk'}`.trim();
+    const assetType = VALID_AUDIO_ASSET_TYPES.has(requestedAssetType)
+      ? requestedAssetType
+      : 'lecture_chunk';
+    if (assetType !== requestedAssetType) {
+      console.warn('Normalizing unsupported AI speech assetType:', requestedAssetType);
+    }
+
+    const lectureId = parseOptionalInteger(req.body.lectureId);
+    const sessionId = parseOptionalInteger(req.body.sessionId);
+
     const asset = await aiTutorService.getOrCreateAudioAsset({
-      lectureId: req.body.lectureId || null,
-      sessionId: req.body.sessionId || null,
-      assetType: req.body.assetType || 'lecture_chunk',
+      lectureId,
+      sessionId,
+      assetType,
       text
     });
 
     res.json({ success: true, asset });
   } catch (error) {
-    console.error('Generate AI speech error:', error);
+    logBadRequest('speakText', req, error, {
+      lectureId: parseOptionalInteger(req.body?.lectureId),
+      sessionId: parseOptionalInteger(req.body?.sessionId),
+      assetType: req.body?.assetType || null,
+      textLength: `${req.body?.text || ''}`.trim().length
+    });
     res.status(400).json({ error: error.message || 'Internal server error' });
   }
 };

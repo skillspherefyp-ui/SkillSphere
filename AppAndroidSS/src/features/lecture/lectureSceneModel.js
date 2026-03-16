@@ -85,13 +85,16 @@ const normalizeScene = (scene, index, recommendedDurationMs) => {
     type: scene?.type || 'teaching_scene',
     mode,
     narration: `${scene?.narration || ''}`.trim(),
-    subtitleText: `${scene?.subtitle_text || scene?.subtitleText || scene?.narration || ''}`.trim(),
+    subtitleText: `${scene?.subtitle_text || scene?.subtitleText || scene?.subtitle || scene?.narration || ''}`.trim(),
     timing: {
-      durationMs,
+      durationMs: Math.max(
+        1200,
+        Number(scene?.timing_ms || scene?.timingMs || durationMs) || durationMs
+      ),
       startMs: Number(scene?.timing?.start_ms || scene?.timing?.startMs || 0) || 0,
     },
-    diagramInstructions: scene?.diagram_instructions || scene?.diagramInstructions || null,
-    exampleInstructions: scene?.example_instructions || scene?.exampleInstructions || null,
+    diagramInstructions: scene?.diagram_instructions || scene?.diagramInstructions || scene?.diagram_instruction || null,
+    exampleInstructions: scene?.example_instructions || scene?.exampleInstructions || scene?.example || null,
     boardActions: ensureArray(scene?.board_actions || scene?.boardActions).map(normalizeAction).filter(Boolean),
   };
 };

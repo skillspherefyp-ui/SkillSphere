@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { Op } = require('sequelize');
 const {
   sequelize,
   Course,
@@ -25,6 +26,15 @@ const aiTeachingOrchestrator = require('./aiTeachingOrchestrator');
 
 const AUDIO_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'ai-audio');
 const generationJobs = new Map();
+
+function isValidAudioFile(storagePath) {
+  try {
+    if (!storagePath || !fs.existsSync(storagePath)) return false;
+    return fs.statSync(storagePath).size > 0;
+  } catch (_) {
+    return false;
+  }
+}
 
 function dedupeStrings(values) {
   return Array.from(
@@ -1837,7 +1847,9 @@ async function startTutorSession(userId, topicId, voiceModeEnabled) {
     where: {
       userId,
       topicId,
-      status: ['in_progress', 'paused', 'lecture_completed']
+      status: {
+        [Op.in]: ['in_progress', 'paused', 'lecture_completed']
+      }
     },
     order: [['updatedAt', 'DESC']]
   });
@@ -2343,29 +2355,51 @@ async function submitQuiz(lectureId, userId, answers) {
 }
 
 async function getOrCreateAudioAsset({ lectureId, sessionId, assetType, text }) {
-  const cacheKey = openaiService.createAudioCacheKey([`${lectureId || ''}`, assetType, text]);
+  const normalizedText = `${text || ''}`.trim();
+  if (!normalizedText) {
+    throw new Error('Audio text is required');
+  }
+
+  const normalizedAssetType = ['lecture_chunk', 'qa_answer'].includes(`${assetType || ''}`.trim())
+    ? `${assetType}`.trim()
+    : 'lecture_chunk';
+  const normalizedLectureId = Number.isInteger(Number(lectureId)) && Number(lectureId) > 0 ? Number(lectureId) : null;
+  const normalizedSessionId = Number.isInteger(Number(sessionId)) && Number(sessionId) > 0 ? Number(sessionId) : null;
+  const cacheKey = openaiService.createAudioCacheKey([`${normalizedLectureId || ''}`, normalizedAssetType, normalizedText]);
   const existing = await AIAudioAsset.findOne({ where: { cacheKey } });
-  if (existing && fs.existsSync(existing.storagePath)) {
+  if (existing && isValidAudioFile(existing.storagePath)) {
     return existing;
   }
 
   fs.mkdirSync(AUDIO_UPLOAD_DIR, { recursive: true });
-  const filename = `${cacheKey}.mp3`;
-  const outputPath = path.join(AUDIO_UPLOAD_DIR, filename);
+  const filename = existing?.urlPath
+    ? path.basename(existing.urlPath.split('?')[0])
+    : `${cacheKey}.mp3`;
+  const outputPath = existing?.storagePath || path.join(AUDIO_UPLOAD_DIR, filename);
 
   await openaiService.synthesizeSpeech(text, outputPath);
+  if (!isValidAudioFile(outputPath)) {
+    throw new Error('Generated audio file is invalid');
+  }
 
-  return AIAudioAsset.create({
-    lectureId: lectureId || null,
-    sessionId: sessionId || null,
+  const nextPayload = {
+    lectureId: normalizedLectureId,
+    sessionId: normalizedSessionId,
     cacheKey,
-    assetType,
+    assetType: normalizedAssetType,
     voice: 'alloy',
     mimeType: 'audio/mpeg',
     storagePath: outputPath,
     urlPath: `/uploads/ai-audio/${filename}`,
-    textPreview: text.slice(0, 120)
-  });
+    textPreview: normalizedText.slice(0, 120)
+  };
+
+  if (existing) {
+    await existing.update(nextPayload);
+    return existing;
+  }
+
+  return AIAudioAsset.create(nextPayload);
 }
 
 module.exports = {
