@@ -289,7 +289,9 @@ const AILearningScreen = () => {
       setLiveSubtitleText(normalizedText);
       return;
     }
-    const targetCount = Math.max(1, Math.min(words.length, Math.round(words.length * Math.max(0, Math.min(1, ratio)))));
+    const progressRatio = Math.max(0, Math.min(1, ratio));
+    const easedRatio = progressRatio < 0.92 ? progressRatio * 1.08 : progressRatio;
+    const targetCount = Math.max(1, Math.min(words.length, Math.ceil(words.length * Math.max(0, Math.min(1, easedRatio)))));
     setLiveSubtitleText(words.slice(0, targetCount).join(' '));
   };
   const beginTimedSubtitleSync = (text, durationMs) => {
@@ -306,15 +308,15 @@ const AILearningScreen = () => {
       return;
     }
     const totalDurationMs = Math.max(1200, Number(durationMs) || Math.max(2200, words.length * 280));
-    const intervalMs = Math.max(70, Math.min(240, Math.round(totalDurationMs / words.length)));
-    let index = 0;
-    subtitleIntervalRef.current = setInterval(() => {
-      index += 1;
-      setLiveSubtitleText(words.slice(0, Math.min(index, words.length)).join(' '));
-      if (index >= words.length) {
-        stopSubtitleSync();
-      }
-    }, intervalMs);
+      const intervalMs = Math.max(55, Math.min(180, Math.round(totalDurationMs / words.length)));
+      let index = 0;
+      subtitleIntervalRef.current = setInterval(() => {
+        index += 1.25;
+        setLiveSubtitleText(words.slice(0, Math.min(Math.ceil(index), words.length)).join(' '));
+        if (index >= words.length) {
+          stopSubtitleSync();
+        }
+      }, intervalMs);
   };
   const beginSubtitleSync = (text, options = {}) => {
     const normalizedText = `${text || ''}`.trim();
@@ -519,7 +521,7 @@ const AILearningScreen = () => {
           if (playbackToken !== playbackTokenRef.current) return;
           const sourceText = subtitleBoundaryRef.current.text;
           if (!sourceText || typeof event?.charIndex !== 'number') return;
-          const nextIndex = Math.max(subtitleBoundaryRef.current.lastIndex, Math.min(sourceText.length, event.charIndex + 1));
+          const nextIndex = Math.max(subtitleBoundaryRef.current.lastIndex, Math.min(sourceText.length, event.charIndex + 12));
           subtitleBoundaryRef.current.lastIndex = nextIndex;
           setLiveSubtitleText(sourceText.slice(0, nextIndex).trim() || sourceText.split(/\s+/).slice(0, 1).join(' '));
         };
@@ -1090,7 +1092,7 @@ const AILearningScreen = () => {
 
           <View style={styles.subtitleStrip}>
             <View style={[styles.subtitleDot, { backgroundColor: tutorStatus.tone }]} />
-            <Text style={styles.subtitleText} numberOfLines={isMobile ? 2 : 1}>{displaySubtitleText || 'The lecture narration will appear here as the tutor teaches.'}</Text>
+            <Text style={styles.subtitleText} numberOfLines={isMobile ? 3 : 2}>{displaySubtitleText || 'The lecture narration will appear here as the tutor teaches.'}</Text>
           </View>
         </View>
 

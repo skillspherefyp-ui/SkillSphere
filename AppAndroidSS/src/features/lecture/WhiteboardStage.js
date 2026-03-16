@@ -2,14 +2,22 @@ import React from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 
 const renderStaticLayer = (items) => items.map((item) => (
-  <Text key={item.id} style={styles.boardTitle}>{item.text}</Text>
+  <Text
+    key={item.id}
+    style={styles.boardTitle}
+    numberOfLines={2}
+    adjustsFontSizeToFit
+    minimumFontScale={0.72}
+  >
+    {item.text}
+  </Text>
 ));
 
 const renderDynamicLayer = (items) => items.map((item) => {
   if (item.kind === 'paragraph') {
     return (
       <View key={item.id} style={[styles.contentBlock, item.tone === 'focus' && styles.focusBlock]}>
-        {item.title ? <Text style={styles.blockTitle}>{item.title}</Text> : null}
+        {item.title ? <Text style={styles.blockTitle} numberOfLines={1}>{item.title}</Text> : null}
         <Text style={styles.blockText}>{item.text}</Text>
       </View>
     );
@@ -18,7 +26,7 @@ const renderDynamicLayer = (items) => items.map((item) => {
   if (item.kind === 'bullet_list') {
     return (
       <View key={item.id} style={styles.sectionStack}>
-        {item.title ? <Text style={styles.sectionLabel}>{item.title}</Text> : null}
+        {item.title ? <Text style={styles.sectionLabel} numberOfLines={1}>{item.title}</Text> : null}
         {item.items.map((bullet, index) => (
           <View key={`${item.id}-${index}`} style={styles.bulletRow}>
             <View style={styles.bulletDot} />
@@ -41,7 +49,7 @@ const renderDynamicLayer = (items) => items.map((item) => {
   if (item.kind === 'example') {
     return (
       <View key={item.id} style={[styles.contentBlock, styles.exampleBlock]}>
-        {item.title ? <Text style={styles.blockTitle}>{item.title}</Text> : null}
+        {item.title ? <Text style={styles.blockTitle} numberOfLines={1}>{item.title}</Text> : null}
         <Text style={item.format === 'code' ? styles.codeText : styles.blockText}>{item.content}</Text>
         {item.note ? <Text style={styles.helperText}>{item.note}</Text> : null}
       </View>
@@ -55,7 +63,7 @@ const renderDiagramLayer = (items) => items.map((item) => {
   if (item.diagramType === 'flowchart') {
     return (
       <View key={item.id} style={styles.diagramBlock}>
-        {item.title ? <Text style={styles.sectionLabel}>{item.title}</Text> : null}
+        {item.title ? <Text style={styles.sectionLabel} numberOfLines={1}>{item.title}</Text> : null}
         {item.steps.map((step, index) => (
           <View key={`${item.id}-${index}`} style={styles.flowRow}>
             <View style={styles.flowBadge}><Text style={styles.flowBadgeText}>{index + 1}</Text></View>
@@ -69,7 +77,7 @@ const renderDiagramLayer = (items) => items.map((item) => {
   if (item.diagramType === 'comparison_table') {
     return (
       <View key={item.id} style={styles.diagramBlock}>
-        {item.title ? <Text style={styles.sectionLabel}>{item.title}</Text> : null}
+        {item.title ? <Text style={styles.sectionLabel} numberOfLines={1}>{item.title}</Text> : null}
         {item.rows.map((row, index) => (
           <View key={`${item.id}-${index}`} style={styles.compareRow}>
             <Text style={styles.compareTitle}>{row.left || row.label || `Item ${index + 1}`}</Text>
@@ -82,7 +90,7 @@ const renderDiagramLayer = (items) => items.map((item) => {
 
   return (
     <View key={item.id} style={styles.diagramBlock}>
-      {item.title ? <Text style={styles.sectionLabel}>{item.title}</Text> : null}
+      {item.title ? <Text style={styles.sectionLabel} numberOfLines={1}>{item.title}</Text> : null}
       <View style={styles.nodeGrid}>
         {item.nodes.map((node, index) => (
           <View key={`${item.id}-${index}`} style={styles.nodeCard}>
@@ -124,7 +132,7 @@ const WhiteboardStage = ({ boardState, currentScene, objectiveText, status, mode
       <View style={styles.topRail}>
         <View style={styles.titleCopy}>
           <Text style={styles.eyebrow}>AI Whiteboard</Text>
-          <Text style={styles.sceneTitle} numberOfLines={1}>{currentScene?.title || 'Lesson board'}</Text>
+          <Text style={styles.sceneTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.74}>{currentScene?.title || 'Lesson board'}</Text>
           <Text style={styles.objectiveText} numberOfLines={2}>{objectiveText || 'Teaching content is being prepared.'}</Text>
         </View>
         <View style={styles.metaRail}>
@@ -151,61 +159,61 @@ const WhiteboardStage = ({ boardState, currentScene, objectiveText, status, mode
 };
 
 const styles = StyleSheet.create({
-  stageRoot: { flex: 1, padding: 20, backgroundColor: '#07111c', overflow: 'hidden' },
+  stageRoot: { flex: 1, padding: 16, backgroundColor: '#07111c', overflow: 'hidden' },
   gridOverlay: {
     ...StyleSheet.absoluteFillObject,
     opacity: 0.08,
     backgroundColor: 'transparent',
     borderWidth: 0,
   },
-  topRail: { flexDirection: 'row', justifyContent: 'space-between', gap: 16, marginBottom: 18, zIndex: 2 },
+  topRail: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginBottom: 12, zIndex: 2 },
   titleCopy: { flex: 1, minWidth: 0 },
-  eyebrow: { color: '#7dd3fc', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
-  sceneTitle: { color: '#f8fafc', fontSize: 28, fontWeight: '800', marginBottom: 8 },
-  objectiveText: { color: '#a5b4c7', fontSize: 15, lineHeight: 22, fontWeight: '500' },
+  eyebrow: { color: '#7dd3fc', fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 },
+  sceneTitle: { color: '#f8fafc', fontSize: 22, lineHeight: 28, fontWeight: '800', marginBottom: 6, flexShrink: 1 },
+  objectiveText: { color: '#a5b4c7', fontSize: 13, lineHeight: 18, fontWeight: '500' },
   metaRail: { alignItems: 'flex-end', gap: 8, maxWidth: '38%' },
-  metaPill: { borderRadius: 999, borderWidth: 1, borderColor: 'rgba(125,211,252,0.18)', backgroundColor: 'rgba(10,18,30,0.86)', paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  metaText: { color: '#dbeafe', fontSize: 12, fontWeight: '700' },
+  metaPill: { borderRadius: 999, borderWidth: 1, borderColor: 'rgba(125,211,252,0.18)', backgroundColor: 'rgba(10,18,30,0.86)', paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  metaText: { color: '#dbeafe', fontSize: 11, fontWeight: '700' },
   statusDot: { width: 8, height: 8, borderRadius: 999 },
-  contentShell: { flex: 1, minHeight: 0, gap: 18, zIndex: 1 },
-  staticLayer: { gap: 10 },
-  dynamicLayer: { gap: 14, minHeight: 0 },
-  diagramLayer: { gap: 14 },
-  boardTitle: { color: '#f8fafc', fontSize: 36, lineHeight: 40, fontWeight: '800' },
-  contentBlock: { borderRadius: 20, borderWidth: 1, borderColor: 'rgba(148,163,184,0.14)', backgroundColor: 'rgba(15,23,42,0.58)', padding: 16, gap: 8 },
+  contentShell: { flex: 1, minHeight: 0, gap: 12, zIndex: 1 },
+  staticLayer: { gap: 8, flexShrink: 1 },
+  dynamicLayer: { gap: 10, minHeight: 0, flexShrink: 1 },
+  diagramLayer: { gap: 10, flexShrink: 1 },
+  boardTitle: { color: '#f8fafc', fontSize: 26, lineHeight: 30, fontWeight: '800', flexShrink: 1 },
+  contentBlock: { borderRadius: 18, borderWidth: 1, borderColor: 'rgba(148,163,184,0.14)', backgroundColor: 'rgba(15,23,42,0.58)', padding: 12, gap: 6, flexShrink: 1 },
   focusBlock: { borderColor: 'rgba(96,165,250,0.4)', backgroundColor: 'rgba(29,78,216,0.14)' },
-  blockTitle: { color: '#7dd3fc', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8 },
-  blockText: { color: '#e2e8f0', fontSize: 15, lineHeight: 22, fontWeight: '500' },
-  sectionStack: { gap: 10 },
-  sectionLabel: { color: '#7dd3fc', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8 },
-  bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  bulletDot: { width: 8, height: 8, borderRadius: 999, backgroundColor: '#38bdf8', marginTop: 7 },
-  bulletText: { flex: 1, color: '#f8fafc', fontSize: 17, lineHeight: 24, fontWeight: '600' },
+  blockTitle: { color: '#7dd3fc', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 },
+  blockText: { color: '#e2e8f0', fontSize: 13, lineHeight: 18, fontWeight: '500', flexShrink: 1 },
+  sectionStack: { gap: 8, flexShrink: 1 },
+  sectionLabel: { color: '#7dd3fc', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 },
+  bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, flexShrink: 1 },
+  bulletDot: { width: 7, height: 7, borderRadius: 999, backgroundColor: '#38bdf8', marginTop: 6 },
+  bulletText: { flex: 1, color: '#f8fafc', fontSize: 14, lineHeight: 19, fontWeight: '600' },
   equationBlock: { backgroundColor: 'rgba(30,64,175,0.18)', borderColor: 'rgba(96,165,250,0.3)' },
-  equationText: { color: '#dbeafe', fontSize: 24, lineHeight: 30, fontWeight: '800' },
-  equationNote: { color: '#bfdbfe', fontSize: 13, lineHeight: 19 },
+  equationText: { color: '#dbeafe', fontSize: 18, lineHeight: 24, fontWeight: '800' },
+  equationNote: { color: '#bfdbfe', fontSize: 12, lineHeight: 17 },
   exampleBlock: { backgroundColor: 'rgba(15,23,42,0.8)' },
-  codeText: { color: '#e2e8f0', fontSize: 14, lineHeight: 21, fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier' },
-  helperText: { color: '#94a3b8', fontSize: 13, lineHeight: 19 },
-  diagramBlock: { gap: 10 },
-  flowRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  flowBadge: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#2563eb', justifyContent: 'center', alignItems: 'center' },
-  flowBadgeText: { color: '#ffffff', fontSize: 12, fontWeight: '800' },
-  flowText: { flex: 1, color: '#e2e8f0', fontSize: 15, lineHeight: 22, fontWeight: '600' },
-  compareRow: { borderRadius: 16, borderWidth: 1, borderColor: 'rgba(148,163,184,0.14)', backgroundColor: 'rgba(15,23,42,0.56)', padding: 14 },
-  compareTitle: { color: '#f8fafc', fontSize: 14, fontWeight: '800', marginBottom: 6 },
-  compareBody: { color: '#cbd5e1', fontSize: 14, lineHeight: 21 },
-  nodeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  nodeCard: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(148,163,184,0.14)', backgroundColor: 'rgba(15,23,42,0.6)' },
-  nodeText: { color: '#f8fafc', fontSize: 14, fontWeight: '700' },
+  codeText: { color: '#e2e8f0', fontSize: 12, lineHeight: 18, fontFamily: Platform.OS === 'web' ? 'monospace' : 'Courier' },
+  helperText: { color: '#94a3b8', fontSize: 12, lineHeight: 17 },
+  diagramBlock: { gap: 8, flexShrink: 1 },
+  flowRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
+  flowBadge: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#2563eb', justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  flowBadgeText: { color: '#ffffff', fontSize: 10, fontWeight: '800' },
+  flowText: { flex: 1, color: '#e2e8f0', fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  compareRow: { borderRadius: 14, borderWidth: 1, borderColor: 'rgba(148,163,184,0.14)', backgroundColor: 'rgba(15,23,42,0.56)', padding: 10, flexShrink: 1 },
+  compareTitle: { color: '#f8fafc', fontSize: 12, fontWeight: '800', marginBottom: 4 },
+  compareBody: { color: '#cbd5e1', fontSize: 12, lineHeight: 17 },
+  nodeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  nodeCard: { paddingHorizontal: 10, paddingVertical: 9, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(148,163,184,0.14)', backgroundColor: 'rgba(15,23,42,0.6)', maxWidth: '48%' },
+  nodeText: { color: '#f8fafc', fontSize: 12, lineHeight: 16, fontWeight: '700' },
   highlightLayer: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', alignItems: 'flex-end', padding: 18 },
   highlightRail: { gap: 8, alignItems: 'flex-end' },
-  highlightPill: { borderRadius: 999, borderWidth: 1, borderColor: 'rgba(96,165,250,0.36)', backgroundColor: 'rgba(30,64,175,0.2)', paddingHorizontal: 12, paddingVertical: 8, maxWidth: 240 },
-  highlightText: { color: '#dbeafe', fontSize: 12, fontWeight: '800' },
+  highlightPill: { borderRadius: 999, borderWidth: 1, borderColor: 'rgba(96,165,250,0.36)', backgroundColor: 'rgba(30,64,175,0.2)', paddingHorizontal: 10, paddingVertical: 6, maxWidth: 220 },
+  highlightText: { color: '#dbeafe', fontSize: 11, fontWeight: '800' },
   transitionLayer: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-start', alignItems: 'flex-start', padding: 18 },
   transitionRail: { gap: 8 },
-  transitionBubble: { maxWidth: '74%', borderRadius: 18, borderWidth: 1, borderColor: 'rgba(125,211,252,0.18)', backgroundColor: 'rgba(7,12,22,0.92)', paddingHorizontal: 14, paddingVertical: 12 },
-  transitionText: { color: '#dbeafe', fontSize: 13, lineHeight: 18, fontWeight: '700' },
+  transitionBubble: { maxWidth: '74%', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(125,211,252,0.18)', backgroundColor: 'rgba(7,12,22,0.92)', paddingHorizontal: 12, paddingVertical: 10 },
+  transitionText: { color: '#dbeafe', fontSize: 12, lineHeight: 17, fontWeight: '700' },
 });
 
 export default WhiteboardStage;
