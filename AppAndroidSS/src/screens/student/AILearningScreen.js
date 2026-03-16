@@ -860,6 +860,31 @@ const AILearningScreen = () => {
     if (!lectureCompleted) { Toast.show({ type: 'info', text1: 'Finish the Lecture', text2: 'Complete the lecture before opening the quiz.' }); return; }
     navigation.navigate('Quiz', { courseId, topicId, lectureId: lecture.id });
   };
+  const retakeLecture = async () => {
+    if (!session?.id) {
+      Toast.show({ type: 'error', text1: 'Retake Unavailable', text2: 'This lecture session is not ready to restart yet.' });
+      return;
+    }
+    stopPlayback();
+    clearInterruptAutoResume();
+    clearInterruptGreeting();
+    setActivePanel(null);
+    setShowCompleteDialog(false);
+    setLectureCompleted(false);
+    setRuntimeState(RUNTIME_STATES.PAUSED);
+    try {
+      const response = await aiTutorAPI.restartSession(session.id);
+      if (!response.success) throw new Error(response.error || 'Unable to restart this lecture');
+      setSession(response.session);
+      setCurrentChunk(response.chunk);
+      setChatMessages((response.session?.messages || []).map((message) => ({ type: message.sender === 'user' ? 'user' : 'ai', text: message.content })));
+      setRuntimeState(response.session?.status === 'lecture_completed' ? RUNTIME_STATES.ENDED : RUNTIME_STATES.PLAYING);
+      Toast.show({ type: 'success', text1: 'Lecture Restarted', text2: 'The lecture has been reset to the beginning.' });
+    } catch (error) {
+      setRuntimeState(RUNTIME_STATES.PAUSED);
+      Toast.show({ type: 'error', text1: 'Retake Failed', text2: error.message || 'Unable to restart this lecture right now.' });
+    }
+  };
 
   const renderDrawerHeader = (eyebrow, title) => (
     <View style={styles.drawerHeader}>
@@ -1028,6 +1053,7 @@ const AILearningScreen = () => {
 
   const controls = [
     { key: 'pause', icon: isPlaying ? 'pause' : 'play', label: isPlaying ? 'Pause' : 'Resume', onPress: togglePause, active: false, disabled: false },
+    { key: 'retake', icon: 'refresh-outline', label: 'Retake', onPress: retakeLecture, active: false, disabled: !session?.id },
     { key: 'raise', icon: runtimeState === RUNTIME_STATES.STUDENT_INTERRUPT ? 'hand-left-outline' : 'hand-right-outline', label: runtimeState === RUNTIME_STATES.STUDENT_INTERRUPT ? 'Lower Hand' : 'Raise Hand', onPress: handleRaiseHandToggle, active: runtimeState === RUNTIME_STATES.STUDENT_INTERRUPT, disabled: false, tone: 'attention' },
     { key: 'mic', icon: isRecording ? 'stop' : 'mic-outline', label: isRecording ? 'Stop Mic' : 'Mic', onPress: startVoiceInput, active: isRecording, disabled: false },
     { key: 'chat', icon: 'chatbubble-ellipses-outline', label: 'AI Chat', onPress: openChatPanel, active: activePanel === PANEL_KEYS.CHAT, disabled: false },
