@@ -52,200 +52,128 @@ const calculatePercentageChange = (current, previous) => {
 };
 
 // ============================================
-// BAR CHART COMPONENT
+// CUSTOM CHART COMPONENTS
 // ============================================
 
-const BarChart = ({ data, theme, isDark, height = 180 }) => {
+// EduView-style pill-track bar chart (no y-axis, clean)
+const BarChart = ({ data }) => {
   const maxValue = Math.max(...data.map(d => d.value), 1);
+  const maxIndex = data.reduce((best, d, i, arr) => (d.value >= arr[best].value ? i : best), 0);
 
   return (
-    <View style={barChartStyles.container}>
-      <View style={[barChartStyles.yAxis, { height }]}>
-        {[100, 75, 50, 25, 0].map((val, i) => (
-          <Text key={i} style={[barChartStyles.yLabel, { color: theme.colors.textTertiary }]}>
-            {Math.round((maxValue * val) / 100)}
-          </Text>
-        ))}
-      </View>
-      <View style={barChartStyles.chartArea}>
-        <View
-          style={[
-            barChartStyles.barsContainer,
-            {
-              height,
-              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.1)',
-            },
-          ]}
-        >
-          {data.map((item, index) => {
-            const barHeight = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
-            return (
-              <View key={index} style={barChartStyles.barWrapper}>
-                <View
-                  style={[
-                    barChartStyles.bar,
-                    {
-                      height: `${Math.max(barHeight, 2)}%`,
-                      backgroundColor: item.color || '#6366F1',
-                    },
-                  ]}
-                />
+    <View style={{ flex: 1 }}>
+      <View style={[barChartStyles.barsContainer, { flex: 1 }]}>
+        {data.map((item, index) => {
+          const barHeightPct = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
+          const isActive = index === maxIndex;
+          return (
+            <View key={index} style={barChartStyles.barWrapper}>
+              <View style={barChartStyles.barTrack} />
+              <View style={[barChartStyles.bar, {
+                height: `${Math.max(barHeightPct, 3)}%`,
+                backgroundColor: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.4)',
+              }]}>
+                {item.value > 0 && <Text style={barChartStyles.barValue}>{item.value}</Text>}
               </View>
-            );
-          })}
-        </View>
-        <View style={barChartStyles.xAxis}>
-          {data.map((item, index) => (
-            <Text key={index} style={[barChartStyles.xLabel, { color: theme.colors.textTertiary }]}>
-              {item.label}
-            </Text>
-          ))}
-        </View>
+            </View>
+          );
+        })}
+      </View>
+      <View style={barChartStyles.xAxis}>
+        {data.map((item, index) => (
+          <Text key={index} style={barChartStyles.xLabel}>{item.label}</Text>
+        ))}
       </View>
     </View>
   );
 };
 
 const barChartStyles = StyleSheet.create({
-  container: { flexDirection: 'row', paddingTop: 10 },
-  yAxis: { width: 35, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 8 },
-  yLabel: { fontSize: 10 },
-  chartArea: { flex: 1 },
   barsContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-around',
-    borderLeftWidth: 1,
-    borderBottomWidth: 1,
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
   },
-  barWrapper: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: '100%', paddingHorizontal: 4 },
-  bar: { width: '65%', borderTopLeftRadius: 4, borderTopRightRadius: 4, minHeight: 4 },
-  xAxis: { flexDirection: 'row', justifyContent: 'space-around', paddingTop: 8, paddingHorizontal: 8 },
-  xLabel: { fontSize: 10, flex: 1, textAlign: 'center' },
+  barWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    height: '100%',
+    position: 'relative',
+    paddingHorizontal: 3,
+  },
+  barTrack: {
+    position: 'absolute',
+    bottom: 0,
+    width: 28,
+    height: '100%',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 14,
+  },
+  bar: {
+    width: 28,
+    borderRadius: 14,
+    minHeight: 4,
+    alignItems: 'center',
+    paddingTop: 5,
+    justifyContent: 'flex-start',
+  },
+  barValue: { color: '#fff', fontSize: 9, fontWeight: '700' },
+  xAxis: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 10,
+    paddingHorizontal: 4,
+  },
+  xLabel: {
+    fontSize: 11,
+    flex: 1,
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.75)',
+    fontWeight: '600',
+  },
 });
 
-// ============================================
-// LINE CHART COMPONENT
-// ============================================
-
-const LineChart = ({ data, theme, isDark, height = 180 }) => {
+// Horizontal bar chart — rows fill full card height evenly
+const HorizontalBarChart = ({ data }) => {
   const maxValue = Math.max(...data.map(d => d.value), 1);
+  const maxIndex = data.reduce((best, d, i, arr) => (d.value >= arr[best].value ? i : best), 0);
 
   return (
-    <View style={lineChartStyles.container}>
-      <View style={[lineChartStyles.yAxis, { height }]}>
-        {[100, 75, 50, 25, 0].map((val, i) => {
-          const value = Math.round((maxValue * val) / 100);
-          return (
-            <Text key={i} style={[lineChartStyles.yLabel, { color: theme.colors.textTertiary }]}>
-              {value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
+    <View style={hBarStyles.container}>
+      {data.map((item, index) => {
+        const widthPct = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
+        const isActive = index === maxIndex;
+        return (
+          <View key={index} style={hBarStyles.row}>
+            <Text style={hBarStyles.label}>{item.label}</Text>
+            <View style={hBarStyles.trackWrap}>
+              <View style={hBarStyles.track} />
+              <View style={[hBarStyles.fill, {
+                width: `${Math.max(widthPct, 3)}%`,
+                backgroundColor: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.45)',
+              }]} />
+            </View>
+            <Text style={[hBarStyles.value, { opacity: isActive ? 1 : 0.65 }]}>
+              {item.value}
             </Text>
-          );
-        })}
-      </View>
-      <View style={lineChartStyles.chartArea}>
-        <View
-          style={[
-            lineChartStyles.chartContainer,
-            {
-              height,
-              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.1)',
-            },
-          ]}
-        >
-          {[0, 1, 2, 3, 4].map((_, i) => (
-            <View
-              key={i}
-              style={[
-                lineChartStyles.gridLine,
-                {
-                  top: (i * height) / 4,
-                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(26,26,46,0.05)',
-                },
-              ]}
-            />
-          ))}
-          {data.map((item, index) => {
-            if (index === 0) return null;
-            const prevItem = data[index - 1];
-            const x1 = ((index - 1) / (data.length - 1)) * 100;
-            const x2 = (index / (data.length - 1)) * 100;
-            const y1 = maxValue > 0 ? ((maxValue - prevItem.value) / maxValue) * 100 : 100;
-            const y2 = maxValue > 0 ? ((maxValue - item.value) / maxValue) * 100 : 100;
-            const length = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-            const angle = Math.atan2(y2 - y1, x2 - x1) * (180 / Math.PI);
-
-            return (
-              <View
-                key={`line-${index}`}
-                style={[
-                  lineChartStyles.lineSegment,
-                  {
-                    left: `${x1}%`,
-                    top: `${y1}%`,
-                    width: `${length}%`,
-                    transform: [{ rotate: `${angle}deg` }],
-                    backgroundColor: '#8B5CF6',
-                  },
-                ]}
-              />
-            );
-          })}
-          {data.map((item, index) => {
-            const x = (index / (data.length - 1)) * 100;
-            const y = maxValue > 0 ? ((maxValue - item.value) / maxValue) * 100 : 100;
-
-            return (
-              <View
-                key={index}
-                style={[
-                  lineChartStyles.dot,
-                  {
-                    left: `${x}%`,
-                    top: `${y}%`,
-                    backgroundColor: '#8B5CF6',
-                    shadowColor: '#8B5CF6',
-                  },
-                ]}
-              />
-            );
-          })}
-        </View>
-        <View style={lineChartStyles.xAxis}>
-          {data.map((item, index) => (
-            <Text key={index} style={[lineChartStyles.xLabel, { color: theme.colors.textTertiary }]}>
-              {item.label}
-            </Text>
-          ))}
-        </View>
-      </View>
+          </View>
+        );
+      })}
     </View>
   );
 };
 
-const lineChartStyles = StyleSheet.create({
-  container: { flexDirection: 'row', paddingTop: 10 },
-  yAxis: { width: 40, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 8 },
-  yLabel: { fontSize: 10 },
-  chartArea: { flex: 1 },
-  chartContainer: { position: 'relative', borderLeftWidth: 1, borderBottomWidth: 1 },
-  gridLine: { position: 'absolute', left: 0, right: 0, height: 1 },
-  dot: {
-    position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginLeft: -4,
-    marginTop: -4,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  lineSegment: { position: 'absolute', height: 2, transformOrigin: 'left center' },
-  xAxis: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 8 },
-  xLabel: { fontSize: 10, flex: 1, textAlign: 'center' },
+const hBarStyles = StyleSheet.create({
+  container: { flex: 1, paddingTop: 4, justifyContent: 'space-between' },
+  row: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  label: { width: 30, fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.75)', textAlign: 'right' },
+  trackWrap: { flex: 1, height: 12, position: 'relative', justifyContent: 'center' },
+  track: { position: 'absolute', left: 0, right: 0, height: 12, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.15)' },
+  fill: { height: 12, borderRadius: 6, minWidth: 4 },
+  value: { width: 28, fontSize: 12, fontWeight: '700', color: '#FFFFFF', textAlign: 'right' },
 });
 
 // ============================================
@@ -260,29 +188,27 @@ const DashboardStatCard = ({ icon, iconColor, value, label, change, theme, isDar
       style={[
         dsc.card,
         {
-          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF',
-          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
-          borderLeftColor: iconColor,
+          backgroundColor: isDark ? theme.colors.card : '#FFFFFF',
+          borderColor: isDark ? theme.colors.border : '#EEEEEE',
+          borderTopColor: iconColor,
         },
         style,
       ]}
     >
       <View style={dsc.top}>
-        <Text style={[dsc.label, { color: theme.colors.textSecondary }]}>{label}</Text>
         <View style={[dsc.iconCircle, { backgroundColor: iconColor + '18' }]}>
-          <Icon name={icon} size={18} color={iconColor} />
+          <Icon name={icon} size={17} color={iconColor} />
         </View>
+        <Text style={[dsc.label, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+          {label}
+        </Text>
       </View>
-      <Text style={[dsc.value, { color: theme.colors.textPrimary }]}>
+      <Text style={[dsc.value, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
         {typeof value === 'number' ? value.toLocaleString() : value}
       </Text>
       {change && (
         <View style={dsc.changeRow}>
-          <Icon
-            name={isPositive ? 'trending-up-outline' : 'trending-down-outline'}
-            size={13}
-            color={isPositive ? '#10B981' : '#EF4444'}
-          />
+          <View style={[dsc.changeDot, { backgroundColor: isPositive ? '#10B981' : '#EF4444' }]} />
           <Text style={[dsc.change, { color: isPositive ? '#10B981' : '#EF4444' }]}>
             {change} from last month
           </Text>
@@ -294,25 +220,25 @@ const DashboardStatCard = ({ icon, iconColor, value, label, change, theme, isDar
 
 const dsc = StyleSheet.create({
   card: {
-    padding: 18,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderLeftWidth: 4,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderTopWidth: 3,
   },
   top: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 14,
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
   },
   label: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '600',
     flex: 1,
   },
   iconCircle: {
-    width: 38,
-    height: 38,
+    width: 34,
+    height: 34,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
@@ -326,7 +252,12 @@ const dsc = StyleSheet.create({
   changeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
+  },
+  changeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   change: {
     fontSize: 12,
@@ -497,6 +428,24 @@ const SuperAdminDashboard = () => {
     });
   }, [courses]);
 
+  // Platform insights: course status breakdown + top enrollments
+  const platformInsights = useMemo(() => {
+    const published = courses.filter(c => c.status === 'published').length;
+    const draft = courses.filter(c => c.status !== 'published').length;
+
+    const totalEnrollments = courses.reduce((sum, c) => sum + (c.enrollmentCount || 0), 0);
+    const avgEnrollment = courses.length > 0 ? (totalEnrollments / courses.length).toFixed(1) : '0.0';
+
+    const topCourses = courses
+      .map(course => ({ name: course.name || 'Untitled', count: course.enrollmentCount || 0 }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    const maxEnroll = Math.max(...topCourses.map(c => c.count), 1);
+
+    return { published, draft, totalEnrollments, avgEnrollment, topCourses, maxEnroll };
+  }, [courses]);
+
   const styles = getStyles(theme, isDark, isLargeScreen, isTablet, isMobile);
 
   if (initialLoading) {
@@ -624,75 +573,164 @@ const SuperAdminDashboard = () => {
 
         {/* Charts Section */}
         <View style={styles.chartsSection}>
+
+          {/* User Growth — amber colored card */}
           <Animated.View entering={FadeInDown.duration(400).delay(100)} style={styles.chartCard}>
-            <AppCard
-              style={[
-                styles.chartCardInner,
-                {
-                  borderLeftWidth: 3,
-                  borderLeftColor: '#6366F1',
-                },
-              ]}
-            >
-              <View style={styles.chartHeader}>
-                <View style={styles.chartHeaderLeft}>
-                  <View style={styles.chartIconBadge}>
-                    <Icon name="bar-chart" size={16} color="#6366F1" />
+            <View style={[styles.coloredChartCard, { backgroundColor: '#B45309' }]}>
+              <View style={styles.coloredChartHeader}>
+                <View style={styles.coloredChartHeaderLeft}>
+                  <View style={styles.coloredChartIconBadge}>
+                    <Icon name="bar-chart" size={15} color="#FFFFFF" />
                   </View>
                   <View>
-                    <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
-                      User Growth
+                    <Text style={styles.coloredChartTitle}>User Growth</Text>
+                    <Text style={styles.coloredChartSubtitle}>Registered users · last 6 months</Text>
+                  </View>
+                </View>
+                <View style={styles.coloredChartBadge}>
+                  <Icon name="trending-up" size={12} color="#FFFFFF" />
+                  <Text style={styles.coloredChartBadgeText}>{stats.studentChange}</Text>
+                </View>
+              </View>
+              <BarChart data={userGrowthData} />
+            </View>
+          </Animated.View>
+
+          {/* Course Growth — navy colored card */}
+          <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.chartCard}>
+            <View style={[styles.coloredChartCard, { backgroundColor: '#1E3A5F' }]}>
+              <View style={styles.coloredChartHeader}>
+                <View style={styles.coloredChartHeaderLeft}>
+                  <View style={styles.coloredChartIconBadge}>
+                    <Icon name="book" size={15} color="#FFFFFF" />
+                  </View>
+                  <View>
+                    <Text style={styles.coloredChartTitle}>Course Growth</Text>
+                    <Text style={styles.coloredChartSubtitle}>Cumulative courses · last 6 months</Text>
+                  </View>
+                </View>
+                <View style={styles.coloredChartBadge}>
+                  <Icon name="trending-up" size={12} color="#FFFFFF" />
+                  <Text style={styles.coloredChartBadgeText}>{stats.courseChange}</Text>
+                </View>
+              </View>
+              <HorizontalBarChart data={courseGrowthData} />
+            </View>
+          </Animated.View>
+
+          {/* Platform Insights — neutral card */}
+          <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.chartCard}>
+            <AppCard style={[styles.chartCardInner, { paddingBottom: 20, flex: 1 }]}>
+              <View style={styles.chartHeader}>
+                <View style={styles.chartHeaderLeft}>
+                  <View style={[styles.chartIconBadge, { backgroundColor: '#F59E0B18' }]}>
+                    <Icon name="analytics" size={15} color="#F59E0B" />
+                  </View>
+                  <View>
+                    <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>Platform Insights</Text>
+                    <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>Course status & top enrollments</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Course status breakdown */}
+              <View style={styles.insightSection}>
+                <Text style={[styles.insightLabel, { color: theme.colors.textSecondary }]}>Course Status</Text>
+                <View style={styles.statusSegmentRow}>
+                  <View style={[styles.statusSegment, {
+                    flex: platformInsights.published,
+                    backgroundColor: '#10B981',
+                    borderTopLeftRadius: 6,
+                    borderBottomLeftRadius: 6,
+                  }]} />
+                  <View style={[styles.statusSegment, {
+                    flex: Math.max(platformInsights.draft, 0.01),
+                    backgroundColor: isDark ? '#374151' : '#D1D5DB',
+                    borderTopRightRadius: 6,
+                    borderBottomRightRadius: 6,
+                  }]} />
+                </View>
+                <View style={styles.statusLegendRow}>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+                    <Text style={[styles.legendText, { color: theme.colors.textSecondary }]}>
+                      Published ({platformInsights.published})
                     </Text>
-                    <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
-                      Total registered users over time
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: isDark ? '#374151' : '#D1D5DB' }]} />
+                    <Text style={[styles.legendText, { color: theme.colors.textSecondary }]}>
+                      Draft ({platformInsights.draft})
                     </Text>
                   </View>
                 </View>
-                <Icon name="trending-up" size={20} color="#10B981" />
               </View>
-              <BarChart
-                data={userGrowthData}
-                theme={theme}
-                isDark={isDark}
-                height={isMobile ? 140 : 180}
-              />
+
+              {/* User role metrics */}
+              <View style={[styles.insightMetricsRow, { borderColor: theme.colors.border }]}>
+                <View style={styles.insightMetric}>
+                  <View style={[styles.insightMetricIcon, { backgroundColor: '#6366F118' }]}>
+                    <Icon name="person" size={14} color="#6366F1" />
+                  </View>
+                  <Text style={[styles.insightMetricValue, { color: theme.colors.textPrimary }]}>
+                    {stats.totalAdmins}
+                  </Text>
+                  <Text style={[styles.insightMetricLabel, { color: theme.colors.textSecondary }]}>
+                    Admins
+                  </Text>
+                </View>
+                <View style={[styles.insightMetricDivider, { backgroundColor: theme.colors.border }]} />
+                <View style={styles.insightMetric}>
+                  <View style={[styles.insightMetricIcon, { backgroundColor: '#8B5CF618' }]}>
+                    <Icon name="shield-checkmark" size={14} color="#8B5CF6" />
+                  </View>
+                  <Text style={[styles.insightMetricValue, { color: theme.colors.textPrimary }]}>
+                    {stats.totalExperts}
+                  </Text>
+                  <Text style={[styles.insightMetricLabel, { color: theme.colors.textSecondary }]}>
+                    Experts
+                  </Text>
+                </View>
+                <View style={[styles.insightMetricDivider, { backgroundColor: theme.colors.border }]} />
+                <View style={styles.insightMetric}>
+                  <View style={[styles.insightMetricIcon, { backgroundColor: '#22D3EE18' }]}>
+                    <Icon name="school" size={14} color="#22D3EE" />
+                  </View>
+                  <Text style={[styles.insightMetricValue, { color: theme.colors.textPrimary }]}>
+                    {stats.totalStudents}
+                  </Text>
+                  <Text style={[styles.insightMetricLabel, { color: theme.colors.textSecondary }]}>
+                    Students
+                  </Text>
+                </View>
+              </View>
+
+              {/* Top courses by enrollment */}
+              {platformInsights.topCourses.length > 0 && (
+                <View style={styles.insightSection}>
+                  <Text style={[styles.insightLabel, { color: theme.colors.textSecondary }]}>Top Courses by Enrollment</Text>
+                  {platformInsights.topCourses.map((course, i) => (
+                    <View key={i} style={styles.topCourseRow}>
+                      <Text style={[styles.topCourseRank, { color: theme.colors.textTertiary }]}>#{i + 1}</Text>
+                      <View style={styles.topCourseBarWrap}>
+                        <Text style={[styles.topCourseName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                          {course.name}
+                        </Text>
+                        <View style={[styles.topCourseTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)' }]}>
+                          <View style={[styles.topCourseBar, {
+                            width: `${(course.count / platformInsights.maxEnroll) * 100}%`,
+                            backgroundColor: ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'][i % 5],
+                          }]} />
+                        </View>
+                      </View>
+                      <Text style={[styles.topCourseCount, { color: theme.colors.textSecondary }]}>{course.count}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
             </AppCard>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.chartCard}>
-            <AppCard
-              style={[
-                styles.chartCardInner,
-                {
-                  borderLeftWidth: 3,
-                  borderLeftColor: '#8B5CF6',
-                },
-              ]}
-            >
-              <View style={styles.chartHeader}>
-                <View style={styles.chartHeaderLeft}>
-                  <View style={[styles.chartIconBadge, { backgroundColor: '#8B5CF6' + '18' }]}>
-                    <Icon name="trending-up" size={16} color="#8B5CF6" />
-                  </View>
-                  <View>
-                    <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
-                      Course Growth
-                    </Text>
-                    <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
-                      Total courses on platform
-                    </Text>
-                  </View>
-                </View>
-                <Icon name="trending-up" size={20} color="#10B981" />
-              </View>
-              <LineChart
-                data={courseGrowthData}
-                theme={theme}
-                isDark={isDark}
-                height={isMobile ? 140 : 180}
-              />
-            </AppCard>
-          </Animated.View>
         </View>
 
         {/* Admins Table */}
@@ -1067,12 +1105,60 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     // Charts Section
     chartsSection: {
       flexDirection: isLargeScreen ? 'row' : 'column',
+      flexWrap: isLargeScreen ? 'wrap' : 'nowrap',
       paddingHorizontal: isMobile ? 16 : 24,
       gap: 16,
       marginBottom: 24,
     },
-    chartCard: { flex: 1, minWidth: isLargeScreen ? 360 : undefined },
+    chartCard: {
+      flex: 1,
+      minWidth: isLargeScreen ? 280 : isTablet ? '47%' : '100%',
+      alignSelf: 'stretch',
+    },
     chartCardInner: { padding: isMobile ? 16 : 20 },
+
+    // Colored chart card (amber/navy backgrounds)
+    coloredChartCard: {
+      flex: 1,
+      flexDirection: 'column',
+      borderRadius: 16,
+      padding: isMobile ? 16 : 20,
+      overflow: 'hidden',
+    },
+    coloredChartHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 18,
+    },
+    coloredChartHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      flex: 1,
+    },
+    coloredChartIconBadge: {
+      width: 30,
+      height: 30,
+      borderRadius: 8,
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    coloredChartTitle: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+    coloredChartSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+    coloredChartBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: 'rgba(255,255,255,0.18)',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 20,
+    },
+    coloredChartBadgeText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
+
+    // Neutral chart card header
     chartHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -1089,12 +1175,59 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
       width: 32,
       height: 32,
       borderRadius: 8,
-      backgroundColor: '#6366F1' + '18',
+      backgroundColor: '#6366F118',
       justifyContent: 'center',
       alignItems: 'center',
     },
-    chartTitle: { fontSize: 16, fontWeight: '600' },
-    chartSubtitle: { fontSize: 13, marginTop: 4 },
+    chartTitle: { fontSize: 15, fontWeight: '700' },
+    chartSubtitle: { fontSize: 12, marginTop: 3 },
+
+    // Platform insights styles
+    insightSection: { marginTop: 16 },
+    insightLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 8,
+    },
+    statusSegmentRow: {
+      flexDirection: 'row',
+      height: 10,
+      borderRadius: 6,
+      overflow: 'hidden',
+      marginBottom: 8,
+    },
+    statusSegment: { height: '100%' },
+    statusLegendRow: { flexDirection: 'row', gap: 16 },
+    legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+    legendDot: { width: 8, height: 8, borderRadius: 4 },
+    legendText: { fontSize: 12 },
+    insightMetricsRow: {
+      flexDirection: 'row',
+      marginTop: 16,
+      paddingTop: 16,
+      borderTopWidth: 1,
+    },
+    insightMetric: { flex: 1, alignItems: 'center', gap: 4 },
+    insightMetricIcon: {
+      width: 28,
+      height: 28,
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 2,
+    },
+    insightMetricDivider: { width: 1, height: '100%' },
+    insightMetricValue: { fontSize: 20, fontWeight: '800' },
+    insightMetricLabel: { fontSize: 11, marginTop: 2, textAlign: 'center' },
+    topCourseRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+    topCourseRank: { fontSize: 11, fontWeight: '700', width: 22 },
+    topCourseBarWrap: { flex: 1 },
+    topCourseName: { fontSize: 12, fontWeight: '500', marginBottom: 4 },
+    topCourseTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
+    topCourseBar: { height: '100%', borderRadius: 3, minWidth: 4 },
+    topCourseCount: { fontSize: 12, fontWeight: '600', width: 24, textAlign: 'right' },
 
     // Manage button
     manageButton: {
