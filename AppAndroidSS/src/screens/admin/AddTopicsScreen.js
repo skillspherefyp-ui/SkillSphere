@@ -77,12 +77,9 @@ const AddTopicsScreen = () => {
   const [selectedTopicMaterials, setSelectedTopicMaterials] = useState(null);
   const [topicToDelete, setTopicToDelete] = useState(null);
   const [editingTopic, setEditingTopic] = useState(null);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [showGenerationReportModal, setShowGenerationReportModal] = useState(false);
   const [generationReport, setGenerationReport] = useState([]);
   const [lectureMetaByTopic, setLectureMetaByTopic] = useState({});
-  const [replaceExistingGeneration, setReplaceExistingGeneration] = useState(false);
-  const [generationStatus, setGenerationStatus] = useState(null);
 
   const topics = course?.topics || [];
 
@@ -93,7 +90,15 @@ const AddTopicsScreen = () => {
       if (!courseId || isManualMode) return;
 
       try {
-        await refreshLectureGenerationData(active);
+        const response = await aiTutorAPI.listLectures(courseId);
+        if (!active || !response.success) return;
+
+        setLectureMetaByTopic(
+          (response.lectures || []).reduce((acc, lecture) => {
+            acc[lecture.topicId] = lecture;
+            return acc;
+          }, {})
+        );
       } catch (_) {
       }
     };
@@ -103,14 +108,6 @@ const AddTopicsScreen = () => {
       active = false;
     };
   }, [courseId, isManualMode, topics.length]);
-
-  useEffect(() => {
-    if (!courseId || isManualMode || !generationStatus?.isRunning) return undefined;
-    const interval = setInterval(() => {
-      refreshLectureGenerationData(true);
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [courseId, isManualMode, generationStatus?.isRunning]);
 
   // Sidebar navigation items based on user role
   const sidebarItems = isSuperAdmin ? [
@@ -137,73 +134,6 @@ const AddTopicsScreen = () => {
     const completedTopics = topics.filter(t => t.status === 'completed').length;
     return { totalTopics, totalMaterials, completedTopics };
   }, [topics]);
-
-  const generatedLectureCount = useMemo(() => (
-    Object.values(lectureMetaByTopic || {}).filter((lecture) => (
-      lecture && ['ready', 'processing', 'failed'].includes(`${lecture.status || ''}`.trim())
-    )).length
-  ), [lectureMetaByTopic]);
-
-  const formatExpectedTime = (targetIso, waitMs) => {
-    if (!targetIso && !waitMs) return null;
-    const waitMinutes = Math.max(1, Math.round((Number(waitMs) || 0) / 60000));
-    const targetLabel = targetIso ? new Date(targetIso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null;
-    return targetLabel ? `Expected by ${targetLabel} (~${waitMinutes} min)` : `Expected in ~${waitMinutes} min`;
-  };
-
-  const buildGenerationReport = (statusResponse) => (
-    (statusResponse?.topics || []).map((item) => ({
-      ...item,
-      displayStatus: item.status === 'ready'
-        ? item.generationModel === 'fallback-template'
-          ? 'fallback used'
-          : 'ready'
-        : item.status,
-      displayMessage: item.errorMessage
-        || (item.status === 'ready'
-          ? item.generationModel === 'fallback-template'
-            ? 'Fallback lecture package stored successfully.'
-            : 'Lecture package generated successfully.'
-          : item.status === 'processing'
-            ? 'Generation is still running for this topic.'
-            : item.status === 'pending'
-              ? 'This topic has not started generation yet.'
-              : 'Generation failed for this topic.'),
-      expectedTimeLabel: formatExpectedTime(item.expectedReadyAt, item.expectedWaitMs),
-    }))
-  );
-
-  const refreshLectureGenerationData = async (active = true) => {
-    if (!courseId || isManualMode) return null;
-    const [statusResponse, lectureResponse] = await Promise.all([
-      aiTutorAPI.getGenerationStatus(courseId).catch(() => null),
-      aiTutorAPI.listLectures(courseId).catch(() => null),
-    ]);
-
-    if (!active) return statusResponse;
-
-    const statusByTopic = (statusResponse?.topics || []).reduce((acc, item) => {
-      acc[item.topicId] = item;
-      return acc;
-    }, {});
-    const lectureByTopic = (lectureResponse?.lectures || []).reduce((acc, lecture) => {
-      acc[lecture.topicId] = lecture;
-      return acc;
-    }, {});
-
-    setGenerationStatus(statusResponse?.success ? statusResponse : null);
-    setGenerationReport(buildGenerationReport(statusResponse));
-    setLectureMetaByTopic(
-      topics.reduce((acc, topic) => {
-        acc[topic.id] = {
-          ...(lectureByTopic[topic.id] || {}),
-          ...(statusByTopic[topic.id] || {}),
-        };
-        return acc;
-      }, {})
-    );
-    return statusResponse;
-  };
 
   // Get color for topic based on index
   const getTopicColor = (index) => {
@@ -451,91 +381,15 @@ const AddTopicsScreen = () => {
       });
       return;
     }
-    setReplaceExistingGeneration(generatedLectureCount > 0);
     setShowConfirmDialog(true);
   };
 
-  const confirmSubmitForAI = async () => {
+  const confirmSubmitForAI = () => {
     setShowConfirmDialog(false);
-    setIsGenerating(true);
-
-    try {
-      const response = await aiTutorAPI.generateCoursePackage(courseId, {
-        replaceExisting: replaceExistingGeneration,
-      });
-      if (!response.success) {
-        throw new Error(response.error || 'AI generation failed');
-      }
-
-      const startedMessage = response.alreadyRunning
-        ? 'AI generation is already running for this course.'
-        : 'AI generation started. We will keep tracking progress for you.';
-
-      Toast.show({
-        type: 'info',
-        text1: 'Generation Started',
-        text2: startedMessage,
-      });
-
-      let statusResponse = null;
-      for (let attempt = 0; attempt < 48; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-        statusResponse = await refreshLectureGenerationData(true);
-
-        if (statusResponse?.isCompleted && !statusResponse?.isRunning) {
-          break;
-        }
-      }
-
-      await fetchCourses();
-      await refreshLectureGenerationData(true);
-
-      if (!statusResponse) {
-        throw new Error('AI generation started, but progress could not be checked automatically. Please refresh in a moment.');
-      }
-
-      const reportItems = buildGenerationReport(statusResponse);
-      setGenerationReport(reportItems);
-      setShowGenerationReportModal(true);
-
-      const failed = (statusResponse.topics || []).filter((item) => item.status === 'failed');
-      const processingCount = (statusResponse.topics || []).filter((item) => item.status === 'processing' || item.status === 'pending').length;
-      const fallbackCount = (statusResponse.topics || []).filter((item) => item.status === 'ready' && item.generationModel === 'fallback-template').length;
-
-      Toast.show({
-        type: failed.length > 0 ? 'error' : processingCount > 0 || fallbackCount > 0 ? 'info' : 'success',
-        text1: failed.length > 0
-          ? 'Generation Partial'
-          : processingCount > 0
-            ? 'Generation Still Running'
-            : fallbackCount > 0
-              ? 'Fallback Generation Used'
-              : 'AI Generation Complete',
-        text2: failed.length > 0
-          ? `${statusResponse.summary?.ready || 0} ready, ${fallbackCount} fallback, ${failed.length} failed.`
-          : processingCount > 0
-            ? `${statusResponse.summary?.ready || 0} ready, ${processingCount} still processing. You can reopen this report anytime.`
-          : fallbackCount > 0
-            ? `${fallbackCount} topics used fallback packages. Open the report for exact details.`
-            : `${statusResponse.summary?.ready || 0} topic packages stored successfully.`,
-      });
-    } catch (error) {
-      setGenerationReport([{
-        topicId: 'request',
-        topicTitle: course?.name || 'Course',
-        displayStatus: 'failed',
-        displayMessage: error.message || 'Unable to generate AI lecture content',
-      }]);
-      setShowGenerationReportModal(true);
-      Toast.show({
-        type: 'error',
-        text1: 'Generation Failed',
-        text2: error.message || 'Unable to generate AI lecture content',
-      });
-    } finally {
-      setIsGenerating(false);
-      setReplaceExistingGeneration(false);
-    }
+    navigation.navigate('GenerationLogs', {
+      courseId,
+      courseTitle: course?.name || 'Course',
+    });
   };
 
   const styles = getStyles(theme, isDark, isLargeScreen, isTablet, isMobile, isManualMode);
@@ -544,7 +398,6 @@ const AddTopicsScreen = () => {
     const color = getTopicColor(index);
     const materialsCount = topic.materials?.length || 0;
     const lectureMeta = lectureMetaByTopic[topic.id];
-    const expectedTimeLabel = formatExpectedTime(lectureMeta?.expectedReadyAt, lectureMeta?.expectedWaitMs);
 
     return (
       <Animated.View
@@ -604,44 +457,11 @@ const AddTopicsScreen = () => {
           </Text>
 
           {!isManualMode && lectureMeta?.status === 'ready' && (
-            <>
-              <View style={[styles.viewMaterialsBtn, { backgroundColor: color + '10', borderColor: color + '30', marginBottom: 10 }]}>
-                <Icon name="sparkles-outline" size={16} color={color} />
-                <Text style={[styles.viewMaterialsText, { color }]}>
-                  {`${lectureMeta.estimatedDurationMinutes || 0} min AI lecture`}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.viewMaterialsBtn, { backgroundColor: theme.colors.primary + '10', borderColor: theme.colors.primary + '30', marginTop: 0 }]}
-                onPress={() => navigation.navigate('AILectureReview', { courseId, topicId: topic.id })}
-              >
-                <Icon name="eye-outline" size={16} color={theme.colors.primary} />
-                <Text style={[styles.viewMaterialsText, { color: theme.colors.primary }]}>
-                  View AI Lecture
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {!isManualMode && lectureMeta?.status && (
-            <View style={styles.lectureMetaStack}>
-              <View style={[styles.viewMaterialsBtn, { backgroundColor: color + '10', borderColor: color + '30', marginBottom: 8 }]}>
-                <Icon name="hardware-chip-outline" size={16} color={color} />
-                <Text style={[styles.viewMaterialsText, { color }]}>
-                  {lectureMeta.status === 'ready'
-                    ? 'AI lecture ready'
-                    : lectureMeta.status === 'processing'
-                      ? 'AI lecture generating'
-                      : lectureMeta.status === 'failed'
-                        ? 'AI generation failed'
-                        : 'Waiting for AI generation'}
-                </Text>
-              </View>
-              {expectedTimeLabel ? (
-                <Text style={[styles.lectureEtaText, { color: theme.colors.textSecondary }]}>
-                  {expectedTimeLabel}
-                </Text>
-              ) : null}
+            <View style={[styles.viewMaterialsBtn, { backgroundColor: color + '10', borderColor: color + '30', marginBottom: 10 }]}>
+              <Icon name="sparkles-outline" size={16} color={color} />
+              <Text style={[styles.viewMaterialsText, { color }]}>
+                {`${lectureMeta.estimatedDurationMinutes || 0} min AI lecture`}
+              </Text>
             </View>
           )}
 
@@ -747,33 +567,6 @@ const AddTopicsScreen = () => {
           </Animated.View>
         )}
 
-        {/* Mode Toggle */}
-        <View style={{ flexDirection: 'row', backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(26,26,46,0.06)', borderRadius: 12, padding: 4, marginBottom: 20 }}>
-          <TouchableOpacity
-            style={{
-              flex: 1,
-              paddingVertical: 10,
-              borderRadius: 10,
-              alignItems: 'center',
-              backgroundColor: isManualMode ? ORANGE : 'transparent',
-            }}
-            onPress={() => {}}
-          >
-            <Text style={{ color: isManualMode ? '#FFFFFF' : theme.colors.textSecondary, fontWeight: '700', fontSize: 13 }}>Manual</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={{
-              flex: 1,
-              paddingVertical: 10,
-              borderRadius: 10,
-              alignItems: 'center',
-              backgroundColor: !isManualMode ? '#6366F1' : 'transparent',
-            }}
-            onPress={() => {}}
-          >
-            <Text style={{ color: !isManualMode ? '#FFFFFF' : theme.colors.textSecondary, fontWeight: '700', fontSize: 13 }}>AI Generate</Text>
-          </TouchableOpacity>
-        </View>
 
         {/* Stats Section */}
         <View style={styles.statsSection}>
@@ -853,43 +646,13 @@ const AddTopicsScreen = () => {
                 leftIcon="checkmark-done"
               />
             ) : (
-              <View style={styles.aiActionsStack}>
-                <AppButton
-                  title={isGenerating ? 'Generating AI Package...' : 'Generate Content with AI'}
-                  onPress={handleSubmitForAI}
-                  variant="primary"
-                  style={styles.aiButton}
-                  leftIcon="sparkles"
-                  disabled={isGenerating}
-                  loading={isGenerating}
-                />
-                <View style={styles.secondaryAiActions}>
-                  <AppButton
-                    title="Refresh AI Status"
-                    onPress={() => refreshLectureGenerationData(true)}
-                    variant="outline"
-                    style={styles.secondaryAiButton}
-                    leftIcon="refresh"
-                  />
-                  <AppButton
-                    title="Open Last Report"
-                    onPress={() => setShowGenerationReportModal(true)}
-                    variant="ghost"
-                    style={styles.secondaryAiButton}
-                    leftIcon="document-text-outline"
-                    disabled={!generationReport.length && !generationStatus?.topics?.length}
-                  />
-                </View>
-                {!isManualMode && generationStatus ? (
-                  <Text style={[styles.generationSummaryText, { color: theme.colors.textSecondary }]}>
-                    {generationStatus.isRunning
-                      ? `AI generation is running. ${generationStatus.summary?.ready || 0} ready, ${generationStatus.summary?.processing || 0} processing, ${generationStatus.summary?.pending || 0} pending. ${formatExpectedTime(generationStatus.estimatedCompletionAt, generationStatus.averageTopicDurationMs) || ''}`.trim()
-                      : generationStatus.isCompleted
-                        ? `AI generation completed. ${generationStatus.summary?.ready || 0} topics are ready.`
-                        : `AI generation idle. ${generatedLectureCount} topic lectures currently stored.`}
-                  </Text>
-                ) : null}
-              </View>
+              <AppButton
+                title="Generate Content with AI"
+                onPress={handleSubmitForAI}
+                variant="primary"
+                style={styles.aiButton}
+                leftIcon="sparkles"
+              />
             )}
           </Animated.View>
         )}
@@ -1303,11 +1066,6 @@ const AddTopicsScreen = () => {
                     <Text style={[styles.reportMessage, { color: theme.colors.textSecondary }]}>
                       {item.displayMessage}
                     </Text>
-                    {item.expectedTimeLabel ? (
-                      <Text style={[styles.reportEta, { color: theme.colors.textSecondary }]}>
-                        {item.expectedTimeLabel}
-                      </Text>
-                    ) : null}
                   </View>
                 ))}
               </View>
@@ -1342,16 +1100,11 @@ const AddTopicsScreen = () => {
       <ConfirmDialog
         visible={showConfirmDialog}
         title="Generate with AI"
-        message={replaceExistingGeneration
-          ? `This course already has ${generatedLectureCount} generated AI lecture${generatedLectureCount === 1 ? '' : 's'}. Do you want to remove the existing generated lectures from the database and generate a fresh AI lecture package?`
-          : 'This will trigger AI content generation for all topics. Continue?'}
-        confirmText={replaceExistingGeneration ? 'Replace & Generate' : 'Generate'}
+        message="This will trigger AI content generation for all topics. Continue?"
+        confirmText="Generate"
         confirmVariant="primary"
         onConfirm={confirmSubmitForAI}
-        onCancel={() => {
-          setShowConfirmDialog(false);
-          setReplaceExistingGeneration(false);
-        }}
+        onCancel={() => setShowConfirmDialog(false)}
       />
     </MainLayout>
   );
@@ -1523,14 +1276,6 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile, isManualMod
     statusContainer: {
       marginBottom: 12,
     },
-    lectureMetaStack: {
-      marginBottom: 8,
-    },
-    lectureEtaText: {
-      fontSize: 12,
-      lineHeight: 18,
-      marginTop: 4,
-    },
     viewMaterialsBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1558,22 +1303,6 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile, isManualMod
     // AI Button
     aiButton: {
       marginTop: 24,
-    },
-    aiActionsStack: {
-      marginTop: 24,
-      gap: 12,
-    },
-    secondaryAiActions: {
-      flexDirection: isMobile ? 'column' : 'row',
-      gap: 10,
-    },
-    secondaryAiButton: {
-      flex: isMobile ? 0 : 1,
-    },
-    generationSummaryText: {
-      fontSize: 12,
-      lineHeight: 18,
-      paddingHorizontal: 4,
     },
 
     // Modal Styles
@@ -1652,11 +1381,6 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile, isManualMod
     reportMessage: {
       fontSize: 13,
       lineHeight: 20,
-    },
-    reportEta: {
-      fontSize: 12,
-      lineHeight: 18,
-      fontWeight: '600',
     },
 
     // Materials Section in Add/Edit Modal
