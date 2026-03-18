@@ -439,7 +439,7 @@ const SuperAdminDashboard = () => {
     const topCourses = courses
       .map(course => ({ name: course.name || 'Untitled', count: course.enrollmentCount || 0 }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
+      .slice(0, 3);
 
     const maxEnroll = Math.max(...topCourses.map(c => c.count), 1);
 
