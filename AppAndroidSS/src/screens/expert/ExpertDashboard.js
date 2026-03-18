@@ -53,77 +53,87 @@ const calculatePercentageChange = (current, previous) => {
 };
 
 // ============================================
-// BAR CHART COMPONENT
+// BAR CHART COMPONENT (EduView pill-track style)
 // ============================================
 
-const BarChart = ({ data, theme, isDark, height = 180 }) => {
+const BarChart = ({ data }) => {
   const maxValue = Math.max(...data.map(d => d.value), 1);
+  const maxIndex = data.reduce((best, d, i, arr) => (d.value >= arr[best].value ? i : best), 0);
 
   return (
-    <View style={barChartStyles.container}>
-      <View style={[barChartStyles.yAxis, { height }]}>
-        {[100, 75, 50, 25, 0].map((val, i) => (
-          <Text key={i} style={[barChartStyles.yLabel, { color: theme.colors.textTertiary }]}>
-            {Math.round((maxValue * val) / 100)}
-          </Text>
-        ))}
-      </View>
-      <View style={barChartStyles.chartArea}>
-        <View
-          style={[
-            barChartStyles.barsContainer,
-            {
-              height,
-              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(26,26,46,0.1)',
-            },
-          ]}
-        >
-          {data.map((item, index) => {
-            const barHeight = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
-            return (
-              <View key={index} style={barChartStyles.barWrapper}>
-                <View
-                  style={[
-                    barChartStyles.bar,
-                    {
-                      height: `${Math.max(barHeight, 2)}%`,
-                      backgroundColor: item.color || '#10B981',
-                    },
-                  ]}
-                />
+    <View style={{ flex: 1 }}>
+      <View style={[barChartStyles.barsContainer, { flex: 1 }]}>
+        {data.map((item, index) => {
+          const barHeightPct = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
+          const isActive = index === maxIndex;
+          return (
+            <View key={index} style={barChartStyles.barWrapper}>
+              <View style={barChartStyles.barTrack} />
+              <View style={[barChartStyles.bar, {
+                height: `${Math.max(barHeightPct, 3)}%`,
+                backgroundColor: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.4)',
+              }]}>
+                {item.value > 0 && <Text style={barChartStyles.barValue}>{item.value}</Text>}
               </View>
-            );
-          })}
-        </View>
-        <View style={barChartStyles.xAxis}>
-          {data.map((item, index) => (
-            <Text key={index} style={[barChartStyles.xLabel, { color: theme.colors.textTertiary }]}>
-              {item.label}
-            </Text>
-          ))}
-        </View>
+            </View>
+          );
+        })}
+      </View>
+      <View style={barChartStyles.xAxis}>
+        {data.map((item, index) => (
+          <Text key={index} style={barChartStyles.xLabel}>{item.label}</Text>
+        ))}
       </View>
     </View>
   );
 };
 
 const barChartStyles = StyleSheet.create({
-  container: { flexDirection: 'row', paddingTop: 10 },
-  yAxis: { width: 40, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 8 },
-  yLabel: { fontSize: 11 },
-  chartArea: { flex: 1 },
   barsContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-around',
-    borderLeftWidth: 1,
-    borderBottomWidth: 1,
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
   },
-  barWrapper: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: '100%', paddingHorizontal: 4 },
-  bar: { width: '70%', borderTopLeftRadius: 4, borderTopRightRadius: 4, minHeight: 4 },
-  xAxis: { flexDirection: 'row', justifyContent: 'space-around', paddingTop: 8, paddingHorizontal: 8 },
-  xLabel: { fontSize: 11, flex: 1, textAlign: 'center' },
+  barWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    height: '100%',
+    position: 'relative',
+    paddingHorizontal: 3,
+  },
+  barTrack: {
+    position: 'absolute',
+    bottom: 0,
+    width: 28,
+    height: '100%',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 14,
+  },
+  bar: {
+    width: 28,
+    borderRadius: 14,
+    minHeight: 4,
+    alignItems: 'center',
+    paddingTop: 5,
+    justifyContent: 'flex-start',
+  },
+  barValue: { color: '#fff', fontSize: 9, fontWeight: '700' },
+  xAxis: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 10,
+    paddingHorizontal: 4,
+  },
+  xLabel: {
+    fontSize: 11,
+    flex: 1,
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.75)',
+    fontWeight: '600',
+  },
 });
 
 // ============================================
@@ -138,29 +148,27 @@ const DashboardStatCard = ({ icon, iconColor, value, label, change, theme, isDar
       style={[
         dsc.card,
         {
-          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF',
-          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26,26,46,0.07)',
-          borderLeftColor: iconColor,
+          backgroundColor: isDark ? theme.colors.card : '#FFFFFF',
+          borderColor: isDark ? theme.colors.border : '#EEEEEE',
+          borderTopColor: iconColor,
         },
         style,
       ]}
     >
       <View style={dsc.top}>
-        <Text style={[dsc.label, { color: theme.colors.textSecondary }]}>{label}</Text>
         <View style={[dsc.iconCircle, { backgroundColor: iconColor + '18' }]}>
-          <Icon name={icon} size={18} color={iconColor} />
+          <Icon name={icon} size={17} color={iconColor} />
         </View>
+        <Text style={[dsc.label, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+          {label}
+        </Text>
       </View>
-      <Text style={[dsc.value, { color: theme.colors.textPrimary }]}>
+      <Text style={[dsc.value, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
         {typeof value === 'number' ? value.toLocaleString() : value}
       </Text>
       {change && (
         <View style={dsc.changeRow}>
-          <Icon
-            name={isPositive ? 'trending-up-outline' : 'trending-down-outline'}
-            size={13}
-            color={isPositive ? '#10B981' : '#EF4444'}
-          />
+          <View style={[dsc.changeDot, { backgroundColor: isPositive ? '#10B981' : '#EF4444' }]} />
           <Text style={[dsc.change, { color: isPositive ? '#10B981' : '#EF4444' }]}>
             {change} from last month
           </Text>
@@ -172,25 +180,25 @@ const DashboardStatCard = ({ icon, iconColor, value, label, change, theme, isDar
 
 const dsc = StyleSheet.create({
   card: {
-    padding: 18,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderLeftWidth: 4,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderTopWidth: 3,
   },
   top: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 14,
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
   },
   label: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '600',
     flex: 1,
   },
   iconCircle: {
-    width: 38,
-    height: 38,
+    width: 34,
+    height: 34,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
@@ -204,7 +212,12 @@ const dsc = StyleSheet.create({
   changeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
+  },
+  changeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   change: {
     fontSize: 12,
@@ -469,38 +482,24 @@ const ExpertDashboard = () => {
         <View style={styles.chartsSection}>
           {/* Review Activity Chart */}
           <Animated.View entering={FadeInDown.duration(400).delay(100)} style={styles.chartCard}>
-            <AppCard
-              style={[
-                styles.chartCardInner,
-                {
-                  borderLeftWidth: 3,
-                  borderLeftColor: '#10B981',
-                },
-              ]}
-            >
-              <View style={styles.chartHeader}>
-                <View style={styles.chartHeaderLeft}>
-                  <View style={[styles.chartIconBadge, { backgroundColor: '#10B981' + '18' }]}>
-                    <Icon name="bar-chart" size={16} color="#10B981" />
+            <View style={[styles.coloredChartCard, { backgroundColor: '#065F46' }]}>
+              <View style={styles.coloredChartHeader}>
+                <View style={styles.coloredChartHeaderLeft}>
+                  <View style={styles.coloredChartIconBadge}>
+                    <Icon name="bar-chart" size={15} color="#FFFFFF" />
                   </View>
                   <View>
-                    <Text style={[styles.chartTitle, { color: theme.colors.textPrimary }]}>
-                      Review Activity
-                    </Text>
-                    <Text style={[styles.chartSubtitle, { color: theme.colors.textSecondary }]}>
-                      Your monthly review contributions
-                    </Text>
+                    <Text style={styles.coloredChartTitle}>Review Activity</Text>
+                    <Text style={styles.coloredChartSubtitle}>Your monthly review contributions</Text>
                   </View>
                 </View>
-                <Icon name="trending-up" size={20} color="#10B981" />
+                <View style={styles.coloredChartBadge}>
+                  <Icon name="trending-up" size={12} color="#FFFFFF" />
+                  <Text style={styles.coloredChartBadgeText}>{stats.reviewedChange}</Text>
+                </View>
               </View>
-              <BarChart
-                data={reviewActivityData}
-                theme={theme}
-                isDark={isDark}
-                height={isMobile ? 140 : 180}
-              />
-            </AppCard>
+              <BarChart data={reviewActivityData} />
+            </View>
           </Animated.View>
 
           {/* Quick Actions Card */}
@@ -854,10 +853,54 @@ const getStyles = (theme, isDark, isLargeScreen, isTablet, isMobile) =>
     chartCard: {
       flex: 1,
       minWidth: isLargeScreen ? 400 : undefined,
+      alignSelf: 'stretch',
     },
     chartCardInner: {
       padding: isMobile ? 16 : 20,
     },
+
+    // Colored chart card
+    coloredChartCard: {
+      flex: 1,
+      flexDirection: 'column',
+      borderRadius: 16,
+      padding: isMobile ? 16 : 20,
+      overflow: 'hidden',
+    },
+    coloredChartHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 18,
+    },
+    coloredChartHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      flex: 1,
+    },
+    coloredChartIconBadge: {
+      width: 30,
+      height: 30,
+      borderRadius: 8,
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    coloredChartTitle: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+    coloredChartSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+    coloredChartBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: 'rgba(255,255,255,0.18)',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 20,
+    },
+    coloredChartBadgeText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
+
+    // Neutral chart card header
     chartHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
