@@ -1,11 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
-  KeyboardAvoidingView,
   Platform,
   useWindowDimensions,
   TextInput,
@@ -18,15 +16,26 @@ import Toast from 'react-native-toast-message';
 import MainLayout from '../../components/ui/MainLayout';
 import MarkdownText from '../../components/ui/MarkdownText';
 import { useTheme } from '../../context/ThemeContext';
-import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { aiChatAPI } from '../../services/apiClient';
 
+const HEADER_HEIGHT = 64;
+
+const SUGGESTED_PROMPTS = [
+  { icon: 'book-outline', text: 'Explain a concept from my course' },
+  { icon: 'code-slash-outline', text: 'Help me debug my code' },
+  { icon: 'document-text-outline', text: 'Summarize research paper' },
+  { icon: 'bulb-outline', text: 'Quiz me on a topic' },
+];
+
 const AIChatScreen = () => {
   const { theme, isDark } = useTheme();
-  const { user, logout } = useAuth();
   const navigation = useNavigation();
   const { width, height } = useWindowDimensions();
+
+  const isWeb = Platform.OS === 'web';
+  const isPhone = width < 768;
+  const isLarge = width >= 1024;
 
   const sidebarItems = [
     { label: 'Dashboard', icon: 'grid-outline', iconActive: 'grid', route: 'Dashboard' },
@@ -36,9 +45,7 @@ const AIChatScreen = () => {
     { label: 'Certificates', icon: 'ribbon-outline', iconActive: 'ribbon', route: 'Certificates' },
     { label: 'Reminders', icon: 'checkmark-circle-outline', iconActive: 'checkmark-circle', route: 'Todo' },
   ];
-  const handleNavigate = (route) => navigation.navigate(route);
 
-  // Chat state
   const [sessions, setSessions] = useState([]);
   const [currentSession, setCurrentSession] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -46,19 +53,22 @@ const AIChatScreen = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sendingMessage, setSendingMessage] = useState(false);
-  const [showChatSidebar, setShowChatSidebar] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(isLarge);
   const [isRecording, setIsRecording] = useState(false);
 
-  const flatListRef = useRef(null);
+  // Responsive sidebar width
+  const sidebarWidth = isLarge ? 260 : isPhone ? width * 0.75 : 220;
+
+  const scrollViewRef = useRef(null);
   const recognitionRef = useRef(null);
-  const isWeb = Platform.OS === 'web';
 
-  // Responsive breakpoints
-  const isPhone = width < 768;
-  const isTablet = width >= 768 && width < 1024;
-  const isLargeScreen = width >= 1024;
+  // Scroll to bottom whenever messages change (after React commits the update)
+  useEffect(() => {
+    if (messages.length > 0) {
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  }, [messages.length, isTyping]);
 
-  // Fetch chat sessions on mount
   useEffect(() => {
     fetchSessions();
   }, []);
@@ -69,20 +79,16 @@ const AIChatScreen = () => {
       const response = await aiChatAPI.getSessions();
       if (response.success) {
         setSessions(response.sessions || []);
-        // If there are sessions, load the most recent one
         if (response.sessions && response.sessions.length > 0) {
           loadSession(response.sessions[0].id);
         } else {
-          // Create a new session if none exist
           handleNewChat();
         }
       }
     } catch (error) {
-      console.error('Error fetching sessions:', error);
-      // If error, show default welcome message
       setMessages([{
         id: '1',
-        content: "Hello! I'm SkillSphere AI, your academic assistant. I can help with studying, coding, writing, research, course questions, and general learning support. I can also format comparisons and settings in tables when useful.",
+        content: "Hello! I'm SkillSphere AI, your academic assistant. Ask me anything about your courses, coding, writing, or research.",
         sender: 'ai',
         timestamp: new Date(),
       }]);
@@ -96,20 +102,15 @@ const AIChatScreen = () => {
       const response = await aiChatAPI.getSession(sessionId);
       if (response.success && response.session) {
         setCurrentSession(response.session);
-        const formattedMessages = (response.session.messages || []).map(msg => ({
+        const formatted = (response.session.messages || []).map(msg => ({
           ...msg,
           timestamp: new Date(msg.timestamp || msg.createdAt),
         }));
-        setMessages(formattedMessages);
-        setShowChatSidebar(false);
+        setMessages(formatted);
+        if (!isLarge) setSidebarOpen(false);
       }
     } catch (error) {
-      console.error('Error loading session:', error);
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'Failed to load chat session',
-      });
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to load chat session' });
     }
   };
 
@@ -118,21 +119,18 @@ const AIChatScreen = () => {
       const response = await aiChatAPI.createSession({ title: 'New Chat' });
       if (response.success && response.session) {
         setCurrentSession(response.session);
-        const formattedMessages = (response.session.messages || []).map(msg => ({
+        const formatted = (response.session.messages || []).map(msg => ({
           ...msg,
           timestamp: new Date(msg.timestamp || msg.createdAt),
         }));
-        setMessages(formattedMessages);
-        // Add the new session to the list
+        setMessages(formatted);
         setSessions(prev => [response.session, ...prev]);
-        setShowChatSidebar(false);
+        if (!isLarge) setSidebarOpen(false);
       }
     } catch (error) {
-      console.error('Error creating session:', error);
-      // Fallback to local message
       setMessages([{
         id: '1',
-        content: "Hello! I'm SkillSphere AI, your academic assistant. I can help with studying, coding, writing, research, course questions, and general learning support. I can also format comparisons and settings in tables when useful.",
+        content: "Hello! I'm SkillSphere AI, your academic assistant. Ask me anything!",
         sender: 'ai',
         timestamp: new Date(),
       }]);
@@ -143,751 +141,713 @@ const AIChatScreen = () => {
     try {
       const response = await aiChatAPI.deleteSession(sessionId);
       if (response.success) {
-        setSessions(prev => prev.filter(s => s.id !== sessionId));
+        const remaining = sessions.filter(s => s.id !== sessionId);
+        setSessions(remaining);
         if (currentSession?.id === sessionId) {
-          // Load another session or create new
-          const remaining = sessions.filter(s => s.id !== sessionId);
-          if (remaining.length > 0) {
-            loadSession(remaining[0].id);
-          } else {
-            handleNewChat();
-          }
+          if (remaining.length > 0) loadSession(remaining[0].id);
+          else handleNewChat();
         }
-        Toast.show({
-          type: 'success',
-          text1: 'Deleted',
-          text2: 'Chat deleted successfully',
-        });
+        Toast.show({ type: 'success', text1: 'Deleted', text2: 'Chat deleted' });
       }
-    } catch (error) {
-      console.error('Error deleting session:', error);
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'Failed to delete chat',
-      });
+    } catch {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to delete chat' });
     }
   };
 
-  const handleSend = async () => {
-    if (!inputText.trim() || sendingMessage) return;
-
-    const userMessageText = inputText.trim();
+  const handleSend = async (text) => {
+    const messageText = (text || inputText).trim();
+    if (!messageText || sendingMessage) return;
     setInputText('');
     setSendingMessage(true);
     setIsTyping(true);
 
-    // Add user message immediately for better UX
-    const tempUserMessage = {
+    const tempMsg = {
       id: `temp-${Date.now()}`,
-      content: userMessageText,
+      content: messageText,
       sender: 'user',
       timestamp: new Date(),
     };
-    setMessages(prev => [...prev, tempUserMessage]);
+    setMessages(prev => [...prev, tempMsg]);
+
+    const scrollToBottom = () =>
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 200);
+
+    const addErrorMsg = (text) => {
+      setMessages(prev => [
+        ...prev.filter(m => m.id !== tempMsg.id),
+        { id: `err-${Date.now()}`, content: text, sender: 'ai', timestamp: new Date() },
+      ]);
+    };
 
     try {
       if (currentSession?.id) {
-        const response = await aiChatAPI.sendMessage(currentSession.id, userMessageText);
+        const response = await aiChatAPI.sendMessage(currentSession.id, messageText);
         if (response.success) {
-          // Replace temp message with real one and add AI response
           setMessages(prev => {
-            const filtered = prev.filter(m => m.id !== tempUserMessage.id);
+            const filtered = prev.filter(m => m.id !== tempMsg.id);
             return [
               ...filtered,
               { ...response.userMessage, timestamp: new Date(response.userMessage.timestamp || response.userMessage.createdAt) },
               { ...response.aiMessage, timestamp: new Date(response.aiMessage.timestamp || response.aiMessage.createdAt) },
             ];
           });
-
-          // Update session in list with new title if changed
           setSessions(prev => prev.map(s =>
             s.id === currentSession.id
-              ? { ...s, lastMessageAt: new Date(), title: userMessageText.substring(0, 50) + (userMessageText.length > 50 ? '...' : '') }
+              ? { ...s, lastMessageAt: new Date(), title: messageText.substring(0, 50) + (messageText.length > 50 ? '...' : '') }
               : s
           ));
+        } else {
+          // API returned success: false — show the error message if provided
+          addErrorMsg(response.message || response.error || "Something went wrong. Please try again.");
         }
       } else {
-        // Fallback for local mode
         setTimeout(() => {
-          const aiMessage = {
-            id: (Date.now() + 1).toString(),
-            content: "Thank you for your question! I'm here to help you learn better. This is a simulated response - in the full implementation, I would provide detailed answers based on your enrolled courses and learning materials.\n\nIs there anything specific you'd like to know more about?",
+          setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            content: "I'm here to help you learn. This is a simulated response.",
             sender: 'ai',
             timestamp: new Date(),
-          };
-          setMessages(prev => [...prev, aiMessage]);
+          }]);
+          scrollToBottom();
         }, 1000);
       }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      // Fallback response
-      const aiMessage = {
-        id: (Date.now() + 1).toString(),
-        content: "I apologize, but I'm having trouble connecting to the server. Please try again in a moment.",
-        sender: 'ai',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, aiMessage]);
+    } catch (err) {
+      addErrorMsg("I'm having trouble connecting. Please try again.");
     } finally {
       setIsTyping(false);
       setSendingMessage(false);
-      flatListRef.current?.scrollToEnd({ animated: true });
+      scrollToBottom();
     }
   };
 
-  // Voice recording handler
   const handleVoiceInput = () => {
-    if (Platform.OS === 'web') {
-      // Web Speech API
-      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        Toast.show({
-          type: 'error',
-          text1: 'Not Supported',
-          text2: 'Voice input is not supported in this browser',
-        });
-        return;
-      }
-
-      if (isRecording) {
-        // Stop recording
-        if (recognitionRef.current) {
-          recognitionRef.current.stop();
-        }
-        setIsRecording(false);
-      } else {
-        // Start recording
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const recognition = new SpeechRecognition();
-        recognitionRef.current = recognition;
-
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.lang = 'en-US';
-
-        recognition.onstart = () => {
-          setIsRecording(true);
-        };
-
-        recognition.onresult = (event) => {
-          const transcript = event.results[0][0].transcript;
-          setInputText(prev => prev + (prev ? ' ' : '') + transcript);
-          setIsRecording(false);
-        };
-
-        recognition.onerror = (event) => {
-          console.error('Speech recognition error:', event.error);
-          setIsRecording(false);
-          if (event.error === 'not-allowed') {
-            Toast.show({
-              type: 'error',
-              text1: 'Permission Denied',
-              text2: 'Please allow microphone access',
-            });
-          }
-        };
-
-        recognition.onend = () => {
-          setIsRecording(false);
-        };
-
-        recognition.start();
-      }
-    } else {
-      // For native platforms, show a message
-      Toast.show({
-        type: 'info',
-        text1: 'Voice Input',
-        text2: 'Voice input requires native speech recognition module',
-      });
+    if (Platform.OS !== 'web') {
+      Toast.show({ type: 'info', text1: 'Voice Input', text2: 'Requires native speech recognition' });
+      return;
     }
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      Toast.show({ type: 'error', text1: 'Not Supported', text2: 'Voice not supported in this browser' });
+      return;
+    }
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new SR();
+    recognitionRef.current = rec;
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.lang = 'en-US';
+    rec.onstart = () => setIsRecording(true);
+    rec.onresult = (e) => {
+      setInputText(prev => prev + (prev ? ' ' : '') + e.results[0][0].transcript);
+      setIsRecording(false);
+    };
+    rec.onerror = () => setIsRecording(false);
+    rec.onend = () => setIsRecording(false);
+    rec.start();
   };
 
-  // Format date for sidebar
-  const formatSessionDate = (dateString) => {
-    const date = new Date(dateString);
+  const formatDate = (dateString) => {
+    const d = new Date(dateString);
     const now = new Date();
-    const diff = now - date;
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
+    const days = Math.floor((now - d) / 86400000);
     if (days === 0) return 'Today';
     if (days === 1) return 'Yesterday';
-    if (days < 7) return `${days} days ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    if (days < 7) return `${days}d ago`;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  // Chat History Sidebar Content
-  const renderChatSidebar = () => (
-    <View style={styles.chatSidebarContent}>
-      {/* Header */}
-      <View style={styles.sidebarHeader}>
-        <View style={styles.sidebarHeaderIcon}>
-          <Icon name="chatbubbles" size={20} color={theme.colors.primary} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.sidebarTitle, { color: theme.colors.textPrimary }]}>Chat History</Text>
-          <Text style={[styles.sidebarSubtitle, { color: theme.colors.textSecondary }]}>
-            {sessions.length} conversation{sessions.length !== 1 ? 's' : ''}
-          </Text>
-        </View>
-        {!isLargeScreen && (
-          <TouchableOpacity onPress={() => setShowChatSidebar(false)} style={styles.closeSidebar}>
-            <Icon name="close" size={24} color={theme.colors.textPrimary} />
-          </TouchableOpacity>
-        )}
-      </View>
+  // ─── Render helpers ───────────────────────────────────────────────
 
-      {/* New Chat Button */}
-      <TouchableOpacity
-        style={[styles.newChatButton, { backgroundColor: theme.colors.primary }]}
-        onPress={handleNewChat}
-      >
-        <Icon name="add" size={20} color="#fff" />
-        <Text style={styles.newChatButtonText}>New Chat</Text>
-      </TouchableOpacity>
-
-      {/* Chat List */}
-      <ScrollView style={styles.sessionsList} showsVerticalScrollIndicator={false}>
-        {sessions.map((session) => (
-          <TouchableOpacity
-            key={session.id}
-            style={[
-              styles.sessionItem,
-              currentSession?.id === session.id && styles.sessionItemActive,
-              { backgroundColor: currentSession?.id === session.id ? (isDark ? 'rgba(79, 70, 229, 0.2)' : theme.colors.primary + '10') : 'transparent' }
-            ]}
-            onPress={() => loadSession(session.id)}
-          >
-            <View style={styles.sessionIcon}>
-              <Icon
-                name={currentSession?.id === session.id ? 'chatbubble' : 'chatbubble-outline'}
-                size={18}
-                color={currentSession?.id === session.id ? theme.colors.primary : theme.colors.textTertiary}
-              />
-            </View>
-            <View style={styles.sessionInfo}>
-              <Text
-                style={[
-                  styles.sessionTitle,
-                  { color: currentSession?.id === session.id ? theme.colors.primary : theme.colors.textPrimary }
-                ]}
-                numberOfLines={1}
-              >
-                {session.title || 'New Chat'}
-              </Text>
-              <Text style={[styles.sessionDate, { color: theme.colors.textTertiary }]}>
-                {formatSessionDate(session.lastMessageAt || session.createdAt)}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={() => handleDeleteSession(session.id)}
-            >
-              <Icon name="trash-outline" size={16} color={theme.colors.error} />
-            </TouchableOpacity>
-          </TouchableOpacity>
-        ))}
-
-        {sessions.length === 0 && (
-          <View style={styles.emptySessions}>
-            <Icon name="chatbubbles-outline" size={40} color={theme.colors.textTertiary} />
-            <Text style={[styles.emptyText, { color: theme.colors.textTertiary }]}>
-              No chat history yet
-            </Text>
-          </View>
-        )}
-      </ScrollView>
-    </View>
-  );
-
-  const styles = getStyles(theme, isDark, isWeb, isPhone, isLargeScreen, width, height);
-
-  const renderMessage = ({ item, index }) => (
-    <Animated.View
-      entering={FadeInDown.duration(300).delay(index * 30)}
-      style={[
-        styles.messageContainer,
-        item.sender === 'user' ? styles.userMessage : styles.aiMessage,
-      ]}
-    >
-      {item.sender === 'ai' && (
-        <View style={[styles.aiAvatar, { backgroundColor: theme.colors.primary + '20' }]}>
-          <Icon name="sparkles" size={isPhone ? 16 : 20} color={theme.colors.primary} />
-        </View>
-      )}
-      <View
-        style={[
-          styles.messageContent,
-          item.sender === 'user'
-            ? { backgroundColor: theme.colors.primary }
-            : {
-                backgroundColor: isDark ? theme.colors.backgroundSecondary : theme.colors.backgroundSecondary,
-                borderWidth: 1,
-                borderColor: theme.colors.border,
-              },
-        ]}
-      >
-        {item.sender === 'user' ? (
-          <Text
-            style={[
-              styles.messageText,
-              { color: '#ffffff' },
-            ]}
-          >
-            {item.content || item.text}
-          </Text>
-        ) : (
-          <MarkdownText
-            style={styles.markdownContainer}
-            textColor={theme.colors.textPrimary}
-          >
-            {item.content || item.text}
-          </MarkdownText>
-        )}
-        <Text
-          style={[
-            styles.messageTime,
-            { color: item.sender === 'user' ? 'rgba(255,255,255,0.7)' : theme.colors.textTertiary },
-          ]}
-        >
-          {item.timestamp?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || ''}
-        </Text>
-      </View>
-      {item.sender === 'user' && (
-        <View style={[styles.userAvatar, { backgroundColor: theme.colors.primary }]}>
-          <Icon name="person" size={isPhone ? 16 : 20} color="#ffffff" />
-        </View>
-      )}
-    </Animated.View>
-  );
-
-  const renderTypingIndicator = () => {
-    if (!isTyping) return null;
+  const renderMessage = ({ item, index }) => {
+    const isUser = item.sender === 'user';
     return (
       <Animated.View
-        entering={FadeIn.duration(300)}
-        style={[styles.messageContainer, styles.aiMessage]}
+        entering={FadeInDown.duration(250).delay(index * 20)}
+        style={[
+          styles.msgRow,
+          isUser ? styles.msgRowUser : styles.msgRowAI,
+        ]}
       >
-        <View style={[styles.aiAvatar, { backgroundColor: theme.colors.primary + '20' }]}>
-          <Icon name="sparkles" size={isPhone ? 16 : 20} color={theme.colors.primary} />
+        {!isUser && (
+          <View style={[styles.aiAvatar, { backgroundColor: theme.colors.primary + '20' }]}>
+            <Icon name="sparkles" size={16} color={theme.colors.primary} />
+          </View>
+        )}
+        <View style={[
+          styles.msgBubble,
+          isUser
+            ? { backgroundColor: theme.colors.primary, borderBottomRightRadius: 4 }
+            : { backgroundColor: isDark ? '#2f2f2f' : theme.colors.backgroundSecondary, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: theme.colors.border },
+        ]}>
+          {isUser ? (
+            <Text style={[styles.msgText, { color: '#fff' }]}>{item.content || item.text}</Text>
+          ) : (
+            <MarkdownText style={{ flex: 1 }} textColor={theme.colors.textPrimary}>
+              {item.content || item.text}
+            </MarkdownText>
+          )}
+          <Text style={[styles.msgTime, { color: isUser ? 'rgba(255,255,255,0.6)' : theme.colors.textTertiary }]}>
+            {item.timestamp?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || ''}
+          </Text>
         </View>
-        <View
-          style={[
-            styles.messageContent,
-            styles.typingBubble,
-            {
-              backgroundColor: isDark ? theme.colors.backgroundSecondary : theme.colors.backgroundSecondary,
-              borderWidth: 1,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
+      </Animated.View>
+    );
+  };
+
+  const renderTyping = () => {
+    if (!isTyping) return null;
+    return (
+      <Animated.View entering={FadeIn.duration(200)} style={[styles.msgRow, styles.msgRowAI]}>
+        <View style={[styles.aiAvatar, { backgroundColor: theme.colors.primary + '20' }]}>
+          <Icon name="sparkles" size={16} color={theme.colors.primary} />
+        </View>
+        <View style={[styles.msgBubble, { backgroundColor: isDark ? '#2f2f2f' : theme.colors.backgroundSecondary, borderWidth: 1, borderColor: theme.colors.border, paddingVertical: 16 }]}>
           <View style={styles.typingDots}>
             <View style={[styles.dot, { backgroundColor: theme.colors.primary }]} />
-            <View style={[styles.dot, { backgroundColor: theme.colors.primary, opacity: 0.7 }]} />
-            <View style={[styles.dot, { backgroundColor: theme.colors.primary, opacity: 0.4 }]} />
+            <View style={[styles.dot, { backgroundColor: theme.colors.primary, opacity: 0.6 }]} />
+            <View style={[styles.dot, { backgroundColor: theme.colors.primary, opacity: 0.3 }]} />
           </View>
         </View>
       </Animated.View>
     );
   };
 
+  const renderWelcome = () => (
+    <View style={styles.welcomeContainer}>
+      <View style={[styles.welcomeIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+        <Icon name="sparkles" size={36} color={theme.colors.primary} />
+      </View>
+      <Text style={[styles.welcomeTitle, { color: theme.colors.textPrimary }]}>
+        How can I help you today?
+      </Text>
+      <Text style={[styles.welcomeSub, { color: theme.colors.textSecondary }]}>
+        Ask anything about your courses, coding, research, or studying
+      </Text>
+      <View style={styles.promptsGrid}>
+        {SUGGESTED_PROMPTS.map((p, i) => (
+          <TouchableOpacity
+            key={i}
+            style={[styles.promptCard, { backgroundColor: isDark ? '#2f2f2f' : theme.colors.surface, borderColor: theme.colors.border }]}
+            onPress={() => handleSend(p.text)}
+          >
+            <Icon name={p.icon} size={18} color={theme.colors.primary} />
+            <Text style={[styles.promptText, { color: theme.colors.textPrimary }]}>{p.text}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+
+  // ─── Sidebar ──────────────────────────────────────────────────────
+
+  const renderSidebar = () => (
+    <View style={[styles.sidebar, {
+      width: sidebarWidth,
+      backgroundColor: isDark ? theme.colors.background : '#f9f9f9',
+      borderRightColor: theme.colors.border,
+    }]}>
+      {/* Logo + title + close button on mobile */}
+      <View style={[styles.sidebarTop, { borderBottomColor: theme.colors.border }]}>
+        <View style={styles.sidebarBrandRow}>
+          <Icon name="sparkles" size={18} color={theme.colors.primary} />
+          <Text style={[styles.sidebarBrandText, { color: theme.colors.textPrimary }]}>SkillSphere AI</Text>
+          {isPhone && (
+            <TouchableOpacity
+              style={[styles.closeSidebarBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : theme.colors.backgroundSecondary }]}
+              onPress={() => setSidebarOpen(false)}
+            >
+              <Icon name="close" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity
+          style={[styles.newChatBtn, { backgroundColor: theme.colors.primary }]}
+          onPress={handleNewChat}
+        >
+          <Icon name="create-outline" size={16} color="#fff" />
+          <Text style={styles.newChatBtnText}>New chat</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Sessions list */}
+      <ScrollView style={styles.sessionsList} showsVerticalScrollIndicator={false}>
+        {sessions.length === 0 ? (
+          <View style={styles.emptySessionsBox}>
+            <Icon name="chatbubbles-outline" size={32} color={theme.colors.textTertiary} />
+            <Text style={[styles.emptySessionsText, { color: theme.colors.textTertiary }]}>No chats yet</Text>
+          </View>
+        ) : (
+          sessions.map(session => {
+            const active = currentSession?.id === session.id;
+            return (
+              <TouchableOpacity
+                key={session.id}
+                style={[
+                  styles.sessionRow,
+                  active && { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : theme.colors.primary + '12' },
+                ]}
+                onPress={() => loadSession(session.id)}
+              >
+                <Icon name="chatbubble-outline" size={14} color={active ? theme.colors.primary : theme.colors.textTertiary} />
+                <Text
+                  style={[styles.sessionTitle, { color: active ? theme.colors.primary : theme.colors.textPrimary }]}
+                  numberOfLines={1}
+                >
+                  {session.title || 'New Chat'}
+                </Text>
+                <Text style={[styles.sessionDate, { color: theme.colors.textTertiary }]}>
+                  {formatDate(session.lastMessageAt || session.createdAt)}
+                </Text>
+                <TouchableOpacity onPress={() => handleDeleteSession(session.id)} style={styles.deleteBtn}>
+                  <Icon name="trash-outline" size={13} color={theme.colors.error} />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            );
+          })
+        )}
+      </ScrollView>
+    </View>
+  );
+
+  // ─── Loading state ────────────────────────────────────────────────
+
   if (loading) {
     return (
-      <MainLayout
-        showSidebar={true}
-        sidebarItems={sidebarItems}
-        activeRoute="AITutor"
-        onNavigate={handleNavigate}
-        showHeader={true}
-      >
-        <View style={styles.loadingContainer}>
+      <MainLayout showSidebar={true} sidebarItems={sidebarItems} activeRoute="AITutor" onNavigate={r => navigation.navigate(r)} showHeader={true}>
+        <View style={[styles.loadingBox, { backgroundColor: theme.colors.background }]}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
-            Loading chats...
-          </Text>
+          <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>Loading chats…</Text>
         </View>
       </MainLayout>
     );
   }
+
+  // ─── Main render ──────────────────────────────────────────────────
+
+  const bodyHeight = isWeb ? height - HEADER_HEIGHT : undefined;
 
   return (
     <MainLayout
       showSidebar={true}
       sidebarItems={sidebarItems}
       activeRoute="AITutor"
-      onNavigate={handleNavigate}
+      onNavigate={r => navigation.navigate(r)}
       showHeader={true}
-      customSidebar={renderChatSidebar()}
-      customSidebarVisible={showChatSidebar}
-      onCustomSidebarToggle={setShowChatSidebar}
-      customMenuIcon="chatbubbles-outline"
-      hideHeaderToggle={true}
     >
-      <View style={[styles.mainContainer, { backgroundColor: isDark ? theme.colors.background : theme.colors.background }]}>
-        {/* Chat Area */}
-        <View style={styles.chatArea}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.keyboardView}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-          >
-            {/* Chat Header */}
-            <View style={[styles.chatHeader, { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderBottomColor: theme.colors.border }]}>
+      {/* Root row — explicit pixel height on web so children never overflow */}
+      <View style={[
+        styles.root,
+        {
+          backgroundColor: theme.colors.background,
+          ...(isWeb ? { height: bodyHeight, overflow: 'hidden' } : { flex: 1 }),
+        },
+      ]}>
+
+        {/* ── Chat history sidebar ── */}
+        {isPhone ? (
+          /* Phone: absolute overlay with backdrop */
+          sidebarOpen && (
+            <>
               <TouchableOpacity
-                style={[
-                  styles.backButton,
-                  {
-                    backgroundColor: showChatSidebar
-                      ? 'rgba(255,140,66,0.25)'
-                      : (isDark ? 'rgba(255,255,255,0.1)' : theme.colors.backgroundSecondary),
-                    borderWidth: 1,
-                    borderColor: showChatSidebar ? 'rgba(255,140,66,0.5)' : 'transparent',
-                  },
-                ]}
-                onPress={() => setShowChatSidebar(!showChatSidebar)}
-              >
-                <Icon
-                  name={showChatSidebar ? 'close' : 'chatbubbles-outline'}
-                  size={20}
-                  color={showChatSidebar ? '#FF8C42' : theme.colors.textPrimary}
-                />
-              </TouchableOpacity>
-              <View style={[styles.chatHeaderIcon, { backgroundColor: theme.colors.primary + '15' }]}>
-                <Icon name="sparkles" size={isPhone ? 20 : 24} color={theme.colors.primary} />
+                style={styles.backdrop}
+                activeOpacity={1}
+                onPress={() => setSidebarOpen(false)}
+              />
+              <View style={[styles.sidebarOverlay, { width: sidebarWidth }]}>
+                {renderSidebar()}
               </View>
-              <View style={styles.chatHeaderText}>
-                <Text style={[styles.chatHeaderTitle, { color: theme.colors.textPrimary }]}>
-                  {currentSession?.title || 'AI Learning Assistant'}
-                </Text>
-                <Text style={[styles.chatHeaderSubtitle, { color: theme.colors.textSecondary }]}>
-                  Ask about courses, coding, research, or study help
-                </Text>
-              </View>
-              <View style={[styles.onlineIndicator, { backgroundColor: theme.colors.success }]} />
-            </View>
+            </>
+          )
+        ) : (
+          /* Tablet / desktop: sidebar pushes content */
+          sidebarOpen && renderSidebar()
+        )}
 
-            {/* Chat Messages */}
-            <FlatList
-              ref={flatListRef}
-              data={messages}
-              renderItem={renderMessage}
-              keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
-              contentContainerStyle={styles.messagesList}
-              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-              showsVerticalScrollIndicator={false}
-              ListFooterComponent={renderTypingIndicator}
-            />
+        {/* ── Main chat column ── */}
+        <View style={[styles.chatColumn, { overflow: 'hidden' }]}>
 
-            {/* Input Area */}
-            <View
-              style={[
-                styles.inputContainer,
-                { backgroundColor: isDark ? theme.colors.card : theme.colors.surface, borderTopColor: theme.colors.border },
-              ]}
+          {/* Sub-header bar */}
+          <View style={[styles.subHeader, {
+            backgroundColor: isDark ? theme.colors.card : theme.colors.surface,
+            borderBottomColor: theme.colors.border,
+          }]}>
+            <TouchableOpacity
+              style={[styles.sidebarToggle, {
+                backgroundColor: sidebarOpen
+                  ? theme.colors.primary + '20'
+                  : (isDark ? 'rgba(255,255,255,0.08)' : theme.colors.backgroundSecondary),
+              }]}
+              onPress={() => setSidebarOpen(v => !v)}
             >
-              {/* Voice Button */}
-              <TouchableOpacity
-                style={[
-                  styles.voiceButton,
-                  {
-                    backgroundColor: isRecording
-                      ? theme.colors.error
-                      : isDark ? 'rgba(255,255,255,0.1)' : theme.colors.backgroundSecondary,
-                  },
-                ]}
-                onPress={handleVoiceInput}
-              >
-                <Icon
-                  name={isRecording ? 'stop' : 'mic'}
-                  size={isPhone ? 20 : 22}
-                  color={isRecording ? '#ffffff' : theme.colors.primary}
-                />
-              </TouchableOpacity>
+              <Icon
+                name={sidebarOpen ? 'chevron-back' : 'chatbubbles-outline'}
+                size={18}
+                color={sidebarOpen ? theme.colors.primary : theme.colors.textPrimary}
+              />
+            </TouchableOpacity>
+            <Text style={[styles.subHeaderTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+              {currentSession?.title || 'SkillSphere AI'}
+            </Text>
+            <View style={[styles.onlineDot, { backgroundColor: theme.colors.success }]} />
+          </View>
 
-              <View style={[styles.inputWrapper, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.backgroundSecondary }]}>
-                <TextInput
-                  style={[styles.input, { color: theme.colors.textPrimary }]}
-                  value={inputText}
-                  onChangeText={setInputText}
-                  placeholder={isRecording ? "Listening..." : "Ask anything, or request a table/compare view..."}
-                  placeholderTextColor={isRecording ? theme.colors.error : theme.colors.textTertiary}
-                  multiline
-                  maxLength={1000}
-                  onSubmitEditing={handleSend}
-                  editable={!isRecording}
-                />
+          {/* Messages list — ScrollView is reliable on web; flex:1 keeps input pinned */}
+          <ScrollView
+            ref={scrollViewRef}
+            style={{ flex: 1 }}
+            contentContainerStyle={[
+              styles.messagesList,
+              messages.length === 0 && styles.messagesListEmpty,
+            ]}
+            showsVerticalScrollIndicator={false}
+            onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: false })}
+          >
+            {messages.length === 0
+              ? renderWelcome()
+              : messages.map((item, index) => (
+                  <React.Fragment key={item.id?.toString() || `msg-${index}`}>
+                    {renderMessage({ item, index })}
+                  </React.Fragment>
+                ))
+            }
+            {renderTyping()}
+          </ScrollView>
+
+          {/* ── Input area — sibling of FlatList, always visible at bottom ── */}
+          <View style={[styles.inputArea, {
+            backgroundColor: isDark ? theme.colors.background : '#fff',
+            borderTopColor: theme.colors.border,
+          }]}>
+            <View style={[styles.inputBox, {
+              backgroundColor: isDark ? '#2f2f2f' : theme.colors.backgroundSecondary,
+              borderColor: theme.colors.border,
+            }]}>
+              <TextInput
+                style={[styles.textInput, { color: theme.colors.textPrimary }]}
+                value={inputText}
+                onChangeText={setInputText}
+                placeholder={isRecording ? 'Listening…' : 'Message SkillSphere AI…'}
+                placeholderTextColor={isRecording ? theme.colors.error : theme.colors.textTertiary}
+                multiline
+                maxLength={1000}
+                editable={!isRecording}
+              />
+              <View style={styles.inputBtns}>
+                <TouchableOpacity style={styles.iconBtn} onPress={handleVoiceInput}>
+                  <Icon
+                    name={isRecording ? 'stop-circle' : 'mic-outline'}
+                    size={22}
+                    color={isRecording ? theme.colors.error : theme.colors.textSecondary}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.sendBtn, {
+                    backgroundColor: inputText.trim() && !sendingMessage ? theme.colors.primary : (isDark ? '#444' : '#d4d4d4'),
+                  }]}
+                  onPress={() => handleSend()}
+                  disabled={!inputText.trim() || sendingMessage}
+                >
+                  {sendingMessage
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Icon name="arrow-up" size={18} color={inputText.trim() ? '#fff' : (isDark ? '#888' : '#aaa')} />
+                  }
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  {
-                    backgroundColor: inputText.trim() && !sendingMessage
-                      ? theme.colors.primary
-                      : theme.colors.textTertiary,
-                    opacity: inputText.trim() && !sendingMessage ? 1 : 0.5,
-                  },
-                ]}
-                onPress={handleSend}
-                disabled={!inputText.trim() || sendingMessage || isRecording}
-              >
-                {sendingMessage ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Icon name="send" size={isPhone ? 18 : 20} color="#ffffff" />
-                )}
-              </TouchableOpacity>
             </View>
-          </KeyboardAvoidingView>
+            <Text style={[styles.disclaimer, { color: theme.colors.textTertiary }]}>
+              SkillSphere AI can make mistakes — verify important information.
+            </Text>
+          </View>
+
         </View>
       </View>
     </MainLayout>
   );
 };
 
-const getStyles = (theme, isDark, isWeb, isPhone, isLargeScreen, width, height) =>
-  StyleSheet.create({
-    loadingContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    loadingText: {
-      marginTop: 12,
-      fontSize: 14,
-    },
-    mainContainer: {
-      flex: 1,
-    },
+const styles = StyleSheet.create({
+  loadingBox: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: { fontSize: 14 },
 
-    // Chat Sidebar
-    chatSidebarContent: {
-      flex: 1,
-      paddingTop: 8,
-    },
-    sidebarHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 16,
-      gap: 12,
-    },
-    sidebarHeaderIcon: {
-      width: 36,
-      height: 36,
-      borderRadius: 8,
-      backgroundColor: isDark ? 'rgba(79, 70, 229, 0.2)' : theme.colors.primary + '15',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    sidebarTitle: {
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    sidebarSubtitle: {
-      fontSize: 12,
-    },
-    closeSidebar: {
-      padding: 4,
-    },
-    newChatButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      marginHorizontal: 16,
-      marginBottom: 16,
-      paddingVertical: 12,
-      borderRadius: 12,
-    },
-    newChatButtonText: {
-      color: '#fff',
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    sessionsList: {
-      flex: 1,
-      paddingHorizontal: 8,
-    },
-    sessionItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 12,
-      marginHorizontal: 8,
-      marginBottom: 4,
-      borderRadius: 10,
-      gap: 10,
-    },
-    sessionItemActive: {
-      borderLeftWidth: 3,
-      borderLeftColor: theme.colors.primary,
-    },
-    sessionIcon: {
-      width: 28,
-      height: 28,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    sessionInfo: {
-      flex: 1,
-    },
-    sessionTitle: {
-      fontSize: 13,
-      fontWeight: '500',
-      marginBottom: 2,
-    },
-    sessionDate: {
-      fontSize: 11,
-    },
-    deleteButton: {
-      padding: 6,
-    },
-    emptySessions: {
-      alignItems: 'center',
-      paddingVertical: 40,
-    },
-    emptyText: {
-      marginTop: 12,
-      fontSize: 13,
-    },
+  // Root row
+  root: {
+    flexDirection: 'row',
+  },
 
-    // Chat Area
-    chatArea: {
-      flex: 1,
-    },
-    keyboardView: {
-      flex: 1,
-    },
-    chatHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: isPhone ? 12 : 16,
-      borderBottomWidth: 1,
-      gap: 12,
-    },
-    backButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    chatHeaderIcon: {
-      width: isPhone ? 40 : 48,
-      height: isPhone ? 40 : 48,
-      borderRadius: isPhone ? 20 : 24,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    chatHeaderText: {
-      flex: 1,
-    },
-    chatHeaderTitle: {
-      fontSize: isPhone ? 14 : 16,
-      fontWeight: '600',
-    },
-    chatHeaderSubtitle: {
-      fontSize: isPhone ? 11 : 13,
-      marginTop: 2,
-    },
-    onlineIndicator: {
-      width: isPhone ? 8 : 10,
-      height: isPhone ? 8 : 10,
-      borderRadius: isPhone ? 4 : 5,
-    },
-    messagesList: {
-      padding: isPhone ? 12 : 20,
-      paddingBottom: 8,
-    },
-    messageContainer: {
-      flexDirection: 'row',
-      marginBottom: isPhone ? 12 : 16,
-      alignItems: 'flex-end',
-    },
-    userMessage: {
-      justifyContent: 'flex-end',
-    },
-    aiMessage: {
-      justifyContent: 'flex-start',
-    },
-    aiAvatar: {
-      width: isPhone ? 28 : 36,
-      height: isPhone ? 28 : 36,
-      borderRadius: isPhone ? 14 : 18,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginRight: isPhone ? 8 : 12,
-    },
-    userAvatar: {
-      width: isPhone ? 28 : 36,
-      height: isPhone ? 28 : 36,
-      borderRadius: isPhone ? 14 : 18,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginLeft: isPhone ? 8 : 12,
-    },
-    messageContent: {
-      maxWidth: '75%',
-      borderRadius: isPhone ? 16 : 20,
-      padding: isPhone ? 12 : 16,
-    },
-    messageText: {
-      fontSize: isPhone ? 14 : 15,
-      lineHeight: isPhone ? 20 : 24,
-    },
-    markdownContainer: {
-      flex: 1,
-    },
-    messageTime: {
-      fontSize: isPhone ? 10 : 11,
-      marginTop: 6,
-      textAlign: 'right',
-    },
-    typingBubble: {
-      paddingVertical: isPhone ? 14 : 18,
-      paddingHorizontal: isPhone ? 18 : 24,
-    },
-    typingDots: {
-      flexDirection: 'row',
-      gap: isPhone ? 5 : 6,
-    },
-    dot: {
-      width: isPhone ? 7 : 8,
-      height: isPhone ? 7 : 8,
-      borderRadius: isPhone ? 3.5 : 4,
-    },
-    inputContainer: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      padding: isPhone ? 12 : 16,
-      borderTopWidth: 1,
-      gap: isPhone ? 8 : 10,
-    },
-    voiceButton: {
-      width: isPhone ? 44 : 48,
-      height: isPhone ? 44 : 48,
-      borderRadius: isPhone ? 22 : 24,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    inputWrapper: {
-      flex: 1,
-      borderRadius: isPhone ? 22 : 26,
-      paddingHorizontal: isPhone ? 14 : 18,
-      paddingVertical: Platform.OS === 'ios' ? (isPhone ? 12 : 14) : (isPhone ? 8 : 10),
-      maxHeight: isPhone ? 100 : 140,
-    },
-    input: {
-      fontSize: isPhone ? 15 : 16,
-      lineHeight: isPhone ? 20 : 24,
-      maxHeight: isPhone ? 80 : 120,
-    },
-    sendButton: {
-      width: isPhone ? 44 : 52,
-      height: isPhone ? 44 : 52,
-      borderRadius: isPhone ? 22 : 26,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-  });
+  // ── Sidebar ──
+  backdrop: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    zIndex: 10,
+  },
+  sidebarOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    zIndex: 11,
+  },
+  sidebar: {
+    borderRightWidth: 1,
+    flexDirection: 'column',
+  },
+  sidebarTop: {
+    padding: 16,
+    borderBottomWidth: 1,
+    gap: 10,
+  },
+  sidebarBrandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sidebarBrandText: {
+    fontSize: 15,
+    fontWeight: '700',
+    flex: 1,
+  },
+  closeSidebarBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  newChatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  newChatBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  sessionsList: {
+    flex: 1,
+    paddingVertical: 8,
+  },
+  sessionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginHorizontal: 8,
+    borderRadius: 8,
+    marginBottom: 2,
+  },
+  sessionTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  sessionDate: {
+    fontSize: 11,
+  },
+  deleteBtn: {
+    padding: 4,
+  },
+  emptySessionsBox: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 8,
+  },
+  emptySessionsText: {
+    fontSize: 13,
+  },
+
+  // ── Chat column ──
+  chatColumn: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  subHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  sidebarToggle: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  subHeaderTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+
+  // ── Messages ──
+  messagesList: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  messagesListEmpty: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  msgRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  msgRowUser: {
+    justifyContent: 'flex-end',
+  },
+  msgRowAI: {
+    justifyContent: 'flex-start',
+  },
+  aiAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  msgBubble: {
+    maxWidth: '75%',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  msgText: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  msgTime: {
+    fontSize: 11,
+    marginTop: 6,
+    textAlign: 'right',
+  },
+  typingDots: {
+    flexDirection: 'row',
+    gap: 5,
+    alignItems: 'center',
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+
+  // ── Welcome ──
+  welcomeContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+    gap: 12,
+  },
+  welcomeIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  welcomeTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  welcomeSub: {
+    fontSize: 14,
+    textAlign: 'center',
+    maxWidth: 400,
+    lineHeight: 21,
+  },
+  promptsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'center',
+    marginTop: 16,
+    maxWidth: 600,
+  },
+  promptCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    minWidth: 200,
+    flex: 1,
+  },
+  promptText: {
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
+  },
+
+  // ── Input area ──
+  inputArea: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    gap: 8,
+  },
+  inputBox: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  textInput: {
+    fontSize: 15,
+    lineHeight: 22,
+    maxHeight: 120,
+    minHeight: 24,
+  },
+  inputBtns: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  iconBtn: {
+    padding: 6,
+  },
+  sendBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  disclaimer: {
+    fontSize: 11,
+    textAlign: 'center',
+  },
+});
 
 export default AIChatScreen;
